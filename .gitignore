@@ -1,5 +1,21 @@
 *
 !.gitignore
+# HDL
 !*.vhd
 !*.mpf
+# C/C++
+!*.c
+!*.cpp
+!*.S
+# CMake
+!CMakeLists.txt
+!targets.cmake
+!toolchain.cmake
+!*.ld
 !*/
+
+# CMake
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles

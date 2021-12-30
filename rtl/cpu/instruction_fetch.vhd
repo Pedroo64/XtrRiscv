@@ -52,11 +52,16 @@ begin
         '0';
     
     instr_o <= rsp_dat_i;
-    instr_vld_o <= rsp_vld_i;
+    instr_vld_o <= 
+        '1' when decode_rdy_i = '0' else 
+        '1' when decode_rdy_i = '1' and rsp_vld_i = '0' else             
+        rsp_vld_i;
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            pc_o <= std_logic_vector(pc);
+            if decode_rdy_i = '1' then
+                pc_o <= std_logic_vector(pc);
+            end if;
         end if;
     end process;
     
