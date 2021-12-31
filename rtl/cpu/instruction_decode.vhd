@@ -30,40 +30,41 @@ end entity instruction_decode;
 architecture rtl of instruction_decode is
     signal rs1_adr, rs2_adr : std_logic_vector(4 downto 0);
     signal rdy              : std_logic;
+    signal decode_vld       : std_logic;
 begin
     rs1_adr_o <= instr_i(19 downto 15) when rdy = '1' else rs1_adr;
     rs2_adr_o <= instr_i(24 downto 20) when rdy = '1' else rs2_adr;
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            decode_vld_o <= '0';
-            rs1_adr      <= (others => '0');
-            rs2_adr      <= (others => '0');
+            decode_vld <= '0';
+            rs1_adr    <= (others => '0');
+            rs2_adr    <= (others => '0');
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
-                decode_vld_o <= '0';
-                rs1_adr      <= (others => '0');
-                rs2_adr      <= (others => '0');
+                decode_vld <= '0';
+                rs1_adr    <= (others => '0');
+                rs2_adr    <= (others => '0');
             else
-                if en_i = '1' then
-                    if execute_rdy_i = '1' then
-                        rs1_adr      <= instr_i(19 downto 15);
-                        rs2_adr      <= instr_i(24 downto 20);
-                        decode_vld_o <= '0';
-                        opcode_o     <= instr_i(6 downto 0);
-                        pc_o         <= pc_i;
-                        rd_adr_o     <= instr_i(11 downto 7);
-                        funct3       <= instr_i(14 downto 12);
-                        funct7       <= instr_i(31 downto 25);
+                if en_i = '1' and instr_vld_i = '1' then
+                    if rdy = '1' then
+                        rs1_adr    <= instr_i(19 downto 15);
+                        rs2_adr    <= instr_i(24 downto 20);
+                        decode_vld <= '0';
+                        opcode_o   <= instr_i(6 downto 0);
+                        pc_o       <= pc_i;
+                        rd_adr_o   <= instr_i(11 downto 7);
+                        funct3     <= instr_i(14 downto 12);
+                        funct7     <= instr_i(31 downto 25);
                         case instr_i(6 downto 0) is
                             when RV32I_OP_LUI => -- U Type
                                 immediate_o(31 downto 12) <= instr_i(31 downto 12);
                                 immediate_o(11 downto 0)  <= (others => '0');
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
                             when RV32I_OP_AUIPC => -- U Type
                                 immediate_o(31 downto 12) <= instr_i(31 downto 12);
                                 immediate_o(11 downto 0)  <= (others => '0');
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_JAL                    => -- J Type
                                 immediate_o(31 downto 20) <= (others => instr_i(31));
@@ -72,14 +73,14 @@ begin
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(24 downto 21);
                                 immediate_o(0)            <= '0';
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_JALR                   => -- I Type
                                 immediate_o(31 downto 11) <= (others => instr_i(31));
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(24 downto 21);
                                 immediate_o(0)            <= instr_i(20);
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_BRANCH                 => -- B Type
                                 immediate_o(31 downto 12) <= (others => instr_i(31));
@@ -87,41 +88,41 @@ begin
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(11 downto 8);
                                 immediate_o(0)            <= '0';
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_LOAD                   => -- I Type
                                 immediate_o(31 downto 11) <= (others => instr_i(31));
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(24 downto 21);
                                 immediate_o(0)            <= instr_i(20);
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_STORE                  => -- S Type
                                 immediate_o(31 downto 11) <= (others => instr_i(31));
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(11 downto 8);
                                 immediate_o(0)            <= instr_i(7);
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_REG_IMM                => -- I Type
                                 immediate_o(31 downto 11) <= (others => instr_i(31));
                                 immediate_o(10 downto 5)  <= instr_i(30 downto 25);
                                 immediate_o(4 downto 1)   <= instr_i(24 downto 21);
                                 immediate_o(0)            <= instr_i(20);
-                                decode_vld_o              <= '1';
+                                decode_vld                <= '1';
 
                             when RV32I_OP_REG_REG => -- R Type
-                                decode_vld_o <= '1';
+                                decode_vld <= '1';
 
                                 --when RV32I_OP_FENCE =>
-                                --    decode_vld_o <= '1';
+                                --    decode_vld <= '1';
                                 --when RV32I_OP_SYS =>
-                                --    decode_vld_o <= '1';
+                                --    decode_vld <= '1';
                             when others =>
                         end case;
                     end if;
                 else
-                    decode_vld_o <= '0';
+                    decode_vld <= '0';
                 end if;
             end if;
         end if;
@@ -143,6 +144,7 @@ begin
     --        end if;
     --    end if;
     --end process;
-    rdy          <= execute_rdy_i;
+    rdy          <= '0' when execute_rdy_i = '0' and decode_vld = '1' else '1';
+    decode_vld_o <= decode_vld;
     decode_rdy_o <= rdy;
 end architecture;

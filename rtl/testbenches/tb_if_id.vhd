@@ -84,7 +84,7 @@ begin
             else
                 instr_rsp_vld <= '0';
             end if;
-            if unsigned(instr_cmd_adr(7 downto 0)) = 16#30# and instr_cmd_vld = '1' then
+            if unsigned(instr_cmd_adr(7 downto 0)) = 16#40# and instr_cmd_vld = '1' then
                 if_load_pc <= '1';
                 if_pc      <= std_logic_vector(unsigned(if_pc) + x"100");
             else
@@ -92,17 +92,20 @@ begin
             end if;
             if unsigned(instr_cmd_adr(7 downto 0)) = 16#10# and instr_cmd_vld = '1' and ex_execute_rdy = '1' then
                 ex_execute_rdy <= '0';
+            elsif (unsigned(instr_cmd_adr(7 downto 0)) = 16#34# or unsigned(instr_cmd_adr(7 downto 0)) = 16#38#) and instr_cmd_vld = '1' then
+                ex_execute_rdy <= '0';
             else
                 ex_execute_rdy <= '1';
             end if;
             if unsigned(instr_cmd_adr(7 downto 0)) = 16#20# and instr_cmd_vld = '1' and if_en = '1' then
+                if_en <= '0';
+            elsif unsigned(instr_cmd_adr(7 downto 0)) = 16#30# and instr_cmd_vld = '1' and if_en = '1' then
                 if_en <= '0';
             else
                 if_en <= '1';
             end if;
         end if;
     end process;
-
     u_if : entity work.instruction_fecth
         port map(
             arst_i => arst, clk_i => clk, srst_i => '0',

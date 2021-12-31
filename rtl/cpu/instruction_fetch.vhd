@@ -24,6 +24,7 @@ end entity instruction_fecth;
 
 architecture rtl of instruction_fecth is
     signal pc : unsigned(31 downto 0);
+    signal d_decode_rdy : std_logic;
 begin
     
     process (clk_i, arst_i)
@@ -54,7 +55,7 @@ begin
     instr_o <= rsp_dat_i;
     instr_vld_o <= 
         '1' when decode_rdy_i = '0' else 
-        '1' when decode_rdy_i = '1' and rsp_vld_i = '0' else             
+        '1' when d_decode_rdy = '0' else             
         rsp_vld_i;
     process (clk_i)
     begin
@@ -65,4 +66,16 @@ begin
         end if;
     end process;
     
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            d_decode_rdy <= '1';
+        elsif rising_edge(clk_i) then
+            if srst_i = '1' then
+                d_decode_rdy <= '1';
+            else
+                d_decode_rdy <= decode_rdy_i;
+            end if;
+        end if;
+    end process;
 end architecture rtl;
