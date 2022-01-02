@@ -5,7 +5,7 @@ set(ARCH "rv32i")
 set(ABI "ilp32")
 set(MEMSIZE "32K")
 set(F_CPU "48e6")
-set(SECTION_START "2K")
+set(SECTION_START "0K")
 set(STACK_SIZE "2K")
 set(HEAP_SIZE "2K")
 

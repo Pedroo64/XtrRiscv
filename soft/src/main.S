@@ -1,29 +1,26 @@
 .global crtStart
 .section .text
 crtStart:
-    la x1, 0x10 # 
-    add x1, x1, x2; # x1 = x1 + x2
-    addi x2, x2, 0x20; # x2 = x2 + 0x20
-    la x3, 0x30 # 
-    li x4, 0x100 # x4 = 0x100
-    sw x5, 0x20(x4) # 
-    lb x6, 0x4(x5) # 
-    sh x7, 0x8(x6)
-    la x1, 0x10 # 
-    li x2, 0x4 # x2 = 0x4
-    
-    la x1, 0x10 # 
-    add x1, x1, x2; # x1 = x1 + x2
-    addi x2, x2, 0x20; # x2 = x2 + 0x20
-    la x3, 0x30 # 
-    li x4, 0x100 # x4 = 0x100
-    sw x5, 0x20(x4) # 
-    lb x6, 0x4(x5) # 
-    sh x7, 0x8(x6)
-    la x1, 0x10 # 
-    li x2, 0x4 # x2 = 0x4
-    
-    
+    li x5, 0x10 # x5 = 0x10
+    li x6, 0x20 # x6 = 0x20
+    add x5, x5, x6; # x5 = x5 + x6
+    sw x5, 0x100(x0) # 
+    lw x6, 0x100(x0) #
+    addi x10, x6, 0x10; # x10 = x6 + 0x10 
+    li x11, 0x20 # x2 = 0x20
+    jal addition  # jump to addition and save position to ra
+    sw x1, 0x100(x0) #
+    lw x6, 0x100(x0) #
+test:
+    beq x6, x0, test; # if x6 == x0 then test
+    and x5, x5, x6
+    or x5, x5, x6
+    xor x5, x5, x6
+    not x5, x5
     
 infinitLoop:
     j infinitLoop
+
+addition:
+    add x1, x10, x11; # x1 = x1 + x2
+    ret
