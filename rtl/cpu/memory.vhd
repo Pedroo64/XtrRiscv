@@ -15,6 +15,7 @@ entity memory is
         rd_adr_i  : in std_logic_vector(4 downto 0);
         rd_adr_o  : out std_logic_vector(4 downto 0);
         rd_we_o   : out std_logic;
+        rd_dat_o  : out std_logic_vector(31 downto 0);
         cmd_adr_o : out std_logic_vector(31 downto 0);
         cmd_vld_o : out std_logic;
         cmd_we_o  : out std_logic;
@@ -65,4 +66,5 @@ begin
         en_i;
     rdy_o   <= rdy;
     rd_we_o <= rd_we and rsp_vld_i;
+    rd_dat_o <= rsp_dat_i;
 end architecture rtl;
