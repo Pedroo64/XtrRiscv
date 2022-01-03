@@ -9,7 +9,7 @@ crtStart:
     addi x10, x6, 0x10; # x10 = x6 + 0x10 
     li x11, 0x20 # x2 = 0x20
     jal addition  # jump to addition and save position to ra
-    sw x1, 0x100(x0) #
+    sw x10, 0x100(x0) #
     lw x6, 0x100(x0) #
 test:
     beq x6, x0, test; # if x6 == x0 then test
@@ -22,5 +22,7 @@ infinitLoop:
     j infinitLoop
 
 addition:
-    add x1, x10, x11; # x1 = x1 + x2
+    add x10, x10, x11; # x10 = x10 + x11
     ret
+    li x31, 0x10 # x31 = 0x10
+    

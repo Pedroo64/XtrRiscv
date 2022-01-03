@@ -35,10 +35,10 @@ begin
             if srst_i = '1' then
                 pc <= (others => '0');
             else
-                if en_i = '1' then
+                if true then
                     if load_pc_i = '1' then
                         pc <= unsigned(pc_i);
-                    elsif cmd_rdy_i = '1' and decode_rdy_i = '1' then
+                    elsif en_i = '1' and cmd_rdy_i = '1' and decode_rdy_i = '1' then
                         pc <= pc + 4;
                     end if;
                 end if;

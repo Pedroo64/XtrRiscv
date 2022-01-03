@@ -3,7 +3,7 @@ set(CMAKE_BUILD_TYPE DEBUG) # Set to RELEASE or DEBUG
 
 set(ARCH "rv32i")
 set(ABI "ilp32")
-set(MEMSIZE "32K")
+set(MEMSIZE "8K")
 set(F_CPU "48e6")
 set(SECTION_START "0K")
 set(STACK_SIZE "2K")
