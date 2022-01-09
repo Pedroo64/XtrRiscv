@@ -21,6 +21,7 @@ architecture rtl of xtr_cpu is
     signal instr_cmd_vld, instr_cmd_rdy, instr_rsp_vld : std_logic;
     signal data_cmd_adr, data_cmd_dat, data_rsp_dat : std_logic_vector(31 downto 0);
     signal data_cmd_vld, data_cmd_we, data_cmd_rdy, data_rsp_vld : std_logic;
+    signal data_cmd_siz : std_logic_vector(1 downto 0);
     signal data_cmd_sel : std_logic_vector(3 downto 0);
 begin
     
@@ -29,7 +30,7 @@ begin
         arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
         instr_cmd_adr_o => instr_cmd_adr, instr_cmd_vld_o => instr_cmd_vld, 
         instr_cmd_rdy_i => instr_cmd_rdy, instr_rsp_dat_i => instr_rsp_dat, instr_rsp_vld_i => instr_rsp_vld,
-        data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_dat_o => data_cmd_dat,
+        data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_siz_o => data_cmd_siz, data_cmd_dat_o => data_cmd_dat,
         data_cmd_rdy_i => data_cmd_rdy, data_rsp_vld_i => data_rsp_vld, data_rsp_dat_i => data_rsp_dat);
 
     instr_cmd_o.adr <= instr_cmd_adr;
@@ -45,9 +46,35 @@ begin
     data_cmd_o.vld  <= data_cmd_vld;
     data_cmd_o.we   <= data_cmd_we;
     data_cmd_o.dat  <= data_cmd_dat;
-    data_cmd_o.sel  <= (others => '1');
+    data_cmd_o.sel  <= data_cmd_sel;
     data_cmd_rdy    <= data_rsp_i.rdy;
     data_rsp_vld    <= data_rsp_i.vld;
     data_rsp_dat    <= data_rsp_i.dat;
+
+    process (data_cmd_siz, data_cmd_adr(1 downto 0))
+    begin
+        case data_cmd_siz is
+            when "00" =>
+                case data_cmd_adr(1 downto 0) is
+                    when "00" =>
+                        data_cmd_sel <= "0001";   
+                    when "01" =>
+                        data_cmd_sel <= "0010";  
+                    when "10" =>
+                        data_cmd_sel <= "0100";  
+                    when "11" =>
+                        data_cmd_sel <= "1000";  
+                    when others =>            
+                end case;
+            when "01" =>
+                if data_cmd_adr(1) = '0' then
+                    data_cmd_sel <= "0011";
+                else
+                    data_cmd_sel <= "1100";
+                end if;
+            when others =>
+                data_cmd_sel <= "1111";
+        end case;
+    end process;
     
 end architecture rtl;

@@ -14,5 +14,8 @@ package xtr_def is
         dat : std_logic_vector(31 downto 0);
     end record xtr_rsp_t;
 
+    type v_xtr_cmd_t is array (natural range <>) of xtr_cmd_t;
+    type v_xtr_rsp_t is array (natural range <>) of xtr_rsp_t;
+
     
 end package xtr_def;

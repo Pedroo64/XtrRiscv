@@ -15,6 +15,7 @@ entity cpu is
         data_cmd_adr_o : out std_logic_vector(31 downto 0);
         data_cmd_vld_o : out std_logic;
         data_cmd_we_o : out std_logic;
+        data_cmd_siz_o : out std_logic_vector(1 downto 0);
         data_cmd_rdy_i : in std_logic;
         data_cmd_dat_o : out std_logic_vector(31 downto 0);
         data_rsp_dat_i : in std_logic_vector(31 downto 0);
@@ -130,9 +131,9 @@ begin
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             en_i => mem_en, vld_i => ex_mem_vld, rdy_o => mem_rdy,
-            adr_i => ex_mem_adr, we_i => ex_mem_we, dat_i => ex_mem_dat,
+            adr_i => ex_mem_adr, we_i => ex_mem_we, dat_i => ex_mem_dat, siz_i => ex_mem_siz,
             rd_adr_i => ex_mem_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
-            cmd_adr_o => data_cmd_adr_o, cmd_vld_o => data_cmd_vld_o, cmd_we_o => data_cmd_we_o, cmd_dat_o => data_cmd_dat_o,
+            cmd_adr_o => data_cmd_adr_o, cmd_vld_o => data_cmd_vld_o, cmd_we_o => data_cmd_we_o, cmd_siz_o => data_cmd_siz_o, cmd_dat_o => data_cmd_dat_o,
             cmd_rdy_i => data_cmd_rdy_i, rsp_vld_i => data_rsp_vld_i, rsp_dat_i => data_rsp_dat_i);
 
 -- writeback

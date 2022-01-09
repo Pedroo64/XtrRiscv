@@ -1,5 +1,6 @@
 # Specify the program tool
-set(PROGRAM_TOOL_PATH "/mnt/c/Users/Pedro/Documents/Dev/Tss/XtrRiscv/soft/HAL/tools/Programmer")
+#set(PROGRAM_TOOL_PATH "/mnt/c/Users/Pedro/Documents/Dev/Tss/XtrRiscv/soft/HAL/tools/Programmer")
+set(PROGRAM_TOOL_PATH "/mnt/e/Dev/XtrRiscv-VexRiscv/Software/tools/Programmer")
 set(PROGRAM_TOOL "${PROGRAM_TOOL_PATH}/${DIR_NAME}/Programmer${WIN_EXE}")
 # include("${CMAKE_CURRENT_LIST_DIR}/../../system/src/CMakeLists.txt")
 # include("${CMAKE_CURRENT_LIST_DIR}/../../cores/riscduinov/CMakeLists.txt")

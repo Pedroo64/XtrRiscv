@@ -58,6 +58,7 @@ architecture rtl of tb_if_id_ex_mem_wb is
     -- ex -> mem
     signal ex_mem_vld, ex_mem_we : std_logic;
     signal ex_mem_adr, ex_mem_dat : std_logic_vector(31 downto 0);
+    signal ex_mem_siz : std_logic_vector(1 downto 0);
     signal ex_mem_rd_we : std_logic;
     signal ex_mem_rd_adr : std_logic_vector(4 downto 0);
     -- ex -> wb
@@ -198,14 +199,14 @@ begin
             rd_adr_o => ex_wb_rd_adr, rd_we_o => ex_wb_rd_we, rd_dat_o => ex_wb_rd_dat,
             load_pc_o => ex_wb_load_pc, pc_o => ex_wb_pc,
             mem_rd_adr_o => ex_mem_rd_adr,
-            mem_cmd_adr_o => ex_mem_adr, mem_cmd_vld_o => ex_mem_vld, mem_cmd_we_o => ex_mem_we, mem_cmd_dat_o => ex_mem_dat, mem_cmd_siz_o => open);
+            mem_cmd_adr_o => ex_mem_adr, mem_cmd_vld_o => ex_mem_vld, mem_cmd_we_o => ex_mem_we, mem_cmd_dat_o => ex_mem_dat, mem_cmd_siz_o => ex_mem_siz);
     mem_en <= '1';
     u_mem : entity work.memory
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             en_i => mem_en,
             adr_i => ex_mem_adr, vld_i => ex_mem_vld, we_i => ex_mem_we, dat_i => ex_mem_dat,
-            rd_adr_i => ex_mem_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
+            rd_adr_i => ex_mem_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, siz_i => ex_mem_siz, rd_dat_o => mem_wb_rd_dat,
             cmd_adr_o => data_cmd_adr, cmd_vld_o => data_cmd_vld, cmd_we_o => data_cmd_we, cmd_dat_o => data_cmd_dat, cmd_rdy_i => data_cmd_rdy,
             rsp_vld_i => data_rsp_vld, rsp_dat_i => data_rsp_dat, rdy_o => mem_rdy);
     wb_en <= '1';

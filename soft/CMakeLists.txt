@@ -22,7 +22,7 @@ project(test.elf C ASM CXX)
 include("${CMAKE_TOOLCHAIN_PATH}/targets.cmake")
 include_directories(inc)
 set(src
-    src/main.S
+    src/main.S src/main.c
 )
 add_executable(${CMAKE_PROJECT_NAME} ${src})  
 

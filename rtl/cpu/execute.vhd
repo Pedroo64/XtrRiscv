@@ -62,8 +62,8 @@ begin
                                 rd_dat_o <= immediate_i;
                                 rd_we    <= '1';
                             when RV32I_OP_AUIPC =>
-                                pc_o     <= std_logic_vector(unsigned(pc_i) + unsigned(immediate_i));
-                                load_pc  <= '1';
+                                --pc_o     <= std_logic_vector(unsigned(pc_i) + unsigned(immediate_i));
+                                --load_pc  <= '1';
                                 rd_dat_o <= std_logic_vector(unsigned(pc_i) + unsigned(immediate_i));
                                 rd_we    <= '1';
                             when RV32I_OP_JAL =>
