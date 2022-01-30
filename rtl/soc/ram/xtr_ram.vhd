@@ -22,7 +22,7 @@ entity xtr_ram is
 end entity xtr_ram;
 
 architecture rtl of xtr_ram is
-    constant C_ADDR_DEPTH : integer := integer(log2(real(C_RAM_SIZE)));
+    constant C_ADDR_DEPTH : integer := integer(log2(real(C_RAM_SIZE / 4)));
 begin
     
     u_bram : entity work.bram

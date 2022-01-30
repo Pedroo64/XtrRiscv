@@ -66,7 +66,7 @@ begin
                 if we_a_i = '1' then
                     for i in 0 to C_NB_COL_A - 1 loop
                         if be_a_i(i) = '1' then
-                            ram(to_integer(unsigned(addr_a_i)))(i*8 + 7 downto i*8) <= dat_a_i(i*8 + 7 downto i*8);
+                            --ram(to_integer(unsigned(addr_a_i)))(i*8 + 7 downto i*8) <= dat_a_i(i*8 + 7 downto i*8);
                         end if;
                     end loop;
                 end if;

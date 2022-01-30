@@ -26,7 +26,7 @@ begin
     
     u_xtr_uart : entity work.xtr_uart
         generic map (
-            C_FREQ_IN => C_FREQ_IN, C_BAUD => 1_000_000)
+            C_FREQ_IN => C_FREQ_IN, C_BAUD => 115_200)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             xtr_cmd_i => xtr_cmd_i, xtr_rsp_o => xtr_rsp_o,

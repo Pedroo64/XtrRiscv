@@ -2,10 +2,16 @@
 !.gitignore
 # HDL
 !*.vhd
+# Modelsim
 !*.mpf
+# Vivado
+!*.xdc
+!*.xpr
 # C/C++
 !*.c
+!*.h
 !*.cpp
+!*.hpp
 !*.S
 # CMake
 !CMakeLists.txt
@@ -19,3 +25,6 @@ Makefile
 CMakeCache.txt
 cmake_install.cmake
 CMakeFiles
+
+# Vivado
+*.runs

@@ -9,7 +9,7 @@ set(SECTION_START "0K")
 set(STACK_SIZE "2K")
 set(HEAP_SIZE "2K")
 
-set(TOOLCHAIN_PATH "/mnt/c/Users/Pedro/Documents/Compilers/RISCV/SiFive/Ubuntu")
+set(TOOLCHAIN_PATH "/mnt/c/opt/compilers/riscv/sifive/ubuntu")
 # set(TOOLCHAIN_PATH "C:/Users/Pedro/Documents/Compilers/RISCV/Windows")
 set(CMAKE_TOOLCHAIN_PATH "cmake_tools")
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_PATH}/toolchain.cmake")
