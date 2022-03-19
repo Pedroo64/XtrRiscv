@@ -22,6 +22,9 @@ entity instruction_decode is
         funct3        : out std_logic_vector(2 downto 0);
         funct7        : out std_logic_vector(6 downto 0);
         immediate_o   : out std_logic_vector(31 downto 0);
+        csr_vld_o     : out std_logic;
+        csr_adr_o     : out std_logic_vector(11 downto 0);
+        csr_zimm_o      : out std_logic_vector(4 downto 0);
         vld_o         : out std_logic;
         mem_vld_o     : out std_logic;
         execute_rdy_i : in std_logic
@@ -29,9 +32,9 @@ entity instruction_decode is
 end entity instruction_decode;
 
 architecture rtl of instruction_decode is
-    signal rs1_adr, rs2_adr : std_logic_vector(4 downto 0);
-    signal rdy              : std_logic;
-    signal vld, mem_vld     : std_logic;
+    signal rs1_adr, rs2_adr      : std_logic_vector(4 downto 0);
+    signal rdy                   : std_logic;
+    signal vld, mem_vld, csr_vld : std_logic;
 begin
     rs1_adr_o <= instr_i(19 downto 15) when rdy = '1' else rs1_adr;
     rs2_adr_o <= instr_i(24 downto 20) when rdy = '1' else rs2_adr;
@@ -40,12 +43,14 @@ begin
         if arst_i = '1' then
             vld     <= '0';
             mem_vld <= '0';
+            csr_vld <= '0';
             rs1_adr <= (others => '0');
             rs2_adr <= (others => '0');
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
                 vld     <= '0';
                 mem_vld <= '0';
+                csr_vld <= '0';
                 rs1_adr <= (others => '0');
                 rs2_adr <= (others => '0');
             else
@@ -60,6 +65,9 @@ begin
                         rd_adr_o <= instr_i(11 downto 7);
                         funct3   <= instr_i(14 downto 12);
                         funct7   <= instr_i(31 downto 25);
+                        csr_vld  <= '0';
+                        csr_zimm_o <= instr_i(19 downto 15);
+                        csr_adr_o <= instr_i(31 downto 20);
                         case instr_i(6 downto 0) is
                             when RV32I_OP_LUI => -- U Type
                                 immediate_o(31 downto 12) <= instr_i(31 downto 12);
@@ -122,14 +130,16 @@ begin
 
                                 --when RV32I_OP_FENCE =>
                                 --    decode_vld <= '1';
-                                --when RV32I_OP_SYS =>
-                                --    decode_vld <= '1';
+                            when RV32I_OP_SYS =>
+                                vld <= '1';
+                                csr_vld <= '1';
                             when others =>
                         end case;
                     end if;
                 elsif vld = '1' and rdy = '1' then
                     vld     <= '0';
                     mem_vld <= '0';
+                    csr_vld <= '0';
                 end if;
             end if;
         end if;
@@ -156,5 +166,6 @@ begin
         en_i;
     vld_o        <= vld;
     mem_vld_o    <= mem_vld;
+    csr_vld_o    <= csr_vld;
     decode_rdy_o <= rdy;
 end architecture;

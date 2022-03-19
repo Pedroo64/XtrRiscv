@@ -37,6 +37,13 @@ constant RV32I_SYS_EBREAK        :   std_logic_vector := "000000000001";
 --constant RV32I_SYS_RDTIMEH       :   std_logic_vector := "110010000001";
 --constant RV32I_SYS_RDINSTRET     :   std_logic_vector := "110000000010";
 --constant RV32I_SYS_RDINSTRETH    :   std_logic_vector := "110010000010";
+-- Csr Operation
+constant RV32I_FN3_CSRRW        :   std_logic_vector(2 downto 0) := "001";
+constant RV32I_FN3_CSRRS        :   std_logic_vector(2 downto 0) := "010";
+constant RV32I_FN3_CSRRC        :   std_logic_vector(2 downto 0) := "011";
+constant RV32I_FN3_CSRRWI       :   std_logic_vector(2 downto 0) := "101";
+constant RV32I_FN3_CSRRSI       :   std_logic_vector(2 downto 0) := "110";
+constant RV32I_FN3_CSRRCI       :   std_logic_vector(2 downto 0) := "111";
 
 -- Specialized registers: zero
 constant RV32I_ZERO             :   std_logic_vector := "00000";

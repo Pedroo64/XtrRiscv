@@ -33,13 +33,23 @@ entity execute is
         mem_cmd_siz_o : out std_logic_vector(1 downto 0);
         mem_rdy_i     : in std_logic;
         wb_rdy_i      : in std_logic;
+        csr_vld_i     : in std_logic;
+        csr_adr_i     : in std_logic_vector(11 downto 0);
+        csr_zimm_i    : in std_logic_vector(4 downto 0);
+        csr_adr_o     : out std_logic_vector(11 downto 0);
+        csr_rd_adr_o  : out std_logic_vector(4 downto 0);
+        csr_dat_o     : out std_logic_vector(31 downto 0);
+        csr_funct3_o  : out std_logic_vector(2 downto 0);
+        csr_vld_o     : out std_logic;
+        csr_we_o      : out std_logic;
+        csr_rdy_i     : in std_logic;
         rdy_o         : out std_logic
     );
 end entity execute;
 
 architecture rtl of execute is
-    signal mem_rdy, wb_rdy, rdy        : std_logic;
-    signal rd_we, load_pc, mem_cmd_vld : std_logic;
+    signal mem_rdy, wb_rdy, rdy, csr_rdy : std_logic;
+    signal rd_we, load_pc, mem_cmd_vld, csr_vld : std_logic;
 begin
 
     process (clk_i, arst_i)
@@ -155,7 +165,11 @@ begin
                                 rd_we <= '1';
                                 case funct3_i is
                                     when RV32I_FN3_ADD =>
-                                        rd_dat_o <= std_logic_vector(unsigned(rs1_dat_i) + unsigned(rs2_dat_i));
+                                        if funct7_i(5) = '1' then
+                                            rd_dat_o <= std_logic_vector(unsigned(rs1_dat_i) - unsigned(rs2_dat_i));
+                                        else
+                                            rd_dat_o <= std_logic_vector(unsigned(rs1_dat_i) + unsigned(rs2_dat_i));
+                                        end if;
                                     when RV32I_FN3_SL =>
                                         rd_dat_o <= std_logic_vector(shift_left(unsigned(rs1_dat_i), to_integer(unsigned(rs2_dat_i(4 downto 0)))));
                                     when RV32I_FN3_SLT =>
@@ -234,12 +248,59 @@ begin
         end if;
     end process;
 
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            csr_vld <= '0';
+        elsif rising_edge(clk_i) then
+            if srst_i = '1' then
+                csr_vld <= '0';
+            else
+                if en_i = '1' and csr_vld_i = '1' and csr_rdy = '1' then
+                    csr_adr_o <= csr_adr_i;
+                    csr_rd_adr_o <= rd_adr_i;
+                    csr_funct3_o <= funct3_i;
+                    csr_vld <= '1';
+                    if funct3_i(1 downto 0) = RV32I_FN3_CSRRS(1 downto 0) or funct3_i(1 downto 0) = RV32I_FN3_CSRRC(1 downto 0) then
+                        if unsigned(csr_zimm_i) = 0 then
+                            csr_we_o <= '0';
+                        end if;
+                    else
+                        csr_we_o <= '1';
+                    end if;
+                    if opcode_i = RV32I_OP_SYS then
+                        case funct3_i is
+                            when RV32I_FN3_CSRRW =>
+                                csr_dat_o <= rs1_dat_i;
+                            when RV32I_FN3_CSRRS =>
+                                csr_dat_o <= std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(rs1_dat_i(4 downto 0)))));
+                            when RV32I_FN3_CSRRC =>
+                                csr_dat_o <= not std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(rs1_dat_i(4 downto 0)))));
+                            when RV32I_FN3_CSRRWI =>
+                                csr_dat_o <= immediate_i;
+                            when RV32I_FN3_CSRRSI =>
+                                csr_dat_o <= std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(csr_zimm_i))));
+                            when RV32I_FN3_CSRRCI =>
+                                csr_dat_o <= not std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(csr_zimm_i))));                        
+                            when others =>
+                        end case;
+                    end if;
+                elsif csr_vld = '1' and csr_rdy = '1' then
+                    csr_vld <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
+
     mem_rdy <=
         '0' when mem_cmd_vld = '1' and mem_rdy_i = '0' else
         '1';
     wb_rdy <=
         '0' when rd_we = '1' and wb_rdy_i = '0' else
         '0' when load_pc = '1' and wb_rdy_i = '0' else
+        '1';
+    csr_rdy <= 
+        '0' when csr_vld = '1' and csr_rdy_i = '0' else
         '1';
 
     rd_we_o       <= rd_we;
@@ -248,7 +309,12 @@ begin
 
     rdy <=
         mem_rdy when mem_vld_i = '1' else
+        csr_rdy when csr_vld_i = '1' else 
         wb_rdy;
 
     rdy_o <= rdy and en_i;
+
+    csr_vld_o <= csr_vld; 
+
+
 end architecture rtl;

@@ -12,6 +12,7 @@ entity control_unit is
         opcode_i : in std_logic_vector(6 downto 0);
         rs1_adr_i : in std_logic_vector(4 downto 0);
         rs2_adr_i : in std_logic_vector(4 downto 0);
+        funct3_i : in std_logic_vector(2 downto 0);
         ex_mem_rd_adr_i : in std_logic_vector(4 downto 0);
         ex_mem_rd_we_i : in std_logic;
         ex_rd_adr_i : in std_logic_vector(4 downto 0);
@@ -32,7 +33,7 @@ end entity control_unit;
 architecture rtl of control_unit is
     signal reg_mutex : std_logic_vector(31 downto 0);
     signal branching, d_branching : std_logic;
-    signal op_use_rs1, op_use_rs2 : std_logic;
+    signal op_use_rs1, op_use_rs2, op_csr : std_logic;
     signal rs1_adr, rs2_adr : std_logic_vector(4 downto 0);
     signal d_wb_rd_we : std_logic;
     signal d_wb_rd_adr : std_logic_vector(4 downto 0);
@@ -130,9 +131,11 @@ begin
         '0' when ex_rd_adr_i = rs2_adr and ex_rd_we_i = '1' and op_use_rs2 = '1' else
         '0' when ex_mem_rd_adr_i = rs1_adr and ex_mem_rd_we_i = '1' and op_use_rs1 = '1' else
         '0' when ex_mem_rd_adr_i = rs2_adr and ex_mem_rd_we_i = '1' and op_use_rs2 = '1' else
-        '0' when reg_mutex(to_integer(unsigned(rs1_adr))) = '1' and op_use_rs1 = '1' else
+        '0' when reg_mutex(to_integer(unsigned(rs1_adr))) = '1' and (op_use_rs1 = '1' or op_csr = '1') else
         '0' when reg_mutex(to_integer(unsigned(rs2_adr))) = '1' and op_use_rs2 = '1' else
+        '0' when ex_rd_adr_i = rs1_adr and ex_rd_we_i = '1' and op_csr = '1' else
         '1';
+
     with opcode_i select
         op_use_rs1 <= 
             '1' when RV32I_OP_JALR,
@@ -148,6 +151,9 @@ begin
             '1' when RV32I_OP_REG_REG,
             '1' when RV32I_OP_STORE,
             '0' when others;
+    op_csr <= 
+        '1' when opcode_i = RV32I_OP_SYS and funct3_i(2) = '0' else
+        '0'; 
     
 -- rs1 :
 -- RV32I_OP_JALR | RV32I_OP_BRANCH | RV32I_OP_REG_IMM | RV32I_OP_REG_REG | RV32I_OP_LOAD | RV32I_OP_STORE
