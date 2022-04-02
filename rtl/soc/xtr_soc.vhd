@@ -16,7 +16,8 @@ entity xtr_soc is
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
         uart_rx_i : in std_logic_vector(C_UART - 1 downto 0);
-        uart_tx_o : out std_logic_vector(C_UART - 1 downto 0)
+        uart_tx_o : out std_logic_vector(C_UART - 1 downto 0);
+        external_irq_i : in std_logic
     );
 end entity xtr_soc;
 
@@ -31,7 +32,8 @@ begin
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
-            data_cmd_o => dat_cmd, data_rsp_i => dat_rsp);
+            data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
+            external_irq_i => external_irq_i);
 
     u_xtr_abr : entity work.xtr_abr
         generic map (

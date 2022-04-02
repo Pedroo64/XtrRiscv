@@ -19,6 +19,8 @@ entity writeback is
         csr_rd_adr_i : in std_logic_vector(4 downto 0);
         csr_rd_we_i : in std_logic;
         csr_rd_dat_i : in std_logic_vector(31 downto 0);
+        csr_load_pc_i : in std_logic;
+        csr_pc_i : in std_logic_vector(31 downto 0);
         rd_adr_o : out std_logic_vector(4 downto 0);
         rd_we_o : out std_logic;
         rd_dat_o : out std_logic_vector(31 downto 0);
@@ -44,8 +46,7 @@ begin
                 load_pc_o <= '0';
             else
                 if en_i = '1' then
-                    load_pc_o <= '0';
-                    pc_o <= ex_pc_i;
+                    rd_we_o <= '0';
                     if mem_rd_we_i = '1' then
                         rd_adr_o <= mem_rd_adr_i;
                         rd_we_o <= '1';
@@ -54,11 +55,17 @@ begin
                         rd_adr_o <= csr_rd_adr_i;
                         rd_we_o <= '1';
                         rd_dat_o <= csr_rd_dat_i;
-                    else
+                    elsif ex_rd_we_i = '1' then
                         rd_adr_o <= ex_rd_adr_i;
                         rd_we_o <= ex_rd_we_i;
                         rd_dat_o <= ex_rd_dat_i;
+                    end if;
+                    if csr_load_pc_i = '1' then
+                        load_pc_o <= '1';
+                        pc_o <= csr_pc_i;
+                    else
                         load_pc_o <= ex_load_pc_i;
+                        pc_o <= ex_pc_i;
                     end if;
                 end if;
             end if;

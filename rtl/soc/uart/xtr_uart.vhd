@@ -29,7 +29,7 @@ architecture rtl of xtr_uart is
     signal rx_vld, rx_available : std_logic;
     signal rx_baud : std_logic_vector(15 downto 0);
 begin
-    xtr_rsp_o.dat <= x"00000" & "0" & rx_available & "0" & tx_rdy & rx_dat_latch;
+    xtr_rsp_o.dat <= x"00000" & "0" & (not tx_rdy) & "0" & rx_available & rx_dat_latch;
     xtr_rsp_o.rdy <= '1';
     process (clk_i, arst_i)
     begin

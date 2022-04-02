@@ -21,6 +21,8 @@ entity control_unit is
         wb_rd_we_i : in std_logic;
         ex_load_pc_i : in std_logic;
         wb_load_pc_i : in std_logic;
+        csr_load_pc_i : in std_logic;
+        branching_o : out std_logic;
         if_en_o : out std_logic;
         if_rst_o : out std_logic;
         id_en_o : out std_logic;
@@ -50,15 +52,16 @@ begin
                 reg_mutex <= (others => '0');
                 branching <= '0';
             else 
-                if ex_mem_rd_we_i = '1' then
-                    reg_mutex(to_integer(unsigned(ex_mem_rd_adr_i))) <= '1';
-                elsif ex_rd_we_i = '1' then
-                    reg_mutex(to_integer(unsigned(ex_rd_adr_i))) <= '1';
-                end if;
                 if d_wb_rd_we = '1' then
                     reg_mutex(to_integer(unsigned(d_wb_rd_adr))) <= '0';
                 end if;
-                if ex_load_pc_i = '1' then
+                if ex_mem_rd_we_i = '1' then
+                    reg_mutex(to_integer(unsigned(ex_mem_rd_adr_i))) <= '1';
+                end if;
+                if ex_rd_we_i = '1' then
+                    reg_mutex(to_integer(unsigned(ex_rd_adr_i))) <= '1';
+                end if;
+                if ex_load_pc_i = '1' or csr_load_pc_i = '1' then
                     branching <= '1';
                 elsif wb_load_pc_i = '1' then
                     branching <= '0';
@@ -119,10 +122,12 @@ begin
     id_rst_o <= branching or d_branching;
     ex_rst_o <= '0';
 
+    branching_o <= branching or d_branching;
+
     if_en_o <= '1';
     id_en_o <= '1';
     ex_en_o <= 
-        '0' when (ex_load_pc_i or branching) = '1' else
+        '0' when (ex_load_pc_i or csr_load_pc_i or branching) = '1' else
         --'0' when reg_mutex(to_integer(unsigned(ex_rd_adr_i))) = '1' and ex_rd_we_i = '1' and op_use_rs1 = '1' else
         --'0' when reg_mutex(to_integer(unsigned(ex_rd_adr_i))) = '1' and ex_rd_we_i = '1' and op_use_rs2 = '1' else
         --'0' when reg_mutex(to_integer(unsigned(ex_mem_rd_adr_i))) = '1' and ex_mem_rd_we_i = '1' and op_use_rs1 = '1' else

@@ -29,14 +29,17 @@ constant RV32I_FN3_OR            :   std_logic_vector := "110";
 constant RV32I_FN3_AND           :   std_logic_vector := "111";
 
 -- SYS codes
-constant RV32I_SYS_ECALL         :   std_logic_vector := "000000000000";
-constant RV32I_SYS_EBREAK        :   std_logic_vector := "000000000001";
+constant RV32I_SYS_ECALL        :   std_logic_vector := "000000000000";
+constant RV32I_SYS_EBREAK       :   std_logic_vector := "000000000001";
+constant RV32I_SYS_MRET         :   std_logic_vector := "001100000010";
 --constant RV32I_SYS_RDCYCLE       :   std_logic_vector := "110000000000";
 --constant RV32I_SYS_RDCYCLEH      :   std_logic_vector := "110010000000";
 --constant RV32I_SYS_RDTIME        :   std_logic_vector := "110000000001";
 --constant RV32I_SYS_RDTIMEH       :   std_logic_vector := "110010000001";
 --constant RV32I_SYS_RDINSTRET     :   std_logic_vector := "110000000010";
 --constant RV32I_SYS_RDINSTRETH    :   std_logic_vector := "110010000010";
+constant RV32I_FN3_TRAP         :   std_logic_vector := "000";
+
 -- Csr Operation
 constant RV32I_FN3_CSRRW        :   std_logic_vector(2 downto 0) := "001";
 constant RV32I_FN3_CSRRS        :   std_logic_vector(2 downto 0) := "010";
@@ -64,5 +67,7 @@ constant RV32I_FN3_BLT          :   std_logic_vector := "100";
 constant RV32I_FN3_BGE          :   std_logic_vector := "101";
 constant RV32I_FN3_BLTU         :   std_logic_vector := "110";
 constant RV32I_FN3_BGEU         :   std_logic_vector := "111";
+
+
     
 end package rv32i_pkg;

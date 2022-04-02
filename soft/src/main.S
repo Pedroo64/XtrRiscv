@@ -8,21 +8,25 @@
 
 .section	.start_jump,"ax",@progbits
 crtStart:
-  //long jump to allow crtInit to be anywhere
-  //do it always in 12 bytes
-  lui x2,       %hi(crtInit)
-  addi x2, x2,  %lo(crtInit)
-  jalr x1,x2
-  nop
+    //long jump to allow crtInit to be anywhere
+    //do it always in 12 bytes
+    lui x2,       %hi(crtInit)
+    addi x2, x2,  %lo(crtInit)
+    jalr x1,x2
+    nop
 
 .section .text
 crtInit:
-  .option push
-  .option norelax
-  la gp, __global_pointer$
-  .option pop
-  la sp, _stack_start
+    .option push
+    .option norelax
+    la gp, __global_pointer$
+    .option pop
+    la sp, _stack_start
 
-  call main
+    la t0, trap_entry # 
+    csrw mtvec, t0
+
+    call main
+
 infinitLoop:
-  j infinitLoop
+    j infinitLoop

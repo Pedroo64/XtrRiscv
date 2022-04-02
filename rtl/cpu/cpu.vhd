@@ -19,7 +19,8 @@ entity cpu is
         data_cmd_rdy_i : in std_logic;
         data_cmd_dat_o : out std_logic_vector(31 downto 0);
         data_rsp_dat_i : in std_logic_vector(31 downto 0);
-        data_rsp_vld_i : in std_logic
+        data_rsp_vld_i : in std_logic;
+        external_irq_i : in std_logic
     );
 end entity cpu;
 
@@ -69,10 +70,13 @@ architecture rtl of cpu is
     signal ex_csr_rd_adr : std_logic_vector(4 downto 0);
     signal ex_csr_funct3 : std_logic_vector(2 downto 0);
     signal ex_csr_adr : std_logic_vector(11 downto 0);
+    signal ex_csr_mret : std_logic;
     -- csr -> wb
     signal csr_wb_rd_we : std_logic;
     signal csr_wb_rd_dat : std_logic_vector(31 downto 0);
     signal csr_wb_rd_adr : std_logic_vector(4 downto 0);
+    signal csr_wb_load_pc : std_logic;
+    signal csr_wb_pc : std_logic_vector(31 downto 0);
     -- wb
     signal wb_en, wb_ex_rdy, wb_csr_rdy : std_logic;
     signal wb_rd_adr : std_logic_vector(4 downto 0);
@@ -85,6 +89,7 @@ architecture rtl of cpu is
     -- control unit
     signal cu_if_rst, cu_id_rst, cu_ex_rst : std_logic;
     signal cu_if_en, cu_id_en, cu_ex_en : std_logic;
+    signal cu_branching : std_logic;
 begin
 -- Fetch
     if_rst <= cu_if_rst or srst_i;
@@ -139,7 +144,8 @@ begin
             mem_rd_adr_o => ex_mem_rd_adr, mem_cmd_adr_o => ex_mem_adr, mem_cmd_vld_o => ex_mem_vld, mem_cmd_we_o => ex_mem_we, mem_cmd_dat_o => ex_mem_dat, mem_cmd_siz_o => ex_mem_siz,
             csr_vld_i => id_ex_csr_vld, csr_rdy_i => csr_rdy,
             csr_adr_i => id_ex_csr_adr, csr_zimm_i => id_ex_csr_zimm, 
-            csr_adr_o => ex_csr_adr, csr_vld_o => ex_csr_vld, csr_we_o => ex_csr_we, csr_dat_o => ex_csr_dat, csr_rd_adr_o => ex_csr_rd_adr, csr_funct3_o => ex_csr_funct3);
+            csr_adr_o => ex_csr_adr, csr_vld_o => ex_csr_vld, csr_we_o => ex_csr_we, csr_dat_o => ex_csr_dat, csr_rd_adr_o => ex_csr_rd_adr, csr_funct3_o => ex_csr_funct3,
+            mret_o => ex_csr_mret);
     ex_mem_rd_we <= 
         '1' when ex_mem_vld = '1' and ex_mem_we = '0' else 
         '0';
@@ -162,7 +168,12 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             en_i => csr_en, rdy_o => csr_rdy, wb_rdy_i => wb_csr_rdy,
             vld_i => ex_csr_vld, we_i => ex_csr_we, adr_i => ex_csr_adr, funct3_i => ex_csr_funct3, dat_i => ex_csr_dat,
-            rd_adr_i => ex_csr_rd_adr, rd_adr_o => csr_wb_rd_adr, rd_dat_o => csr_wb_rd_dat, rd_we_o => csr_wb_rd_we);
+            rd_adr_i => ex_csr_rd_adr, rd_adr_o => csr_wb_rd_adr, rd_dat_o => csr_wb_rd_dat, rd_we_o => csr_wb_rd_we,
+            branching_i => cu_branching,
+            id_vld_i => id_ex_vld, id_pc_i => id_ex_pc, 
+            ex_pc_i => ex_wb_pc, pc_o => csr_wb_pc, load_pc_o => csr_wb_load_pc,
+            ex_rd_we_i => ex_wb_rd_we, ex_load_pc_i => ex_wb_load_pc,
+            mret_i => ex_csr_mret, external_irq_i => external_irq_i);
 
 -- writeback
     wb_en <= '1';
@@ -171,20 +182,23 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             en_i => wb_en, ex_rdy_o => wb_ex_rdy, csr_rdy_o => wb_csr_rdy,
             mem_rd_adr_i => mem_wb_rd_adr, mem_rd_we_i => mem_wb_rd_we, mem_rd_dat_i => mem_wb_rd_dat,
-            csr_rd_adr_i => csr_wb_rd_adr, csr_rd_we_i => csr_wb_rd_we, csr_rd_dat_i => csr_wb_rd_dat,
+            csr_rd_adr_i => csr_wb_rd_adr, csr_rd_we_i => csr_wb_rd_we, csr_rd_dat_i => csr_wb_rd_dat, 
+            csr_load_pc_i => csr_wb_load_pc, csr_pc_i => csr_wb_pc,
             ex_load_pc_i => ex_wb_load_pc, ex_pc_i => ex_wb_pc, ex_rd_adr_i => ex_wb_rd_adr, ex_rd_we_i => ex_wb_rd_we, ex_rd_dat_i => ex_wb_rd_dat,
             rd_adr_o => wb_rd_adr, rd_we_o => wb_rd_we, rd_dat_o => wb_rd_dat, load_pc_o => wb_load_pc, pc_o => wb_pc);
 
 -- control unit
     u_cu : entity work.control_unit
-    port map (
-        arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
-        opcode_i => id_ex_opcode, rs1_adr_i => rs1_adr, rs2_adr_i => rs2_adr, funct3_i => id_ex_funct3,
-        ex_load_pc_i => ex_wb_load_pc, ex_rd_adr_i => ex_wb_rd_adr, ex_rd_we_i => ex_wb_rd_we,
-        ex_mem_rd_adr_i => ex_mem_rd_adr, ex_mem_rd_we_i => ex_mem_rd_we,
-        wb_load_pc_i => wb_load_pc, wb_rd_adr_i => wb_rd_adr, wb_rd_we_i => wb_rd_we,
-        if_rst_o => cu_if_rst, if_en_o => cu_if_en,
-        id_rst_o => cu_id_rst, id_en_o => cu_id_en,
-        ex_rst_o => cu_ex_rst, ex_en_o => cu_ex_en);
+        port map (
+            arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
+            opcode_i => id_ex_opcode, rs1_adr_i => rs1_adr, rs2_adr_i => rs2_adr, funct3_i => id_ex_funct3,
+            ex_load_pc_i => ex_wb_load_pc, ex_rd_adr_i => ex_wb_rd_adr, ex_rd_we_i => ex_wb_rd_we,
+            ex_mem_rd_adr_i => ex_mem_rd_adr, ex_mem_rd_we_i => ex_mem_rd_we,
+            wb_load_pc_i => wb_load_pc, wb_rd_adr_i => wb_rd_adr, wb_rd_we_i => wb_rd_we,
+            csr_load_pc_i => csr_wb_load_pc,
+            branching_o => cu_branching,
+            if_rst_o => cu_if_rst, if_en_o => cu_if_en,
+            id_rst_o => cu_id_rst, id_en_o => cu_id_en,
+            ex_rst_o => cu_ex_rst, ex_en_o => cu_ex_en);
 
 end architecture rtl;
