@@ -25,6 +25,7 @@ entity execute is
         rd_dat_o      : out std_logic_vector(31 downto 0);
         load_pc_o     : out std_logic;
         pc_o          : out std_logic_vector(31 downto 0);
+        vld_o         : out std_logic;
         mem_rd_adr_o  : out std_logic_vector(4 downto 0);
         mem_cmd_adr_o : out std_logic_vector(31 downto 0);
         mem_cmd_vld_o : out std_logic;
@@ -44,6 +45,7 @@ entity execute is
         csr_we_o      : out std_logic;
         csr_rdy_i     : in std_logic;
         mret_o        : out std_logic;
+        ecall_o       : out std_logic;
         rdy_o         : out std_logic
     );
 end entity execute;
@@ -52,7 +54,14 @@ architecture rtl of execute is
     signal mem_rdy, wb_rdy, rdy, csr_rdy : std_logic;
     signal rd_we, load_pc, mem_cmd_vld, csr_vld : std_logic;
 begin
-
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            vld_o <= '0';
+        elsif rising_edge(clk_i) then
+            vld_o <= en_i and vld_i and rdy;
+        end if;
+    end process;
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -64,7 +73,7 @@ begin
                 load_pc <= '0';
             else
                 load_pc <= '0';
-                if en_i = '1' then
+                if en_i = '1' and vld_i = '1' then
                     pc_o <= pc_i;
                 end if;
                 if en_i = '1' and vld_i = '1' and mem_vld_i = '0' then
@@ -263,36 +272,26 @@ begin
                     csr_rd_adr_o <= rd_adr_i;
                     csr_funct3_o <= funct3_i;
                     csr_vld <= '1';
---                    if funct3_i(1 downto 0) = RV32I_FN3_CSRRS(1 downto 0) or funct3_i(1 downto 0) = RV32I_FN3_CSRRC(1 downto 0) then
---                        if unsigned(csr_zimm_i) = 0 then
---                            csr_we_o <= '0';
---                        end if;
---                    else
-                        csr_we_o <= '1';
---                    end if;
+                    csr_we_o <= '1';
                     if opcode_i = RV32I_OP_SYS then
                         case funct3_i is
                             when RV32I_FN3_CSRRW =>
                                 csr_dat_o <= rs1_dat_i;
                             when RV32I_FN3_CSRRS =>
-                                --csr_dat_o <= std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(rs1_dat_i(4 downto 0)))));
                                 csr_dat_o <= rs1_dat_i;
                             when RV32I_FN3_CSRRC =>
---                                csr_dat_o <= not std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(rs1_dat_i(4 downto 0)))));
                                 csr_dat_o <= not rs1_dat_i;
                             when RV32I_FN3_CSRRWI =>
                                 csr_dat_o(31 downto 5) <= (others => '0');
                                 csr_dat_o(4 downto 0) <= csr_zimm_i;
                             when RV32I_FN3_CSRRSI =>
-                                --                                csr_dat_o <= std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(csr_zimm_i))));
                                 csr_dat_o(31 downto 5) <= (others => '0');
                                 csr_dat_o(4 downto 0) <= csr_zimm_i;
                             when RV32I_FN3_CSRRCI =>
-                                --                                csr_dat_o <= not std_logic_vector(shift_left(to_unsigned(1, 32), to_integer(unsigned(csr_zimm_i))));                        
-                                --                                csr_dat_o(31 downto 5) <= (others => '1');
                                 csr_dat_o(31 downto 5) <= (others => '1');
                                 csr_dat_o(4 downto 0) <= not csr_zimm_i;                                                        
                             when others =>
+                                csr_vld <= '0';
                         end case;
                     end if;
                 elsif csr_vld = '1' and csr_rdy = '1' then
@@ -306,15 +305,24 @@ begin
     begin
         if arst_i = '1' then
             mret_o <= '0';
+            ecall_o <= '0';
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
                 mret_o <= '0';
+                ecall_o <= '0';
             else
                 mret_o <= '0';
-                if opcode_i = RV32I_OP_SYS then
-                    if funct3_i = RV32I_FN3_TRAP then
-                        if immediate_i(11 downto 0) = RV32I_SYS_MRET then
-                            mret_o <= '1';
+                ecall_o <= '0';
+                if en_i = '1' and vld_i = '1' and rdy = '1' then
+                    if opcode_i = RV32I_OP_SYS then
+                        if funct3_i = RV32I_FN3_TRAP then
+                            case immediate_i(11 downto 0) is
+                                when RV32I_SYS_MRET =>
+                                    mret_o <= '1';
+                                when RV32I_SYS_ECALL =>
+                                    ecall_o <= '1';
+                                when others =>
+                            end case;
                         end if;
                     end if;
                 end if;

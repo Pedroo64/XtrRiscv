@@ -32,4 +32,30 @@ package csr_def is
     constant CSR_MSTATUS_MIE : integer := 3;
     constant CSR_MIE_MEIE : integer := 11;
 
+-- mcause
+    constant CSR_MCAUSE_USER_SOFTWARE_INTERRUPT         : std_logic_vector := x"80000000";
+    constant CSR_MCAUSE_SUPERVISOR_SOFTWARE_INTERRUPT   : std_logic_vector := x"80000001";
+    constant CSR_MCAUSE_HYPERVISOR_SOFTWARE_INTERRUPT   : std_logic_vector := x"80000002";
+    constant CSR_MCAUSE_MACHINE_SOFTWARE_INTERRUPT      : std_logic_vector := x"80000003";
+    constant CSR_MCAUSE_USER_TIMER_INTERRUPT            : std_logic_vector := x"80000004";
+    constant CSR_MCAUSE_SUPERVISOR_TIMER_INTERRUPT      : std_logic_vector := x"80000005";
+    constant CSR_MCAUSE_HYPERVISOR_TIMER_INTERRUPT      : std_logic_vector := x"80000006";
+    constant CSR_MCAUSE_MACHINE_TIMER_INTERRUPT         : std_logic_vector := x"80000007";
+    constant CSR_MCAUSE_USER_EXTERNAL_INTERRUPT         : std_logic_vector := x"80000008";
+    constant CSR_MCAUSE_SUPERVISOR_EXTERNAL_INTERRUPT   : std_logic_vector := x"80000009";
+    constant CSR_MCAUSE_HYPERVISOR_EXTERNAL_INTERRUPT   : std_logic_vector := x"8000000A";
+    constant CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT      : std_logic_vector := x"8000000B";
+    constant CSR_MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED  : std_logic_vector := x"00000000";
+    constant CSR_MCAUSE_INSTRUCTION_ACCESS_FAULT        : std_logic_vector := x"00000001";
+    constant CSR_MCAUSE_ILLEGAL_INSTRUCTION             : std_logic_vector := x"00000002";
+    constant CSR_MCAUSE_BREAKPOINT                      : std_logic_vector := x"00000003";
+    constant CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED         : std_logic_vector := x"00000004";
+    constant CSR_MCAUSE_LOAD_ACCESS_FAULT               : std_logic_vector := x"00000005";
+    constant CSR_MCAUSE_STORE_ADDRESS_MISALIGNED        : std_logic_vector := x"00000006";
+    constant CSR_MCAUSE_STORE_ACCESS_FAULT              : std_logic_vector := x"00000007";
+    constant CSR_MCAUSE_USER_ECALL                      : std_logic_vector := x"00000008";
+    constant CSR_MCAUSE_SUPERVISOR_ECALL                : std_logic_vector := x"00000009";
+    constant CSR_MCAUSE_HYPERVISOR_ECALL                : std_logic_vector := x"0000000A";
+    constant CSR_MCAUSE_MACHINE_ECALL                   : std_logic_vector := x"0000000B";
+
 end package csr_def;

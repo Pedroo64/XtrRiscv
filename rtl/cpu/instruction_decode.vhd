@@ -131,6 +131,10 @@ begin
                                 --when RV32I_OP_FENCE =>
                                 --    decode_vld <= '1';
                             when RV32I_OP_SYS =>
+                                immediate_o(31 downto 11) <= (others => instr_i(31));
+                                immediate_o(10 downto 5)  <= instr_i(30 downto 25);
+                                immediate_o(4 downto 1)   <= instr_i(24 downto 21);
+                                immediate_o(0)            <= instr_i(20);
                                 vld <= '1';
                                 csr_vld <= '1';
                             when others =>

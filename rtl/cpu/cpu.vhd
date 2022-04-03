@@ -45,7 +45,7 @@ architecture rtl of cpu is
     signal id_ex_csr_adr : std_logic_vector(11 downto 0);
     signal id_ex_csr_zimm : std_logic_vector(4 downto 0);
     -- ex
-    signal ex_en, ex_rst, ex_rdy : std_logic;
+    signal ex_en, ex_rst, ex_rdy, ex_vld : std_logic;
     -- ex -> mem
     signal ex_mem_adr, ex_mem_dat : std_logic_vector(31 downto 0);
     signal ex_mem_rd_adr : std_logic_vector(4 downto 0);
@@ -70,7 +70,7 @@ architecture rtl of cpu is
     signal ex_csr_rd_adr : std_logic_vector(4 downto 0);
     signal ex_csr_funct3 : std_logic_vector(2 downto 0);
     signal ex_csr_adr : std_logic_vector(11 downto 0);
-    signal ex_csr_mret : std_logic;
+    signal ex_csr_mret, ex_csr_ecall : std_logic;
     -- csr -> wb
     signal csr_wb_rd_we : std_logic;
     signal csr_wb_rd_dat : std_logic_vector(31 downto 0);
@@ -135,7 +135,7 @@ begin
     u_ex : entity work.execute
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => ex_rst,
-            en_i => ex_en, vld_i => id_ex_vld, mem_vld_i => id_ex_mem_vld, mem_rdy_i => mem_rdy, wb_rdy_i => wb_ex_rdy, rdy_o => ex_rdy,
+            en_i => ex_en, vld_i => id_ex_vld, mem_vld_i => id_ex_mem_vld, mem_rdy_i => mem_rdy, wb_rdy_i => wb_ex_rdy, vld_o => ex_vld, rdy_o => ex_rdy,
             pc_i => id_ex_pc, rs1_dat_i => rs1_dat, rs2_dat_i => rs2_dat,
             opcode_i => id_ex_opcode, immediate_i => id_ex_immediate, funct3_i => id_ex_funct3, funct7_i => id_ex_funct7,
             rd_adr_i => id_ex_rd_adr, rd_we_o => ex_wb_rd_we,
@@ -145,7 +145,7 @@ begin
             csr_vld_i => id_ex_csr_vld, csr_rdy_i => csr_rdy,
             csr_adr_i => id_ex_csr_adr, csr_zimm_i => id_ex_csr_zimm, 
             csr_adr_o => ex_csr_adr, csr_vld_o => ex_csr_vld, csr_we_o => ex_csr_we, csr_dat_o => ex_csr_dat, csr_rd_adr_o => ex_csr_rd_adr, csr_funct3_o => ex_csr_funct3,
-            mret_o => ex_csr_mret);
+            mret_o => ex_csr_mret, ecall_o => ex_csr_ecall);
     ex_mem_rd_we <= 
         '1' when ex_mem_vld = '1' and ex_mem_we = '0' else 
         '0';
@@ -171,9 +171,9 @@ begin
             rd_adr_i => ex_csr_rd_adr, rd_adr_o => csr_wb_rd_adr, rd_dat_o => csr_wb_rd_dat, rd_we_o => csr_wb_rd_we,
             branching_i => cu_branching,
             id_vld_i => id_ex_vld, id_pc_i => id_ex_pc, 
-            ex_pc_i => ex_wb_pc, pc_o => csr_wb_pc, load_pc_o => csr_wb_load_pc,
+            ex_vld_i => ex_vld, ex_pc_i => ex_wb_pc, pc_o => csr_wb_pc, load_pc_o => csr_wb_load_pc,
             ex_rd_we_i => ex_wb_rd_we, ex_load_pc_i => ex_wb_load_pc,
-            mret_i => ex_csr_mret, external_irq_i => external_irq_i);
+            mret_i => ex_csr_mret, ecall_i => ex_csr_ecall, external_irq_i => external_irq_i);
 
 -- writeback
     wb_en <= '1';

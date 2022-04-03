@@ -22,6 +22,7 @@ entity csr is
         id_vld_i : in std_logic;
         id_pc_i : in std_logic_vector(31 downto 0);
         ex_pc_i : in std_logic_vector(31 downto 0);
+        ex_vld_i : in std_logic;
         load_pc_o : out std_logic;
         pc_o : out std_logic_vector(31 downto 0);
         ex_load_pc_i : in std_logic;
@@ -30,7 +31,8 @@ entity csr is
         wb_rdy_i : in std_logic;
         rdy_o : out std_logic;
         external_irq_i : in std_logic;
-        mret_i : in std_logic
+        mret_i : in std_logic;
+        ecall_i : in std_logic
     );
 end entity csr;
 
@@ -50,15 +52,18 @@ architecture rtl of csr is
     end function;
     signal rdy, rd_we : std_logic;
     type csr_machine_registers_t is record
+        mcause : std_logic_vector(31 downto 0);
         mstatus : std_logic_vector(31 downto 0);
         mie : std_logic_vector(31 downto 0);
         mtvec : std_logic_vector(31 downto 0);
+        mepc : std_logic_vector(31 downto 0);
     end record csr_machine_registers_t;
-    signal mcsr : csr_machine_registers_t := (mstatus => (others => '0'), mie => (others => '0'), mtvec => (others => '0'));
+    signal mcsr : csr_machine_registers_t := (mstatus => (others => '0'), mie => (others => '0'), mtvec => (others => '0'), mcause => (others => '0'), mepc => (others => '0'));
     signal saved_pc : std_logic_vector(31 downto 0);
     signal on_irq, d_on_irq : std_logic;
     signal irq_en, ext_irq_en : std_logic;
-    signal pipeline_empty : std_logic;
+    signal d_branching, d_ecall : std_logic;
+    signal external_irq : std_logic;
 begin
     
     process (clk_i, arst_i)
@@ -82,13 +87,43 @@ begin
                                 mcsr.mie <= write_csr(dat_i, mcsr.mie, funct3_i);
                             when CSR_MTVEC =>
                                 rd_dat_o <= mcsr.mtvec;
-                                mcsr.mtvec <= write_csr(dat_i, mcsr.mtvec, funct3_i);                        
+                                mcsr.mtvec <= write_csr(dat_i, mcsr.mtvec, funct3_i);        
+                            when CSR_MEPC =>
+                                rd_dat_o <= mcsr.mepc;                
+                            when CSR_MCAUSE =>
+                                rd_dat_o <= mcsr.mcause;
                             when others =>
                                 rd_dat_o <= (others => '0');
                         end case;
                     end if;
                 elsif rd_we = '1' and wb_rdy_i = '1' then
                     rd_we <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
+
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if ecall_i = '1' then
+                mcsr.mcause <= CSR_MCAUSE_MACHINE_ECALL;
+            elsif external_irq = '1' then
+                mcsr.mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
+            elsif vld_i = '1' and we_i = '1' and rdy = '1' then
+                if adr_i = CSR_MSTATUS then
+                    mcsr.mcause <= write_csr(dat_i, mcsr.mcause, funct3_i);
+                end if;
+            end if;
+            if d_on_irq = '0' and ex_vld_i = '1' then
+                if ex_load_pc_i = '1' then
+                    mcsr.mepc <= ex_pc_i;
+                else
+                    mcsr.mepc <= std_logic_vector(unsigned(ex_pc_i) + 4);
+                end if;
+            elsif vld_i = '1' and we_i = '1' and rdy = '1' then
+                if adr_i = CSR_MEPC then
+                    mcsr.mepc <= write_csr(dat_i, mcsr.mepc, funct3_i);
                 end if;
             end if;
         end if;
@@ -108,30 +143,47 @@ begin
         if arst_i = '1' then
             on_irq <= '0';
             d_on_irq <= '0';
+            external_irq <= '0';
         elsif rising_edge(clk_i) then
             d_on_irq <= on_irq;
-            if on_irq = '0' and irq_en = '1' and (external_irq_i and ext_irq_en) = '1' then
-                on_irq <= '1';
+            d_branching <= branching_i;
+            external_irq <= '0';
+            if on_irq = '0' then
+                if ecall_i = '1' then
+                    on_irq <= '1';
+                elsif irq_en = '1' then -- for future interrupt support (timer, software)
+                    if (external_irq_i and ext_irq_en) = '1' then
+                        on_irq <= '1';
+                        external_irq <= '1';
+                    end if;
+                end if;
             elsif mret_i = '1' then
                 on_irq <= '0';
             end if;
-            if d_on_irq = '0' then
-                if ex_load_pc_i = '1' or branching_i = '1' then
-                    saved_pc <= ex_pc_i;
-                elsif id_vld_i = '1' then
-                    saved_pc <= id_pc_i;
-                end if;
-            end if;
+--            if d_on_irq = '0' and ex_vld_i = '1' then
+--                if ex_load_pc_i = '1' then
+--                    saved_pc <= ex_pc_i;
+--                else
+--                    saved_pc <= std_logic_vector(unsigned(ex_pc_i) + 4);
+--                end if;
+--            end if;
         end if;
     end process;
-    load_pc_o <= 
-        '1' when on_irq = '1' and d_on_irq = '0' else
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            d_ecall <= ecall_i;
+        end if;
+    end process;
+
+    load_pc_o <=
+        '1' when ecall_i = '1' and on_irq = '0' else
+        '1' when d_ecall = '0' and on_irq = '1' and d_on_irq = '0' else
         '1' when mret_i = '1' else
         '0';
     pc_o <= 
-        mcsr.mtvec when on_irq = '1' and d_on_irq = '0' else
-        saved_pc;
+        mcsr.mtvec when ecall_i = '1' else
+        mcsr.mtvec when d_ecall = '0' and on_irq = '1' and d_on_irq = '0' else
+        mcsr.mepc;
 
-    
-    
 end architecture rtl;
