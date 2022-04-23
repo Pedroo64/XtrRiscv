@@ -7,17 +7,18 @@ entity uart_rx is
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
-        baud_i : in std_logic_vector(15 downto 0);
+        baud_i : in std_logic_vector(23 downto 0);
         rx_vld_o : out std_logic;
         rx_dat_o : out std_logic_vector(7 downto 0);
-        rx_i : in std_logic
+        rx_i : in std_logic;
+        baud_en_o : out std_logic
     );
 end entity uart_rx;
 
 architecture rtl of uart_rx is
     type uart_st is (st_idle, st_start, st_data, st_stop);
     signal current_st : uart_st;
-    signal baud_cnt : unsigned(16 downto 0);
+    signal baud_cnt : unsigned(24 downto 0);
     signal bit_cnt, rx_dat : std_logic_vector(7 downto 0);
     signal rx, baud_clk, baud_en : std_logic;
 begin
@@ -31,21 +32,20 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if current_st /= st_idle then
-                baud_cnt <= ('0' & baud_cnt(baud_cnt'left - 1 downto 0)) + ('0' & unsigned(baud_i));
+            if current_st = st_idle and rx = '0' then
+                baud_cnt <= (others => '0');
             else 
-                baud_cnt <= ('0' & unsigned(baud_i));
+                baud_cnt <= ('0' & baud_cnt(baud_cnt'left - 1 downto 0)) + ('0' & unsigned(baud_i));
             end if;
-            if current_st /= st_idle then
-                if baud_cnt(baud_cnt'left) = '1' then
-                    baud_clk <= not baud_clk;
-                end if;
-            else
+            if current_st = st_idle and rx = '0' then
                 baud_clk <= '0';
+            elsif baud_cnt(baud_cnt'left) = '1' then
+                baud_clk <= not baud_clk;
             end if;
         end if;
     end process;
     baud_en <= '1' when baud_clk = '0' and baud_cnt(baud_cnt'left) = '1' else '0';
+    baud_en_o <= baud_en;
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then

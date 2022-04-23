@@ -6,7 +6,7 @@ entity tb_xtr_soc is
 end entity tb_xtr_soc;
 
 architecture rtl of tb_xtr_soc is
-    constant C_INIT_FILE : string := "E:/Dev/XtrRiscv/soft/bin/test.mem";
+    constant C_INIT_FILE : string := "../../../soft/bin/test.mem";
     constant C_CLK_PER   : time   := 20 ns;
     signal arst          : std_logic;
     signal clk           : std_logic;
@@ -32,7 +32,7 @@ begin
     p_interrupt: process
     begin
         t_interrupt <= '0';
-        wait for 92*C_CLK_PER;
+        wait for 93*C_CLK_PER;
         t_interrupt <= '0';
         wait for C_CLK_PER;
         t_interrupt <= '0';

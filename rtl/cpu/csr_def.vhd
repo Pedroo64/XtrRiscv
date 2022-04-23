@@ -31,6 +31,7 @@ package csr_def is
 
     constant CSR_MSTATUS_MIE : integer := 3;
     constant CSR_MIE_MEIE : integer := 11;
+    constant CSR_MIE_MTIE : integer := 7;
 
 -- mcause
     constant CSR_MCAUSE_USER_SOFTWARE_INTERRUPT         : std_logic_vector := x"80000000";

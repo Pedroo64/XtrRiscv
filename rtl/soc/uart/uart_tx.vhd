@@ -7,7 +7,7 @@ entity uart_tx is
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
-        baud_i : in std_logic_vector(15 downto 0);
+        baud_i : in std_logic_vector(23 downto 0);
         tx_vld_i : in std_logic;
         tx_dat_i : in std_logic_vector(7 downto 0);
         tx_o : out std_logic;
@@ -18,7 +18,7 @@ end entity uart_tx;
 architecture rtl of uart_tx is
     type uart_st is (st_idle, st_start, st_data, st_stop);
     signal current_st : uart_st;
-    signal baud_cnt : unsigned(16 downto 0);
+    signal baud_cnt : unsigned(24 downto 0);
     signal bit_cnt, tx_dat : std_logic_vector(7 downto 0);
     signal tx, baud_en : std_logic;
 begin
@@ -28,7 +28,7 @@ begin
             if current_st /= st_idle then
                 baud_cnt <= ('0' & baud_cnt(baud_cnt'left - 1 downto 0)) + ('0' & unsigned(baud_i));
             else 
-                baud_cnt <= ('0' & unsigned(baud_i));
+                baud_cnt <= (others => '0');
             end if;
         end if;
     end process;

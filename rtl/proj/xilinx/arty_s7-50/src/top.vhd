@@ -31,7 +31,7 @@ begin
     xtr_soc_inst : entity work.xtr_soc
         generic map (
             C_FREQ_IN => C_FREQ, C_RAM_SIZE => C_RAM_SIZE, C_INIT_FILE => C_INIT_FILE,
-            C_UART => 1)
+            C_UART => 1, C_BOOT_TRAP => TRUE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 

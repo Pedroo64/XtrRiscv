@@ -13,7 +13,8 @@ entity xtr_cpu is
         instr_rsp_i : in xtr_rsp_t;
         data_cmd_o : out xtr_cmd_t;
         data_rsp_i : in xtr_rsp_t;
-        external_irq_i : in std_logic
+        external_irq_i : in std_logic;
+        timer_irq_i : in std_logic
     );
 end entity xtr_cpu;
 
@@ -27,13 +28,13 @@ architecture rtl of xtr_cpu is
 begin
     
     u_cpu : entity work.cpu
-    port map (
-        arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
-        instr_cmd_adr_o => instr_cmd_adr, instr_cmd_vld_o => instr_cmd_vld, 
-        instr_cmd_rdy_i => instr_cmd_rdy, instr_rsp_dat_i => instr_rsp_dat, instr_rsp_vld_i => instr_rsp_vld,
-        data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_siz_o => data_cmd_siz, data_cmd_dat_o => data_cmd_dat,
-        data_cmd_rdy_i => data_cmd_rdy, data_rsp_vld_i => data_rsp_vld, data_rsp_dat_i => data_rsp_dat,
-        external_irq_i => external_irq_i);
+        port map (
+            arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
+            instr_cmd_adr_o => instr_cmd_adr, instr_cmd_vld_o => instr_cmd_vld,
+            instr_cmd_rdy_i => instr_cmd_rdy, instr_rsp_dat_i => instr_rsp_dat, instr_rsp_vld_i => instr_rsp_vld,
+            data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_siz_o => data_cmd_siz, data_cmd_dat_o => data_cmd_dat,
+            data_cmd_rdy_i => data_cmd_rdy, data_rsp_vld_i => data_rsp_vld, data_rsp_dat_i => data_rsp_dat,
+            external_irq_i => external_irq_i, timer_irq_i => timer_irq_i);
 
     instr_cmd_o.adr <= instr_cmd_adr;
     instr_cmd_o.vld <= instr_cmd_vld;
