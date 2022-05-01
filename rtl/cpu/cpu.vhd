@@ -35,8 +35,9 @@ architecture rtl of cpu is
     -- id
     signal id_en, id_rst, id_rdy : std_logic;
     signal id_rs1_adr, id_rs2_adr : std_logic_vector(4 downto 0);
+    signal id_rs1_adr_latch, id_rs2_adr_latch : std_logic_vector(4 downto 0);
     -- id -> ex
-    signal id_ex_vld, id_ex_mem_vld, id_ex_csr_vld : std_logic;
+    signal id_ex_vld, id_ex_rd_we : std_logic;
     signal id_ex_pc : std_logic_vector(31 downto 0);
     signal id_ex_opcode : std_logic_vector(6 downto 0);
     signal id_ex_immediate : std_logic_vector(31 downto 0);
@@ -51,6 +52,8 @@ architecture rtl of cpu is
     signal ex_rd_we : std_logic;
     signal ex_funct3 : std_logic_vector(2 downto 0);
     signal ex_funct7 : std_logic_vector(6 downto 0);
+    signal ex_rd_dat : std_logic_vector(31 downto 0);
+    signal mret, ecall : std_logic;
     -- ex -> mem
     signal ex_mem_adr, ex_mem_dat : std_logic_vector(31 downto 0);
     signal ex_mem_rd_adr : std_logic_vector(4 downto 0);
@@ -61,7 +64,7 @@ architecture rtl of cpu is
     signal mem_en, mem_rdy : std_logic;
     -- ex -> wb
     signal ex_wb_rd_adr : std_logic_vector(4 downto 0);
-    signal ex_wb_rd_we, ex_wb_load_pc : std_logic;
+    signal ex_wb_vld, ex_wb_rd_we, ex_wb_load_pc : std_logic;
     signal ex_wb_rd_dat, ex_wb_pc : std_logic_vector(31 downto 0);
     -- mem -> wb
     signal mem_wb_rd_we : std_logic;
@@ -69,6 +72,7 @@ architecture rtl of cpu is
     signal mem_wb_rd_dat : std_logic_vector(31 downto 0);
     -- csr
     signal csr_en, csr_rdy : std_logic;
+    signal mtvec, mie, mstatus, mcause : std_logic_vector(31 downto 0);
     -- ex -> csr
     signal ex_csr_vld, ex_csr_we : std_logic;
     signal ex_csr_dat : std_logic_vector(31 downto 0);
@@ -77,11 +81,9 @@ architecture rtl of cpu is
     signal ex_csr_adr : std_logic_vector(11 downto 0);
     signal ex_csr_mret, ex_csr_ecall : std_logic;
     -- csr -> wb
-    signal csr_wb_rd_we : std_logic;
+    signal csr_wb_rd_we, csr_wb_vld : std_logic;
     signal csr_wb_rd_dat : std_logic_vector(31 downto 0);
     signal csr_wb_rd_adr : std_logic_vector(4 downto 0);
-    signal csr_wb_load_pc : std_logic;
-    signal csr_wb_pc : std_logic_vector(31 downto 0);
     -- wb
     signal wb_en, wb_ex_rdy, wb_csr_rdy : std_logic;
     signal wb_rd_adr : std_logic_vector(4 downto 0);
@@ -95,12 +97,17 @@ architecture rtl of cpu is
     signal cu_if_rst, cu_id_rst, cu_ex_rst : std_logic;
     signal cu_if_en, cu_id_en, cu_ex_en : std_logic;
     signal cu_branching : std_logic;
+    -- interrupt handler
+    signal exception_valid, exception_taken : std_logic;
+    signal exception_pc : std_logic_vector(31 downto 0);
+    signal cause_external_irq : std_logic;
+    signal cause_timer_irq : std_logic;
 begin
 -- Fetch
     if_rst <= cu_if_rst or srst_i;
-    if_en <= cu_if_en;
-    if_load_pc <= wb_load_pc;
-    if_pc <= wb_pc;
+    if_en <= '1';
+--    if_load_pc <= wb_load_pc;
+--    if_pc <= wb_pc;
     u_if : entity work.instruction_fecth
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => if_rst,
@@ -110,17 +117,32 @@ begin
             pc_o => if_id_pc, instr_o => if_id_instr, instr_vld_o => if_id_vld);
 -- Decode
     id_rst <= cu_id_rst or srst_i;
-    id_en <= cu_id_en;
+    id_en <= '1';
     u_id : entity work.instruction_decode
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => id_rst,
-            en_i => id_en, decode_rdy_o => id_rdy, execute_rdy_i => ex_rdy,
-            pc_i => if_id_pc, instr_i => if_id_instr, instr_vld_i => if_id_vld,
-            rs1_adr_o => id_rs1_adr, rs2_adr_o => id_rs2_adr,
-            pc_o => id_ex_pc, opcode_o => id_ex_opcode, rd_adr_o => id_ex_rd_adr,
-            funct3 => id_ex_funct3, funct7 => id_ex_funct7, immediate_o => id_ex_immediate,
-            csr_adr_o => id_ex_csr_adr, csr_zimm_o => id_ex_csr_zimm,
-            vld_o => id_ex_vld, mem_vld_o => id_ex_mem_vld, csr_vld_o => id_ex_csr_vld);
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => id_rst,
+            en_i => id_en,
+            vld_i => if_id_vld,
+            instr_dat_i => if_id_instr,
+            pc_i => if_id_pc,
+            opcode_o => id_ex_opcode,
+            rs1_adr_o => id_rs1_adr,
+            rs2_adr_o => id_rs2_adr,
+            rd_adr_o => id_ex_rd_adr,
+            rd_we_o => id_ex_rd_we,
+            pc_o => id_ex_pc,
+            immediate_o => id_ex_immediate,
+            funct3_o => id_ex_funct3,
+            funct7_o => id_ex_funct7,
+            rdy_o => id_rdy,
+            vld_o => id_ex_vld,
+            rdy_i => ex_rdy,
+            rs1_adr_latch_o => id_rs1_adr_latch,
+            rs2_adr_latch_o => id_rs2_adr_latch
+        );
+
 
 -- Register file
     rs1_adr <= id_rs1_adr;
@@ -135,73 +157,55 @@ begin
             rd_adr_i => rd_adr, rd_we_i => rd_we, rd_dat_i => rd_dat);
           
 -- Execute      
-    ex_rst <= cu_ex_rst or srst_i;
+    ex_rst <= srst_i;
     ex_en <= cu_ex_en;
---    u_ex : entity work.execute
---        port map (
---            arst_i => arst_i, clk_i => clk_i, srst_i => ex_rst,
---            en_i => ex_en, vld_i => id_ex_vld, mem_vld_i => id_ex_mem_vld, mem_rdy_i => mem_rdy, wb_rdy_i => wb_ex_rdy, vld_o => ex_vld, rdy_o => ex_rdy,
---            pc_i => id_ex_pc, rs1_dat_i => rs1_dat, rs2_dat_i => rs2_dat,
---            opcode_i => id_ex_opcode, immediate_i => id_ex_immediate, funct3_i => id_ex_funct3, funct7_i => id_ex_funct7,
---            rd_adr_i => id_ex_rd_adr, rd_we_o => ex_wb_rd_we,
---            rd_adr_o => ex_wb_rd_adr, rd_dat_o => ex_wb_rd_dat,
---            load_pc_o => ex_wb_load_pc, pc_o => ex_wb_pc,
---            mem_rd_adr_o => ex_mem_rd_adr, mem_cmd_adr_o => ex_mem_adr, mem_cmd_vld_o => ex_mem_vld, mem_cmd_we_o => ex_mem_we, mem_cmd_dat_o => ex_mem_dat, mem_cmd_siz_o => ex_mem_siz,
---            csr_vld_i => id_ex_csr_vld, csr_rdy_i => csr_rdy,
---            csr_adr_i => id_ex_csr_adr, csr_zimm_i => id_ex_csr_zimm, 
---            csr_adr_o => ex_csr_adr, csr_vld_o => ex_csr_vld, csr_we_o => ex_csr_we, csr_dat_o => ex_csr_dat, csr_rd_adr_o => ex_csr_rd_adr, csr_funct3_o => ex_csr_funct3,
---            mret_o => ex_csr_mret, ecall_o => ex_csr_ecall);
+    u_execute : entity work.execute
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => ex_rst,
+            enable_i => ex_en,
+            valid_i => id_ex_vld,
+            pc_i => id_ex_pc,
+            opcode_i => id_ex_opcode,
+            immediate_i => id_ex_immediate,
+            rs1_adr_i => id_rs1_adr_latch,
+            rs1_dat_i => rs1_dat,
+            rs2_adr_i => id_rs2_adr_latch,
+            rs2_dat_i => rs2_dat,
+            rd_adr_i => id_ex_rd_adr,
+            rd_we_i => id_ex_rd_we,
+            funct3_i => id_ex_funct3,
+            funct7_i => id_ex_funct7,
+            rd_adr_o => ex_rd_adr,
+            rd_dat_o => ex_rd_dat,
+            rd_we_o => ex_rd_we,
+            funct3_o => ex_funct3,
+            funct7_o => ex_funct7,
+            writeback_valid_o => ex_wb_vld,
+            writeback_ready_i => wb_ex_rdy,
+            pc_o => if_pc,
+            load_pc_o => if_load_pc,
+            memory_valid_o => ex_mem_vld,
+            memory_address_o => ex_mem_adr,
+            memory_data_o => ex_mem_dat,
+            memory_we_o => ex_mem_we,
+            memory_size_o => ex_mem_siz,
+            memory_ready_i => mem_rdy,
+            csr_valid_o => ex_csr_vld,
+            csr_address_o => ex_csr_adr,
+            csr_data_o => ex_csr_dat,
+            csr_ready_i => csr_rdy,
+            exception_valid_i => exception_valid,
+            trap_vector_i => mtvec,
+            exception_pc_o => exception_pc,
+            exception_taken_o => exception_taken,
+            mret_o => mret,
+            ecall_o => ecall,
+            ready_o => ex_rdy
+        );
 
-            u_ex : entity work.execute
-                port map (
-                    arst_i => arst_i,
-                    clk_i => clk_i,
-                    srst_i => ex_rst,
-                    en_i => ex_en,
-                    hold_i => ex_hold,
-                    valid_i => id_ex_vld,
-                    pc_i => id_ex_pc,
-                    opcode_i => id_ex_opcode,
-                    rs1_dat_i => rs1_dat,
-                    rs2_dat_i => rs2_dat,
-                    immediate_i => id_ex_immediate,
-                    funct3_i => id_ex_funct3,
-                    funct7_i => id_ex_funct7,
-                    csr_zimm_i => id_ex_csr_zimm,
-                    rd_adr_i => id_ex_rd_adr,
-                    rd_we_o => ex_rd_we,
-                    rd_adr_o => ex_rd_adr,
-                    rd_dat_o => open,
-                    funct3_o => ex_funct3,
-                    funct7_o => ex_funct7,
-                    pc_o => ex_wb_pc,
-                    load_pc_o => ex_wb_load_pc,
-                    valid_o => ex_vld,
-                    write_back_valid_o => open,
-                    write_back_rd_adr_o => ex_wb_rd_adr,
-                    write_back_rd_dat_o => ex_wb_rd_dat,
-                    write_back_rd_we_o => ex_wb_rd_we,
-                    write_back_ready_i => wb_ex_rdy,
-                    memory_valid_o => ex_mem_vld,
-                    memory_rd_adr_o => ex_mem_rd_adr,
-                    memory_address_o => ex_mem_adr,
-                    memory_data_o => ex_mem_dat,
-                    memory_size_o => ex_mem_siz,
-                    memory_we_o => ex_mem_we,
-                    memory_ready_i => mem_rdy,
-                    csr_valid_o => ex_csr_vld,
-                    csr_address_o => ex_csr_adr,
-                    csr_data_o => ex_csr_dat,
-                    csr_rd_adr_o => ex_csr_rd_adr,
-                    csr_ready_i => csr_rdy,
-                    ecall_o => ex_csr_ecall,
-                    mret_o => ex_csr_mret,
-                    ready_o => ex_rdy
-                );
-          
-    ex_mem_rd_we <= 
-        '1' when ex_mem_vld = '1' and ex_mem_we = '0' else 
-        '0';
+
 
 -- memory
     mem_en <= '1';
@@ -210,48 +214,103 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             en_i => mem_en, vld_i => ex_mem_vld, rdy_o => mem_rdy,
             adr_i => ex_mem_adr, we_i => ex_mem_we, dat_i => ex_mem_dat, siz_i => ex_mem_siz,
-            rd_adr_i => ex_mem_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
+            rd_adr_i => ex_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
             cmd_adr_o => data_cmd_adr_o, cmd_vld_o => data_cmd_vld_o, cmd_we_o => data_cmd_we_o, cmd_siz_o => data_cmd_siz_o, cmd_dat_o => data_cmd_dat_o,
             cmd_rdy_i => data_cmd_rdy_i, rsp_vld_i => data_rsp_vld_i, rsp_dat_i => data_rsp_dat_i);
 
 -- csr
     csr_en <= '1';
+
     u_csr : entity work.csr
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
-            en_i => csr_en, rdy_o => csr_rdy, wb_rdy_i => wb_csr_rdy,
-            vld_i => ex_csr_vld, we_i => '1', adr_i => ex_csr_adr, funct3_i => ex_funct3, dat_i => ex_csr_dat,
-            rd_adr_i => ex_csr_rd_adr, rd_adr_o => csr_wb_rd_adr, rd_dat_o => csr_wb_rd_dat, rd_we_o => csr_wb_rd_we,
-            branching_i => cu_branching,
-            id_vld_i => id_ex_vld, id_pc_i => id_ex_pc, 
-            ex_vld_i => ex_vld, ex_pc_i => ex_wb_pc, pc_o => csr_wb_pc, load_pc_o => csr_wb_load_pc,
-            ex_rd_we_i => ex_wb_rd_we, ex_load_pc_i => ex_wb_load_pc,
-            mret_i => ex_csr_mret, ecall_i => ex_csr_ecall, external_irq_i => external_irq_i, timer_irq_i => timer_irq_i);
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => srst_i,
+            valid_i => ex_csr_vld,
+            rd_adr_i => ex_rd_adr,
+            address_i => ex_csr_adr,
+            data_i => ex_csr_dat,
+            funct3_i => ex_funct3,
+            valid_o => csr_wb_vld,
+            rd_adr_o => csr_wb_rd_adr,
+            rd_dat_o => csr_wb_rd_dat,
+            rd_we_o => csr_wb_rd_we,
+            ready_i => wb_csr_rdy,
+            ready_o => csr_rdy,
+            exception_pc_i => exception_pc,
+            exception_taken_i => exception_taken,
+            ecall_i => ecall,
+            cause_external_irq_i => cause_external_irq,
+            cause_timer_irq_i => cause_timer_irq,
+            mstatus_o => mstatus,
+            mie_o => mie,
+            mtvec_o => mtvec
+        );
+  
 
 -- writeback
-    wb_en <= '1';
+    ex_wb_rd_we <= ex_rd_we and ex_wb_vld;
     u_wb : entity work.writeback
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
-            en_i => wb_en, ex_rdy_o => wb_ex_rdy, csr_rdy_o => wb_csr_rdy,
-            mem_rd_adr_i => mem_wb_rd_adr, mem_rd_we_i => mem_wb_rd_we, mem_rd_dat_i => mem_wb_rd_dat,
-            csr_rd_adr_i => csr_wb_rd_adr, csr_rd_we_i => csr_wb_rd_we, csr_rd_dat_i => csr_wb_rd_dat, 
-            csr_load_pc_i => csr_wb_load_pc, csr_pc_i => csr_wb_pc,
-            ex_load_pc_i => ex_wb_load_pc, ex_pc_i => ex_wb_pc, ex_rd_adr_i => ex_wb_rd_adr, ex_rd_we_i => ex_wb_rd_we, ex_rd_dat_i => ex_wb_rd_dat,
-            rd_adr_o => wb_rd_adr, rd_we_o => wb_rd_we, rd_dat_o => wb_rd_dat, load_pc_o => wb_load_pc, pc_o => wb_pc);
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => srst_i,
+            memory_rd_we_i => mem_wb_rd_we,
+            memory_rd_adr_i => mem_wb_rd_adr,
+            memory_rd_dat_i => mem_wb_rd_dat,
+            execute_rd_we_i => ex_wb_rd_we,
+            execute_rd_adr_i => ex_rd_adr,
+            execute_rd_dat_i => ex_rd_dat,
+            csr_rd_we_i => csr_wb_rd_we,
+            csr_rd_adr_i => csr_wb_rd_adr,
+            csr_rd_dat_i => csr_wb_rd_dat,
+            rd_we_o => wb_rd_we,
+            rd_adr_o => wb_rd_adr,
+            rd_dat_o => wb_rd_dat,
+            execute_ready_o => wb_ex_rdy,
+            csr_ready_o => wb_csr_rdy
+        );
+
 
 -- control unit
-    u_cu : entity work.control_unit
+    u_control_unit : entity work.control_unit
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
-            opcode_i => id_ex_opcode, rs1_adr_i => rs1_adr, rs2_adr_i => rs2_adr, funct3_i => id_ex_funct3,
-            ex_load_pc_i => ex_wb_load_pc, ex_rd_adr_i => ex_rd_adr, ex_rd_we_i => ex_rd_we, ex_vld_i => ex_vld,
---            ex_mem_rd_adr_i => ex_mem_rd_adr, ex_mem_rd_we_i => ex_mem_rd_we,
-            wb_load_pc_i => wb_load_pc, wb_rd_adr_i => wb_rd_adr, wb_rd_we_i => wb_rd_we,
-            csr_load_pc_i => csr_wb_load_pc,
-            branching_o => cu_branching,
-            if_rst_o => cu_if_rst, if_en_o => cu_if_en,
-            id_rst_o => cu_id_rst, id_en_o => cu_id_en,
-            ex_rst_o => cu_ex_rst, ex_en_o => cu_ex_en, ex_hold_o => ex_hold);
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => srst_i,
+            decode_valid_i => id_ex_vld,
+            decode_opcode_i => id_ex_opcode,
+            decode_rs1_adr_i => id_rs1_adr_latch,
+            decode_rs2_adr_i => id_rs2_adr_latch,
+            decode_rd_adr_i => id_ex_rd_adr,
+            decode_rd_we_i => id_ex_rd_we,
+            decode_funct3_i => id_ex_funct3,
+            execute_ready_i => ex_rdy,
+            execute_branch_i => if_load_pc,
+            writeback_rd_adr_i => wb_rd_adr,
+            writeback_rd_we_i => wb_rd_we,
+            writeback_branch_i => if_load_pc,
+            fetch_reset_o => cu_if_rst,
+            decode_reset_o => cu_id_rst,
+            execute_enable_o => cu_ex_en
+        );
+
+-- interrupt handler
+    u_interrupt_handler : entity work.interrupt_handler
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => srst_i,
+            mstatus_i => mstatus,
+            mie_i => mie,
+            ecall_i => ecall,
+            mret_i => mret,
+            external_irq_i => external_irq_i,
+            timer_irq_i => timer_irq_i,
+            exception_valid_o => exception_valid,
+            exception_taken_i => exception_taken,
+            cause_external_irq_o => cause_external_irq,
+            cause_timer_irq_o => cause_timer_irq
+        );
 
 end architecture rtl;
