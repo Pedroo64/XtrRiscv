@@ -22,12 +22,14 @@ entity csr is
         ready_o : out std_logic;
         exception_pc_i : in std_logic_vector(31 downto 0);
         exception_taken_i : in std_logic;
+        exception_exit_i : in std_logic;
         ecall_i : in std_logic;        
         cause_external_irq_i : in std_logic;
         cause_timer_irq_i : in std_logic;
         mstatus_o : out std_logic_vector(31 downto 0);
         mie_o : out std_logic_vector(31 downto 0);
-        mtvec_o : out std_logic_vector(31 downto 0)
+        mtvec_o : out std_logic_vector(31 downto 0);
+        mepc_o : out std_logic_vector(31 downto 0)
     );
 end entity csr;
 
@@ -56,12 +58,12 @@ begin
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            mstatus <= (others => '0');
+            --mstatus <= (others => '0');
             mie <= (others => '0');
             valid <= '0';
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
-                mstatus <= (others => '0');
+                --mstatus <= (others => '0');
                 mie <= (others => '0');
                 valid <= '0';
             else
@@ -71,7 +73,6 @@ begin
                     case address_i is
                         when CSR_MSTATUS =>
                             rd_dat_o <= mstatus;
-                            mstatus <= write_csr(data_i, mstatus, funct3_i);
                         when CSR_MIE =>
                             rd_dat_o <= mie;
                             mie <= write_csr(data_i, mie, funct3_i);
@@ -115,6 +116,33 @@ begin
         end if;
     end process;
 
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            mstatus <= (others => '0');
+        elsif rising_edge(clk_i) then
+            if srst_i = '1' then
+                mstatus <= (others => '0');
+            else
+                if exception_taken_i = '1' then
+                    mstatus(7) <= mstatus(3);
+                    -- mstatus.mie = 0
+                    mstatus(3) <= '0';
+                    -- mstatus.mpp = current privilege mode 
+                    mstatus(12 downto 11) <= "11";
+                elsif exception_exit_i = '1' then
+                    -- privilege set to mstatus.mpp
+                    -- mstatus.mie = mstatus.mpie
+                    mstatus(3) <= mstatus(7);
+                    mstatus(7) <= '1';
+                    mstatus(12 downto 11) <= "11";
+                elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MSTATUS then
+                    mstatus <= write_csr(data_i, mstatus, funct3_i);
+                end if;
+            end if;
+        end if;
+    end process;
+
     ready_o <= 
         '0' when valid = '1' and ready_i = '0' else
         '1';
@@ -122,6 +150,7 @@ begin
     mstatus_o <= mstatus;
     mie_o <= mie;
     mtvec_o <= mtvec;
+    mepc_o <= mepc;
     
     
 end architecture rtl;

@@ -43,8 +43,10 @@ entity execute is
         csr_ready_i : in std_logic;
         exception_valid_i : in std_logic;
         trap_vector_i : in std_logic_vector(31 downto 0);
+        exception_pc_i : in std_logic_vector(31 downto 0);
         exception_pc_o : out std_logic_vector(31 downto 0);
         exception_taken_o : out std_logic;
+        exception_exit_o : out std_logic;
         mret_o : out std_logic;
         ecall_o : out std_logic;
         ready_o : out std_logic
@@ -54,7 +56,7 @@ end entity execute;
 architecture rtl of execute is
     signal writeback_valid, memory_valid, csr_valid : std_logic;
     signal next_stage_ready : std_logic;
-    signal saved_pc, next_pc : std_logic_vector(31 downto 0);
+    signal next_pc, pc : std_logic_vector(31 downto 0);
     signal ecall, exception_taken, load_pc : std_logic;
 begin
     
@@ -180,17 +182,20 @@ begin
             ecall <= '0';
             mret_o <= '0';
             exception_taken <= '0';
+            exception_exit_o <= '0';
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
                 load_pc <= '0';
                 ecall <= '0';
                 mret_o <= '0';
                 exception_taken <= '0';
+                exception_exit_o <= '0';
             else
                 load_pc <= '0';
                 ecall <= '0';
                 mret_o <= '0';
                 exception_taken <= '0';
+                exception_exit_o <= '0';
  --               if exception_valid_i = '1' then
  --                   pc_o <= trap_vector_i;
  --                   load_pc_o <= '1';
@@ -198,6 +203,7 @@ begin
  --                   saved_pc <= pc_o;
  --               end if;
                 if enable_i = '1' and valid_i = '1' and next_stage_ready = '1' then
+                    pc <= std_logic_vector(unsigned(pc_i) + 4);
                     case opcode_i is
                         when RV32I_OP_JAL =>
                             next_pc <= std_logic_vector(unsigned(pc_i) + unsigned(immediate_i));
@@ -240,12 +246,13 @@ begin
                                     when RV32I_SYS_MRET =>
                                         mret_o <= '1';
                                         load_pc <= '1';
-                                        next_pc <= saved_pc;
+                                        next_pc <= exception_pc_i;
+                                        exception_exit_o <= '1';
                                     when RV32I_SYS_ECALL =>
                                         ecall <= '1';
                                         exception_taken <= '1';
-                                        saved_pc <= std_logic_vector(unsigned(pc_i) + 4);
-                                        exception_pc_o <= pc_i;
+                                        --saved_pc <= std_logic_vector(unsigned(pc_i) + 4);
+                                        --exception_pc_o <= pc_i;
                                     when others =>
                                 end case;
                             end if;
@@ -253,16 +260,21 @@ begin
                     end case;
                     if exception_valid_i = '1' and opcode_i /= RV32I_OP_SYS then
                         exception_taken <= '1';
-                        saved_pc <= std_logic_vector(unsigned(pc_i) + 4);
-                        exception_pc_o <= pc_i;
+                        --saved_pc <= std_logic_vector(unsigned(pc_i) + 4);
+                        --exception_pc_o <= std_logic_vector(unsigned(pc_i) + 4);
                     end if;
                 end if;
-                if exception_taken = '1' and load_pc = '1' then
-                    saved_pc <= next_pc;
-                end if;
+--                if exception_taken = '1' and load_pc = '1' then
+--                    exception_pc_o <= next_pc;
+--                    --saved_pc <= next_pc;
+--                end if;
             end if;
         end if;
     end process;
+
+    exception_pc_o <= 
+        next_pc when load_pc = '1' else 
+        pc;
 
     pc_o <= 
         trap_vector_i when exception_taken = '1' else

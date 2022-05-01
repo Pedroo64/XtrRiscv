@@ -98,8 +98,8 @@ architecture rtl of cpu is
     signal cu_if_en, cu_id_en, cu_ex_en : std_logic;
     signal cu_branching : std_logic;
     -- interrupt handler
-    signal exception_valid, exception_taken : std_logic;
-    signal exception_pc : std_logic_vector(31 downto 0);
+    signal exception_valid, exception_taken, exception_exit : std_logic;
+    signal ex_exception_pc, csr_exception_pc : std_logic_vector(31 downto 0);
     signal cause_external_irq : std_logic;
     signal cause_timer_irq : std_logic;
 begin
@@ -198,8 +198,10 @@ begin
             csr_ready_i => csr_rdy,
             exception_valid_i => exception_valid,
             trap_vector_i => mtvec,
-            exception_pc_o => exception_pc,
+            exception_pc_i => csr_exception_pc,
+            exception_pc_o => ex_exception_pc,
             exception_taken_o => exception_taken,
+            exception_exit_o => exception_exit,
             mret_o => mret,
             ecall_o => ecall,
             ready_o => ex_rdy
@@ -237,14 +239,16 @@ begin
             rd_we_o => csr_wb_rd_we,
             ready_i => wb_csr_rdy,
             ready_o => csr_rdy,
-            exception_pc_i => exception_pc,
+            exception_pc_i => ex_exception_pc,
             exception_taken_i => exception_taken,
+            exception_exit_i => exception_exit,
             ecall_i => ecall,
             cause_external_irq_i => cause_external_irq,
             cause_timer_irq_i => cause_timer_irq,
             mstatus_o => mstatus,
             mie_o => mie,
-            mtvec_o => mtvec
+            mtvec_o => mtvec,
+            mepc_o => csr_exception_pc
         );
   
 
