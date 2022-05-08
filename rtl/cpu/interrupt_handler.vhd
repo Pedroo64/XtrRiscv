@@ -56,6 +56,7 @@ begin
             d_on_irq <= on_irq;
             d_ext_irq <= external_irq_i and external_irq_en;
             d_timer_irq <= timer_irq_i and timer_irq_en;
+            d_ecall <= ecall_i;
         end if;
     end process;
 
@@ -75,7 +76,7 @@ begin
                 cause_external_irq_o <= '0';
                 cause_timer_irq_o <= '0';
             else
-                if on_irq = '1' and d_on_irq = '0' then
+                if on_irq = '1' and d_on_irq = '0' and d_ecall = '0' then
                     if d_ext_irq = '1' then
                         exception_valid <= '1';
                         cause_external_irq_o <= '1';

@@ -203,7 +203,7 @@ begin
  --                   saved_pc <= pc_o;
  --               end if;
                 if enable_i = '1' and valid_i = '1' and next_stage_ready = '1' then
-                    pc <= std_logic_vector(unsigned(pc_i) + 4);
+                    pc <= pc_i;
                     case opcode_i is
                         when RV32I_OP_JAL =>
                             next_pc <= std_logic_vector(unsigned(pc_i) + unsigned(immediate_i));
@@ -274,7 +274,8 @@ begin
 
     exception_pc_o <= 
         next_pc when load_pc = '1' else 
-        pc;
+        pc when ecall = '1' else
+        std_logic_vector(unsigned(pc) + 4);
 
     pc_o <= 
         trap_vector_i when exception_taken = '1' else

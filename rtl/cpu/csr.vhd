@@ -58,12 +58,10 @@ begin
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            --mstatus <= (others => '0');
             mie <= (others => '0');
             valid <= '0';
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
-                --mstatus <= (others => '0');
                 mie <= (others => '0');
                 valid <= '0';
             else
@@ -98,13 +96,15 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if ecall_i = '1' then
-                mcause <= CSR_MCAUSE_MACHINE_ECALL;
-            elsif cause_external_irq_i = '1' then
-                mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
-            elsif cause_timer_irq_i = '1' then
-                mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
-            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MSTATUS then
+            if exception_taken_i = '1' then
+                if ecall_i = '1' then
+                    mcause <= CSR_MCAUSE_MACHINE_ECALL;
+                elsif cause_external_irq_i = '1' then
+                    mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
+                elsif cause_timer_irq_i = '1' then
+                    mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
+                end if;
+            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MCAUSE then
                 mcause <= write_csr(data_i, mcause, funct3_i);
             end if;
             if exception_taken_i = '1' then
