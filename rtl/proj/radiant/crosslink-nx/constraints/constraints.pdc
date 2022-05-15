@@ -1,0 +1,6 @@
+ldc_set_sysconfig {JTAG_PORT=ENABLE}
+create_clock -name {pin_clk_i} -period 83.333 [get_ports pin_clk_i]
+ldc_set_location -site {L13} [get_ports pin_clk_i]
+ldc_set_location -site {F16} [get_ports pin_uart_rx_i]
+ldc_set_location -site {F18} [get_ports pin_uart_tx_o]
+ldc_set_location -site {G19} [get_ports pin_arst_n_i]

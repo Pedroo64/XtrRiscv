@@ -1,4 +1,6 @@
 *
+!*.md
+!docs/**
 !.gitignore
 # HDL
 !*.vhd
@@ -7,6 +9,9 @@
 # Vivado
 !*.xdc
 !*.xpr
+# Radiant
+!*.pdc
+!*.rdf
 # C/C++
 !*.c
 !*.h
@@ -28,3 +33,5 @@ CMakeFiles
 
 # Vivado
 *.runs
+# Radiant
+*impl_1*
