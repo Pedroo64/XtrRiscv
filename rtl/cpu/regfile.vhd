@@ -20,6 +20,17 @@ end entity regfile;
 architecture rtl of regfile is
     type regfile_t is array (natural range <>) of std_logic_vector(31 downto 0);
     signal reg : regfile_t(0 to 31);
+        -- XST attributes
+        attribute ram_style: string;
+        attribute ram_style of reg: signal is "distributed";
+    
+        -- Lattice Diamond attributes
+        attribute syn_ramstyle: string;
+        attribute syn_ramstyle of reg: signal is "distributed";
+    
+        -- Altera Quartus attributes
+        attribute ramstyle: string;
+        attribute ramstyle of reg: signal is "distributed";
 begin
     
     process (clk_i, arst_i)

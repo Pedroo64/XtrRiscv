@@ -307,8 +307,6 @@ begin
             srst_i => srst_i,
             mstatus_i => mstatus,
             mie_i => mie,
-            ecall_i => ecall,
-            mret_i => mret,
             external_irq_i => external_irq_i,
             timer_irq_i => timer_irq_i,
             exception_valid_o => exception_valid,
