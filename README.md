@@ -8,8 +8,6 @@ This repository hosts a RISC-V CPU implementation in VHDL. This has the followin
 - External and Timer interrupts
 - FreeRTOS support
 
- CPU runs RV32I instructions over a 5 stage pipeline (fetch, decode, execute, memory, writeback).
-
 This CPU implementation has every stage explicitly implemented so that can be used to understand how a CPU pipeline works or to easily add new features to a specific stage of the pipeline. For example to add M extension of RISC-V only the decode and execute stage need to be modified.
 
 Independently attached to some peripherals for testing, the design can run over 100 MHz on the [Digilent Arty S7-50](https://digilent.com/shop/arty-s7-spartan-7-fpga-development-board) board and on [Lattice CrossLink-NX evaluation board](https://www.latticesemi.com/en/Products/DevelopmentBoardsAndKits/CrossLink-NXEvaluationBoard).
