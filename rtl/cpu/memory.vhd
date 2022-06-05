@@ -11,7 +11,7 @@ entity memory is
         adr_i     : in std_logic_vector(31 downto 0);
         vld_i     : in std_logic;
         we_i      : in std_logic;
-        siz_i     : in std_logic_vector(1 downto 0);
+        siz_i     : in std_logic_vector(2 downto 0);
         dat_i     : in std_logic_vector(31 downto 0);
         rd_adr_i  : in std_logic_vector(4 downto 0);
         rd_adr_o  : out std_logic_vector(4 downto 0);
@@ -34,7 +34,7 @@ architecture rtl of memory is
     signal cmd_vld : std_logic;
     signal rd_we, d_rd_we   : std_logic;
     signal adr, d_adr : std_logic_vector(1 downto 0);
-    signal siz, d_siz : std_logic_vector(1 downto 0);
+    signal siz, d_siz : std_logic_vector(2 downto 0);
     signal rd_adr : std_logic_vector(4 downto 0);
 begin
 
@@ -61,10 +61,10 @@ begin
                     cmd_adr_o <= adr_i;
                     rd_we     <= not we_i;
                     rd_adr  <= rd_adr_i;
-                    cmd_siz_o <= siz_i;
+                    cmd_siz_o <= siz_i(1 downto 0);
                     siz       <= siz_i;
                     adr       <= adr_i(1 downto 0);
-                    case siz_i is
+                    case siz_i(1 downto 0) is
                         when "00" =>
                             cmd_dat_o <= dat_i(7 downto 0) & dat_i(7 downto 0) & dat_i(7 downto 0) & dat_i(7 downto 0);
                         when "01" =>
@@ -87,26 +87,34 @@ begin
         en_i;
     rdy_o   <= rdy;
     rd_we_o <= d_rd_we and rsp_vld_i;
+
+
     process (d_siz, d_adr, rsp_dat_i)
     begin
-        case d_siz is
+        case d_siz(1 downto 0) is
             when "00" =>
                 case d_adr is
                     when "00" =>
-                        rd_dat_o <= x"000000" & rsp_dat_i(7 downto 0);
+                        rd_dat_o(31 downto 8) <= (others => (rsp_dat_i(7) and not d_siz(2)));
+                        rd_dat_o(7 downto 0) <= rsp_dat_i(7 downto 0);
                     when "01" =>
-                        rd_dat_o <= x"000000" & rsp_dat_i(15 downto 8);
+                        rd_dat_o(31 downto 8) <= (others => (rsp_dat_i(15) and not d_siz(2)));
+                        rd_dat_o(7 downto 0) <= rsp_dat_i(15 downto 8);
                     when "10" =>
-                        rd_dat_o <= x"000000" & rsp_dat_i(23 downto 16);
+                        rd_dat_o(31 downto 8) <= (others => (rsp_dat_i(23) and not d_siz(2)));
+                        rd_dat_o(7 downto 0) <= rsp_dat_i(23 downto 16);
                     when "11" =>
-                        rd_dat_o <= x"000000" & rsp_dat_i(31 downto 24);
+                        rd_dat_o(31 downto 8) <= (others => (rsp_dat_i(31) and not d_siz(2)));
+                        rd_dat_o(7 downto 0) <= rsp_dat_i(31 downto 24);
                     when others =>
                 end case;
             when "01" =>
                 if d_adr(1) = '0' then
-                    rd_dat_o <= x"0000" & rsp_dat_i(15 downto 0);
+                    rd_dat_o(31 downto 16) <= (others => (rsp_dat_i(15) and not d_siz(2)));
+                    rd_dat_o(15 downto 0) <= rsp_dat_i(15 downto 0);
                 else
-                    rd_dat_o <= x"0000" & rsp_dat_i(31 downto 16);
+                    rd_dat_o(31 downto 16) <= (others => (rsp_dat_i(31) and not d_siz(2)));
+                    rd_dat_o(15 downto 0) <= rsp_dat_i(31 downto 16);
                 end if;
             when others =>
                 rd_dat_o <= rsp_dat_i;

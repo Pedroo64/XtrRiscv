@@ -58,7 +58,7 @@ architecture rtl of cpu is
     signal ex_mem_adr, ex_mem_dat : std_logic_vector(31 downto 0);
     signal ex_mem_rd_adr : std_logic_vector(4 downto 0);
     signal ex_mem_vld, ex_mem_we : std_logic;
-    signal ex_mem_siz : std_logic_vector(1 downto 0);
+    signal ex_mem_siz : std_logic_vector(2 downto 0);
     signal ex_mem_rd_we : std_logic;
     -- mem
     signal mem_en, mem_rdy : std_logic;

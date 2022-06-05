@@ -35,7 +35,7 @@ entity execute is
         memory_address_o : out std_logic_vector(31 downto 0);
         memory_data_o : out std_logic_vector(31 downto 0);
         memory_we_o : out std_logic;
-        memory_size_o : out std_logic_vector(1 downto 0);
+        memory_size_o : out std_logic_vector(2 downto 0);
         memory_ready_i : in std_logic;
         csr_valid_o : out std_logic;
         csr_address_o : out std_logic_vector(11 downto 0);
@@ -297,7 +297,7 @@ begin
                     memory_data_o <= rs2_dat_i;
                     memory_valid <= '0';
                     memory_we_o <= '0';
-                    memory_size_o <= funct3_i(1 downto 0);
+                    memory_size_o <= funct3_i(2 downto 0);
                     case opcode_i is
                         when RV32I_OP_LOAD =>
                             memory_valid <= '1';
