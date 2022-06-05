@@ -4,8 +4,6 @@
 !.gitignore
 # HDL
 !*.vhd
-# Modelsim
-!*.mpf
 # Vivado
 !*.xdc
 !*.xpr

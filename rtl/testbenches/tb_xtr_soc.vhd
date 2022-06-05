@@ -3,10 +3,13 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 entity tb_xtr_soc is
+    generic (
+        C_INIT_FILE : string := "none";
+        C_OUTPUT_FILE : string := "none"
+    );
 end entity tb_xtr_soc;
 
 architecture rtl of tb_xtr_soc is
-    constant C_INIT_FILE : string := "../../../soft/bin/test.mem";
     constant C_CLK_PER   : time   := 20 ns;
     signal arst          : std_logic;
     signal clk           : std_logic;
@@ -32,8 +35,8 @@ begin
     p_interrupt: process
     begin
         t_interrupt <= '0';
-        wait for 93*C_CLK_PER;
-        t_interrupt <= '0';
+        wait for 68*C_CLK_PER;
+        t_interrupt <= '1';
         wait for C_CLK_PER;
         t_interrupt <= '0';
     end process p_interrupt;
@@ -44,12 +47,9 @@ begin
         end if;
     end process;
 
-    u_xtr_soc : entity work.xtr_soc
+    u_xtr_soc : entity work.sim_soc
         generic map (
-            C_FREQ_IN => 50e6, C_RAM_SIZE => 16*1024, C_UART => 1, C_INIT_FILE => C_INIT_FILE)
+            C_FREQ_IN => 50e6, C_RAM_SIZE => 16*1024*1024, C_INIT_FILE => C_INIT_FILE, C_OUTPUT_FILE => C_OUTPUT_FILE)
         port map (
-            arst_i => arst, clk_i => clk, srst_i => '0',
-            uart_rx_i => (others => '1'), uart_tx_o => open,
-            external_irq_i => interrupt);
-
+            arst_i => arst, clk_i => clk);
 end architecture rtl;
