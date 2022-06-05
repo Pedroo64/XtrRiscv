@@ -47,7 +47,8 @@ architecture rtl of csr is
         end case;
         return ret;
     end function;
-    signal valid : std_logic;
+    signal valid, ready : std_logic;
+    signal mscratch : std_logic_vector(31 downto 0) := (others => '0');
     signal mie : std_logic_vector(31 downto 0) := (others => '0');
     signal mstatus : std_logic_vector(31 downto 0) := (others => '0');
     signal mtvec : std_logic_vector(31 downto 0) := (others => '0');
@@ -65,10 +66,13 @@ begin
                 mie <= (others => '0');
                 valid <= '0';
             else
-                if valid_i = '1' and ready_i = '1' then
+                if valid_i = '1' and ready = '1' then
                     valid <= '1';
                     rd_adr_o <= rd_adr_i;
                     case address_i is
+                        when CSR_MSCRATCH =>
+                            rd_dat_o <= mscratch;
+                            mscratch <= write_csr(data_i, mscratch, funct3_i);
                         when CSR_MSTATUS =>
                             rd_dat_o <= mstatus;
                         when CSR_MIE =>
@@ -143,9 +147,10 @@ begin
         end if;
     end process;
 
-    ready_o <= 
+    ready <= 
         '0' when valid = '1' and ready_i = '0' else
         '1';
+    ready_o <= ready;
 
     mstatus_o <= mstatus;
     mie_o <= mie;
