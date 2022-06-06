@@ -7,6 +7,7 @@ This repository hosts a RISC-V CPU implementation in VHDL. This has the followin
 - Full barrel shifter
 - External and Timer interrupts
 - FreeRTOS support
+- Passes all RV32I [tests](https://github.com/Pedroo64/riscv-arch-test/tree/old-framework-2.x/riscv-target/xtrriscv)
 
 This CPU implementation has every stage explicitly implemented so that can be used to understand how a CPU pipeline works or to easily add new features to a specific stage of the pipeline. For example to add M extension of RISC-V only the decode and execute stage need to be modified.
 
