@@ -13,7 +13,7 @@ $ export VSIM=PATH_TO_VSIM
 ```
 
 ## Compiling the testbench
-Only the **[tb_xtr_soc.vhd]()** is used to test XtrRiscv. To compile the testbench run the following command :
+Only the **[tb_xtr_soc.vhd](../../testbenches/tb_xtr_soc.vhd)** is used to test XtrRiscv. To compile the testbench run the following command :
 ```bash
 $ make
 ```
