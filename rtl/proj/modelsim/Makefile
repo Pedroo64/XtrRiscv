@@ -1,13 +1,14 @@
-
+VSIM        ?= vsim
+VSIM_FLAGS  ?=
 SRCS_PATH=../..
 
 all: compile
 
 create_project:
-	$(VSIM) -c -do "project new . proj;  exit -f"
+	$(VSIM) -c $(VSIM_FLAGS) -do "project new . proj;  exit -f"
 
 add_sources: create_project
-	$(VSIM) -c -do "project open proj.mpf; \
+	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open proj.mpf; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
@@ -33,7 +34,7 @@ add_sources: create_project
 		exit -f" 
 
 compile: add_sources
-	$(VSIM) -c -do "project open proj.mpf; project compileall; exit -f"
+	$(VSIM) -c $(VSIM_FLAGS) -do "project open proj.mpf; project compileall; exit -f"
 
 clean:
 	rm -r work
