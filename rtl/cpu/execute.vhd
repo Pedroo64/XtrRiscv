@@ -49,6 +49,7 @@ entity execute is
         exception_exit_o : out std_logic;
         mret_o : out std_logic;
         ecall_o : out std_logic;
+        ebreak_o : out std_logic;
         ready_o : out std_logic
     );
 end entity execute;
@@ -57,7 +58,7 @@ architecture rtl of execute is
     signal writeback_valid, memory_valid, csr_valid : std_logic;
     signal next_stage_ready : std_logic;
     signal next_pc, pc : std_logic_vector(31 downto 0);
-    signal ecall, exception_taken, load_pc : std_logic;
+    signal ecall, ebreak, exception_taken, load_pc : std_logic;
 begin
     
     process (clk_i)
@@ -180,6 +181,7 @@ begin
         if arst_i = '1' then
             load_pc <= '0';
             ecall <= '0';
+            ebreak <= '0';
             mret_o <= '0';
             exception_taken <= '0';
             exception_exit_o <= '0';
@@ -187,12 +189,14 @@ begin
             if srst_i = '1' then
                 load_pc <= '0';
                 ecall <= '0';
+                ebreak <= '0';
                 mret_o <= '0';
                 exception_taken <= '0';
                 exception_exit_o <= '0';
             else
                 load_pc <= '0';
                 ecall <= '0';
+                ebreak <= '0';
                 mret_o <= '0';
                 exception_taken <= '0';
                 exception_exit_o <= '0';
@@ -253,6 +257,9 @@ begin
                                         exception_taken <= '1';
                                         --saved_pc <= std_logic_vector(unsigned(pc_i) + 4);
                                         --exception_pc_o <= pc_i;
+                                    when RV32I_SYS_EBREAK =>
+                                        ebreak <= '1';
+                                        exception_taken <= '1';
                                     when others =>
                                 end case;
                             end if;
@@ -274,7 +281,7 @@ begin
 
     exception_pc_o <= 
         next_pc when load_pc = '1' else 
-        pc when ecall = '1' else
+        pc when ecall = '1' or ebreak = '1' else
         std_logic_vector(unsigned(pc) + 4);
 
     pc_o <= 
@@ -283,6 +290,7 @@ begin
     load_pc_o <= load_pc or exception_taken;
     exception_taken_o <= exception_taken;
     ecall_o <= ecall;
+    ebreak_o <= ebreak;
 
     process (clk_i, arst_i)
     begin

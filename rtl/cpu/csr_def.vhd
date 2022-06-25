@@ -19,7 +19,7 @@ package csr_def is
     constant CSR_MSCRATCH   : std_logic_vector := x"340";
     constant CSR_MEPC       : std_logic_vector := x"341";
     constant CSR_MCAUSE     : std_logic_vector := x"342";
-    constant CSR_MBADADDR   : std_logic_vector := x"343";
+    constant CSR_MTVAL      : std_logic_vector := x"343";
     constant CSR_MIP        : std_logic_vector := x"344";
     
     constant CSR_MBASE      : std_logic_vector := x"380";

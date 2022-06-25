@@ -53,7 +53,7 @@ architecture rtl of cpu is
     signal ex_funct3 : std_logic_vector(2 downto 0);
     signal ex_funct7 : std_logic_vector(6 downto 0);
     signal ex_rd_dat : std_logic_vector(31 downto 0);
-    signal mret, ecall : std_logic;
+    signal mret, ecall, ebreak : std_logic;
     -- ex -> mem
     signal ex_mem_adr, ex_mem_dat : std_logic_vector(31 downto 0);
     signal ex_mem_rd_adr : std_logic_vector(4 downto 0);
@@ -79,7 +79,6 @@ architecture rtl of cpu is
     signal ex_csr_rd_adr : std_logic_vector(4 downto 0);
     signal ex_csr_funct3 : std_logic_vector(2 downto 0);
     signal ex_csr_adr : std_logic_vector(11 downto 0);
-    signal ex_csr_mret, ex_csr_ecall : std_logic;
     -- csr -> wb
     signal csr_wb_rd_we, csr_wb_vld : std_logic;
     signal csr_wb_rd_dat : std_logic_vector(31 downto 0);
@@ -204,6 +203,7 @@ begin
             exception_exit_o => exception_exit,
             mret_o => mret,
             ecall_o => ecall,
+            ebreak_o => ebreak,
             ready_o => ex_rdy
         );
 
@@ -243,6 +243,7 @@ begin
             exception_taken_i => exception_taken,
             exception_exit_i => exception_exit,
             ecall_i => ecall,
+            ebreak_i => ebreak,
             cause_external_irq_i => cause_external_irq,
             cause_timer_irq_i => cause_timer_irq,
             mstatus_o => mstatus,

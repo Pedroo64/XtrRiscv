@@ -23,7 +23,8 @@ entity csr is
         exception_pc_i : in std_logic_vector(31 downto 0);
         exception_taken_i : in std_logic;
         exception_exit_i : in std_logic;
-        ecall_i : in std_logic;        
+        ecall_i : in std_logic;
+        ebreak_i : in std_logic;
         cause_external_irq_i : in std_logic;
         cause_timer_irq_i : in std_logic;
         mstatus_o : out std_logic_vector(31 downto 0);
@@ -54,6 +55,7 @@ architecture rtl of csr is
     signal mtvec : std_logic_vector(31 downto 0) := (others => '0');
     signal mepc : std_logic_vector(31 downto 0) := (others => '0');
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
+    signal mtval : std_logic_vector(31 downto 0);
 begin
     
     process (clk_i, arst_i)
@@ -85,6 +87,8 @@ begin
                             rd_dat_o <= mepc;
                         when CSR_MCAUSE =>
                             rd_dat_o <= mcause;
+                        when CSR_MTVAL =>
+                            rd_dat_o <= mtval;
                         when others =>
                             rd_dat_o <= (others => '0');
                     end case;
@@ -103,6 +107,8 @@ begin
             if exception_taken_i = '1' then
                 if ecall_i = '1' then
                     mcause <= CSR_MCAUSE_MACHINE_ECALL;
+                elsif ebreak_i = '1' then
+                    mcause <= CSR_MCAUSE_BREAKPOINT;
                 elsif cause_external_irq_i = '1' then
                     mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
                 elsif cause_timer_irq_i = '1' then
@@ -115,6 +121,11 @@ begin
                 mepc <= exception_pc_i;
             elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MEPC then
                 mepc <= write_csr(data_i, mepc, funct3_i);
+            end if;
+            if exception_taken_i = '1' and ebreak_i = '1' then
+                mtval <= exception_pc_i;
+            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MTVAL then
+                mtval <= write_csr(data_i, mtval, funct3_i);
             end if;
 
         end if;
