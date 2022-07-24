@@ -33,6 +33,13 @@ package csr_def is
     constant CSR_MIE_MEIE : integer := 11;
     constant CSR_MIE_MTIE : integer := 7;
 
+-- Debug extension
+    constant CSR_DCSR       : std_logic_vector := x"7B0";
+    constant CSR_DPC        : std_logic_vector := x"7B1";
+    constant CSR_DSCRATCH0  : std_logic_vector := x"7B2";
+    constant CSR_DSCRATCH1  : std_logic_vector := x"7B3";
+    constant CSR_DM_DATA0   : std_logic_vector := x"7C0";
+
 -- mcause
     constant CSR_MCAUSE_USER_SOFTWARE_INTERRUPT         : std_logic_vector := x"80000000";
     constant CSR_MCAUSE_SUPERVISOR_SOFTWARE_INTERRUPT   : std_logic_vector := x"80000001";

@@ -13,6 +13,8 @@ entity xtr_cpu is
         instr_rsp_i : in xtr_rsp_t;
         data_cmd_o : out xtr_cmd_t;
         data_rsp_i : in xtr_rsp_t;
+        debug_cmd_i : in xtr_cmd_t;
+        debug_rsp_o : out xtr_rsp_t;
         external_irq_i : in std_logic;
         timer_irq_i : in std_logic
     );
@@ -23,8 +25,21 @@ architecture rtl of xtr_cpu is
     signal instr_cmd_vld, instr_cmd_rdy, instr_rsp_vld : std_logic;
     signal data_cmd_adr, data_cmd_dat, data_rsp_dat : std_logic_vector(31 downto 0);
     signal data_cmd_vld, data_cmd_we, data_cmd_rdy, data_rsp_vld : std_logic;
+    signal debug_cmd_adr : std_logic_vector(7 downto 0);
+    signal debug_cmd_dat, debug_rsp_dat : std_logic_vector(31 downto 0);
+    signal debug_cmd_vld, debug_cmd_we, debug_cmd_rdy, debug_rsp_vld : std_logic;
     signal data_cmd_siz : std_logic_vector(1 downto 0);
     signal data_cmd_sel : std_logic_vector(3 downto 0);
+    attribute mark_debug : string;
+    attribute mark_debug of instr_cmd_adr : signal is "true";
+    attribute mark_debug of instr_cmd_vld : signal is "true";
+    attribute mark_debug of data_cmd_adr : signal is "true";
+    attribute mark_debug of data_cmd_vld : signal is "true";
+    attribute mark_debug of data_cmd_we : signal is "true";
+    attribute mark_debug of data_cmd_dat : signal is "true";
+    attribute mark_debug of data_cmd_sel : signal is "true";
+    attribute mark_debug of data_rsp_dat : signal is "true";
+    attribute mark_debug of data_rsp_vld : signal is "true";
 begin
     
     u_cpu : entity work.cpu
@@ -34,6 +49,8 @@ begin
             instr_cmd_rdy_i => instr_cmd_rdy, instr_rsp_dat_i => instr_rsp_dat, instr_rsp_vld_i => instr_rsp_vld,
             data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_siz_o => data_cmd_siz, data_cmd_dat_o => data_cmd_dat,
             data_cmd_rdy_i => data_cmd_rdy, data_rsp_vld_i => data_rsp_vld, data_rsp_dat_i => data_rsp_dat,
+            debug_cmd_adr_i => debug_cmd_adr, debug_cmd_dat_i => debug_cmd_dat, debug_cmd_vld_i => debug_cmd_vld, debug_cmd_we_i => debug_cmd_we,
+            debug_rsp_dat_o => debug_rsp_dat, debug_rsp_vld_o => debug_rsp_vld, debug_rsp_rdy_o => debug_cmd_rdy,
             external_irq_i => external_irq_i, timer_irq_i => timer_irq_i);
 
     instr_cmd_o.adr <= instr_cmd_adr;
@@ -53,6 +70,14 @@ begin
     data_cmd_rdy    <= data_rsp_i.rdy;
     data_rsp_vld    <= data_rsp_i.vld;
     data_rsp_dat    <= data_rsp_i.dat;
+    
+    debug_cmd_adr <= debug_cmd_i.adr(7 downto 0);
+    debug_cmd_dat <= debug_cmd_i.dat;
+    debug_rsp_o.dat <= debug_rsp_dat;
+    debug_cmd_vld <= debug_cmd_i.vld;
+    debug_cmd_we <= debug_cmd_i.we;
+    debug_rsp_o.rdy <= debug_cmd_rdy; 
+    debug_rsp_o.vld <= debug_rsp_vld; 
 
     process (data_cmd_siz, data_cmd_adr(1 downto 0))
     begin

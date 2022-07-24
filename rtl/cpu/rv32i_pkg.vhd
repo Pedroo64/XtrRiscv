@@ -32,6 +32,7 @@ constant RV32I_FN3_AND           :   std_logic_vector := "111";
 constant RV32I_SYS_ECALL        :   std_logic_vector := "000000000000";
 constant RV32I_SYS_EBREAK       :   std_logic_vector := "000000000001";
 constant RV32I_SYS_MRET         :   std_logic_vector := "001100000010";
+constant RV32I_SYS_DRET         :   std_logic_vector := "011110110010";
 --constant RV32I_SYS_RDCYCLE       :   std_logic_vector := "110000000000";
 --constant RV32I_SYS_RDCYCLEH      :   std_logic_vector := "110010000000";
 --constant RV32I_SYS_RDTIME        :   std_logic_vector := "110000000001";

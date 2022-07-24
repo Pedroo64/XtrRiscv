@@ -30,7 +30,13 @@ entity csr is
         mstatus_o : out std_logic_vector(31 downto 0);
         mie_o : out std_logic_vector(31 downto 0);
         mtvec_o : out std_logic_vector(31 downto 0);
-        mepc_o : out std_logic_vector(31 downto 0)
+        mepc_o : out std_logic_vector(31 downto 0);
+        cause_debug_irq_i : in std_logic;
+        dm_halt_i : in std_logic;
+        dm_data0_dat_i : in std_logic_vector(31 downto 0);
+        dm_data0_vld_i : in std_logic;
+        dm_data0_dat_o : out std_logic_vector(31 downto 0);
+        dcsr_o : out std_logic_vector(31 downto 0)
     );
 end entity csr;
 
@@ -56,6 +62,13 @@ architecture rtl of csr is
     signal mepc : std_logic_vector(31 downto 0) := (others => '0');
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
     signal mtval : std_logic_vector(31 downto 0);
+    -- debug csr
+    signal dcsr : std_logic_vector(31 downto 0);
+    signal dcsr_cause : std_logic_vector(2 downto 0);
+    signal dcsr_version : std_logic_vector(3 downto 0);
+    signal dcsr_ebreakm, dcsr_step : std_logic;
+    signal dpc : std_logic_vector(31 downto 0);
+    signal dm_data0 : std_logic_vector(31 downto 0);
 begin
     
     process (clk_i, arst_i)
@@ -89,6 +102,19 @@ begin
                             rd_dat_o <= mcause;
                         when CSR_MTVAL =>
                             rd_dat_o <= mtval;
+                        when CSR_DPC => 
+                            rd_dat_o <= dpc;    
+                        when CSR_DCSR => 
+                            rd_dat_o(31 downto 28) <= dcsr_version;
+                            rd_dat_o(27 downto 16) <= (others => '0');
+                            rd_dat_o(15) <= dcsr_ebreakm;
+                            rd_dat_o(14 downto 9) <= (others => '0');
+                            rd_dat_o(8 downto 6) <= dcsr_cause;
+                            rd_dat_o(5 downto 3) <= (others => '0');
+                            rd_dat_o(2) <= dcsr_step;
+                            rd_dat_o(1 downto 0) <= (others => '0');
+                        when CSR_DM_DATA0 => 
+                            rd_dat_o <= dm_data0;
                         when others =>
                             rd_dat_o <= (others => '0');
                     end case;
@@ -128,6 +154,27 @@ begin
                 mtval <= write_csr(data_i, mtval, funct3_i);
             end if;
 
+            if exception_taken_i = '1' and cause_debug_irq_i = '1' then
+                dpc <= exception_pc_i;
+            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_DPC then
+                dpc <= write_csr(data_i, dpc, funct3_i);
+            end if;
+            if exception_taken_i = '1' and cause_debug_irq_i = '1' then
+                if dm_halt_i = '1' then
+                    dcsr(8 downto 6) <= std_logic_vector(to_unsigned(3, 3)); -- HALTREQ
+                elsif ebreak_i = '1' then
+                    dcsr(8 downto 6) <= std_logic_vector(to_unsigned(1, 3)); -- EBREAKM
+                elsif dcsr(2) = '1' then
+                    dcsr(8 downto 6) <= std_logic_vector(to_unsigned(4, 3)); -- STEP
+                end if;
+            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_DCSR then
+                dcsr <= write_csr(data_i, dcsr, funct3_i);
+            end if;
+            if dm_data0_vld_i = '1' then
+                dm_data0 <= dm_data0_dat_i;
+            elsif valid_i = '1' and ready_i = '1' and address_i = CSR_DM_DATA0 then
+                dm_data0 <= write_csr(data_i, dm_data0, funct3_i);
+            end if;
         end if;
     end process;
 
@@ -167,6 +214,18 @@ begin
     mie_o <= mie;
     mtvec_o <= mtvec;
     mepc_o <= mepc;
+
+    dcsr_cause <= dcsr(8 downto 6);
+    dcsr_version <= x"4";
+    dcsr_ebreakm <= dcsr(15);
+    dcsr_step <= dcsr(2);
     
-    
+    dcsr_o(31 downto 28) <= dcsr_version;
+    dcsr_o(27 downto 16) <= (others => '0');
+    dcsr_o(15) <= dcsr_ebreakm;
+    dcsr_o(14 downto 9) <= (others => '0');
+    dcsr_o(8 downto 6) <= dcsr_cause;
+    dcsr_o(5 downto 3) <= (others => '0');
+    dcsr_o(2) <= dcsr_step;
+    dcsr_o(1 downto 0) <= (others => '0');
 end architecture rtl;

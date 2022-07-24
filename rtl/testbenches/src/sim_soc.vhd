@@ -13,7 +13,9 @@ entity sim_soc is
     );
     port (
         arst_i : in std_logic;
-        clk_i : in std_logic
+        clk_i : in std_logic;
+        debug_cmd_i : in xtr_cmd_t;
+        debug_rsp_o : out xtr_rsp_t
     );
 end entity sim_soc;
 
@@ -47,6 +49,7 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
+            debug_cmd_i => debug_cmd_i, debug_rsp_o => debug_rsp_o,
             external_irq_i => '0', timer_irq_i => '0');
 
     u_xtr_abr_lyr1 : entity work.xtr_abr

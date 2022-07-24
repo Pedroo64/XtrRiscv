@@ -48,6 +48,7 @@ entity execute is
         exception_taken_o : out std_logic;
         exception_exit_o : out std_logic;
         mret_o : out std_logic;
+        dret_o : out std_logic;
         ecall_o : out std_logic;
         ebreak_o : out std_logic;
         ready_o : out std_logic
@@ -183,6 +184,7 @@ begin
             ecall <= '0';
             ebreak <= '0';
             mret_o <= '0';
+            dret_o <= '0';
             exception_taken <= '0';
             exception_exit_o <= '0';
         elsif rising_edge(clk_i) then
@@ -191,6 +193,7 @@ begin
                 ecall <= '0';
                 ebreak <= '0';
                 mret_o <= '0';
+                dret_o <= '0';
                 exception_taken <= '0';
                 exception_exit_o <= '0';
             else
@@ -198,6 +201,7 @@ begin
                 ecall <= '0';
                 ebreak <= '0';
                 mret_o <= '0';
+                dret_o <= '0';
                 exception_taken <= '0';
                 exception_exit_o <= '0';
  --               if exception_valid_i = '1' then
@@ -260,6 +264,11 @@ begin
                                     when RV32I_SYS_EBREAK =>
                                         ebreak <= '1';
                                         exception_taken <= '1';
+                                    when RV32I_SYS_DRET =>
+                                        dret_o <= '1';
+                                        load_pc <= '1';
+                                        next_pc <= exception_pc_i;
+                                        exception_exit_o <= '1';
                                     when others =>
                                 end case;
                             end if;
