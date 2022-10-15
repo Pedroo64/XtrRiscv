@@ -17,7 +17,7 @@ architecture rtl of tb_xtr_soc is
     signal arst          : std_logic;
     signal clk           : std_logic;
     signal t_interrupt, interrupt : std_logic := '0';
-    signal t_debug_cmd, debug_cmd : xtr_cmd_t;
+    signal debug_cmd : xtr_cmd_t;
     signal debug_rsp : xtr_rsp_t;
     function load_instruction (
         imm : integer;
@@ -59,15 +59,6 @@ begin
             interrupt <= t_interrupt;
         end if;
     end process;
-    process (clk, arst)
-    begin
-        if arst = '1' then
-            debug_cmd.vld <= '0';
-            debug_cmd.we <= '0';
-        elsif rising_edge(clk) then
-            debug_cmd <= t_debug_cmd;
-        end if;
-    end process;
 
     u_xtr_soc : entity work.sim_soc
         generic map (
@@ -75,46 +66,36 @@ begin
         port map (
             arst_i => arst, clk_i => clk, debug_cmd_i => debug_cmd, debug_rsp_o => debug_rsp);
 
+block_dtm : block
+    signal tck, tdi, tdo, tms : std_logic;
+begin
+    debug_cmd.adr(31 downto 8) <= (others => '0');
+    u_jtag_dtm : entity work.jtag_dtm
+        port map (
+            arst_i => arst,
+            clk_i => clk,
+            tck_i => tck,
+            tdi_i => tdi,
+            tdo_o => tdo,
+            tms_i => tms,
+            cmd_adr_o => debug_cmd.adr(7 downto 0),
+            cmd_dat_o => debug_cmd.dat,
+            cmd_vld_o => debug_cmd.vld,
+            cmd_we_o => debug_cmd.we,
+            rsp_rdy_i => debug_rsp.rdy,
+            rsp_vld_i => debug_rsp.vld,
+            rsp_dat_i => debug_rsp.dat
+        );
+    u_sim_jtag : entity work.sim_jtag
+        port map (
+            arst_i => arst,
+            clk_i => clk,
+            tck_o => tck,
+            tdi_o => tdi,
+            tms_o => tms,
+            tdo_i => tdo
+        );
+end block;
+          
 
-
-    process
-        procedure send_cmd (
-            adr : std_logic_vector(7 downto 0);
-            dat : std_logic_vector(31 downto 0);
-            we : std_logic) is
-        begin
-            t_debug_cmd.vld <= '1'; t_debug_cmd.we <= we; t_debug_cmd.adr <= x"000000" & adr; t_debug_cmd.dat <= dat;
-            wait for C_CLK_PER;
-            t_debug_cmd.vld <= '0';
-            wait for C_CLK_PER;
-        end procedure;
-        procedure send_cmd (
-            adr : integer;
-            dat : std_logic_vector(31 downto 0);
-            we : std_logic) is
-        begin
-            send_cmd(std_logic_vector(to_unsigned(adr, 8)), dat, we);
-        end procedure;
-    begin
-        t_debug_cmd.vld <= '0';
-        wait for 20*C_CLK_PER;
-        send_cmd(C_DMCONTROL, x"00000003", '1'); -- ndmreset, dmactive
-        send_cmd(C_DMSTATUS, (others => '-'), '0'); -- read dmstatus
-        send_cmd(C_DMCONTROL, x"00000001", '1'); -- dmactive
-        send_cmd(C_DMSTATUS, (others => '-'), '0'); -- read dmstatus
-        send_cmd(C_DMCONTROL, x"80000001", '1'); -- haltreq, dmactive
-        send_cmd(C_DMSTATUS, (others => '-'), '0'); -- read dmstatus
-        wait for 10*C_CLK_PER;
-        send_cmd(C_COMMAND, x"00221002", '1'); -- should copy x2 into data0
-        wait for 10*C_CLK_PER;
-        send_cmd(C_DATA0, x"11223344", '1'); -- should copy x2 into data0
-        send_cmd(C_COMMAND, x"00231002", '1'); -- should write data0 into x2
-        wait for 10*C_CLK_PER;
-        send_cmd(C_PROGBUF0, load_instruction(16#20#, 0, 2, 2), '1'); -- lw x2, x0(0x20)
-        send_cmd(C_COMMAND, x"00240000", '1'); -- should execute progbuf
-        wait for 10*C_CLK_PER;
-        send_cmd(C_PROGBUF0, x"7b200073", '1'); -- dret
-        send_cmd(C_COMMAND, x"00240000", '1'); -- should execute progbuf
-        wait;
-    end process;
 end architecture rtl;

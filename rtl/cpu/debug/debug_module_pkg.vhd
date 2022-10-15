@@ -28,8 +28,12 @@ package debug_module_pkg is
     constant C_HARTINFO : integer := 16#12#;
     constant C_ABSTRACTCS : integer := 16#16#;
     constant C_COMMAND : integer := 16#17#;
+    constant C_ABSTRACTAUTO : integer := 16#18#;
     constant C_NEXTDM : integer := 16#1D#;
     constant C_PROGBUF0 : integer := 16#20#;
+    constant C_PROGBUF1 : integer := 16#21#;
+    constant C_PROGBUF2 : integer := 16#22#;
+    constant C_PROGBUF3 : integer := 16#23#;
 
     type dmcontrol_t is record
         haltreq : std_logic; -- 31, WARZ
@@ -87,10 +91,14 @@ package debug_module_pkg is
     type hartinfo_t is record
         nscratch : std_logic_vector(3 downto 0); -- 23 downto 20, R
         dataaccess : std_logic; -- 16, R
-        datasize : std_logic_vector(4 downto 0); -- 15 downto 12, R
+        datasize : std_logic_vector(3 downto 0); -- 15 downto 12, R
         dataaddr : std_logic_vector(11 downto 0); -- 11 downto 0, R
     end record hartinfo_t;
 
+    type abstractauto_t is record
+        autoexecprogbuf : std_logic_vector(3 downto 0); -- 31 downto 16
+        autoexecdata : std_logic_vector(0 downto 0); -- 11 downto 0
+    end record abstractauto_t;
 
     type debug_module_registers_t is record
         data0 : std_logic_vector(31 downto 0); -- R/W
@@ -101,6 +109,10 @@ package debug_module_pkg is
         command : command_t;
         nextdm : std_logic_vector(31 downto 0); -- R
         progbuf0 : std_logic_vector(31 downto 0); -- R/W
+        progbuf1 : std_logic_vector(31 downto 0); -- R/W
+        progbuf2 : std_logic_vector(31 downto 0); -- R/W
+        progbuf3 : std_logic_vector(31 downto 0); -- R/W
+        abstractauto : abstractauto_t;
     end record debug_module_registers_t;
 
     type access_register_command_t is record -- Image of command_t.control

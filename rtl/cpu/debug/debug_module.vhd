@@ -31,11 +31,12 @@ entity debug_module is
 end entity debug_module;
 
 architecture rtl of debug_module is
-    type execute_st is (st_idle, st_check, st_transfer, st_progbuf, st_ebreak, st_error);
+    type execute_st is (st_idle, st_check, st_transfer, st_progbuf0, st_progbuf1, st_progbuf2, st_progbuf3, st_ebreak, st_error, st_dret);
     signal current_st : execute_st;
     signal dm_regs : debug_module_registers_t;
     signal dm_regs_command_control_alias : access_register_command_t;
     signal hart_reset, hart_halted : std_logic;
+    signal trg_auto_exec : std_logic;
 begin
     csr_data0_dat_o <= debug_dat_i;
     csr_data0_vld_o <= 
@@ -58,8 +59,9 @@ begin
     dm_regs.dmstatus.impebreak <= '1'; -- ebreak at the end of progbuf
     dm_regs.dmstatus.allhavereset <= hart_reset;
     dm_regs.dmstatus.anyhavereset <= hart_reset;
-    dm_regs.dmstatus.allresumeack <= not hart_reset;
-    dm_regs.dmstatus.anyresumeack <= not hart_reset;
+--    dm_regs.dmstatus.allresumeack <= not hart_reset;
+--    dm_regs.dmstatus.anyresumeack <= not hart_reset;
+    dm_regs.dmstatus.anyresumeack <= dm_regs.dmstatus.allresumeack;
     dm_regs.dmstatus.allnonexistent <= '0';
     dm_regs.dmstatus.anynonexistent <= '0';
     dm_regs.dmstatus.allunavail <= hart_reset;
@@ -74,7 +76,7 @@ begin
     dm_regs.dmstatus.confstrptrvalid <= '0';
     dm_regs.dmstatus.version <= x"3";
 
-    dm_regs.abstractcs.progbufsize <= std_logic_vector(to_unsigned(1, dm_regs.abstractcs.progbufsize'length));
+    dm_regs.abstractcs.progbufsize <= std_logic_vector(to_unsigned(4, dm_regs.abstractcs.progbufsize'length));
     dm_regs.abstractcs.busy <= '1' when current_st /= st_idle else '0';
     dm_regs.abstractcs.relaxedpriv <= '0'; -- Unsupported 
     dm_regs.abstractcs.datacount <= std_logic_vector(to_unsigned(1, dm_regs.abstractcs.datacount'length));
@@ -92,13 +94,31 @@ begin
     dm_regs_command_control_alias.write <= dm_regs.command.control(16);
     dm_regs_command_control_alias.regno <= dm_regs.command.control(15 downto 0);
 
+    dm_regs.nextdm <= (others => '0');
+
     p_write: process(clk_i, arst_i)
     begin
         if arst_i = '1' then
-            
+            dm_regs.dmcontrol.haltreq <= '0';
+            dm_regs.dmcontrol.resumereq <= '0';
+            dm_regs.dmcontrol.ackhavereset <= '0';
+            dm_regs.dmcontrol.ackunavail <= '0';
+            dm_regs.dmcontrol.ndmreset <= '0';
+            dm_regs.dmcontrol.dmactive <= '0';
+            dm_regs.abstractcs.cmderr <= (others => '0');
+            dm_regs.command.cmdtype <= (others => '0');
+            dm_regs.command.control <= (others => '0');
+            dm_regs.progbuf0 <= (others => '0');
+            dm_regs.progbuf1 <= (others => '0');
+            dm_regs.progbuf2 <= (others => '0');
+            dm_regs.progbuf3 <= (others => '0');
+            dm_regs.abstractauto.autoexecprogbuf <= (others => '0');
+            dm_regs.abstractauto.autoexecdata <= (others => '0');
+            trg_auto_exec <= '0';
         elsif rising_edge(clk_i) then
             if debug_vld_i = '1' and debug_we_i = '1' then
                 case to_integer(unsigned(debug_adr_i)) is
+                    when C_DATA0 =>
                     when C_DMCONTROL =>
                         dm_regs.dmcontrol.haltreq <= debug_dat_i(31);
                         dm_regs.dmcontrol.resumereq <= debug_dat_i(30);
@@ -111,9 +131,39 @@ begin
                     when C_COMMAND =>
                         dm_regs.command.cmdtype <= debug_dat_i(31 downto 24);
                         dm_regs.command.control <= debug_dat_i(23 downto 0);
+                    when C_ABSTRACTAUTO =>
+                        dm_regs.abstractauto.autoexecprogbuf <= debug_dat_i(19 downto 16);
+                        dm_regs.abstractauto.autoexecdata <= debug_dat_i(0 downto 0);
                     when C_PROGBUF0 =>
                         dm_regs.progbuf0 <= debug_dat_i;
+                    when C_PROGBUF1 =>
+                        dm_regs.progbuf1 <= debug_dat_i;
+                    when C_PROGBUF2 =>
+                        dm_regs.progbuf2 <= debug_dat_i;
+                    when C_PROGBUF3 =>
+                        dm_regs.progbuf3 <= debug_dat_i;
                     when others =>
+                        --dm_regs.abstractcs.cmderr <= std_logic_vector(to_unsigned(2, dm_regs.abstractcs.cmderr'length));
+                end case;
+            end if;
+            if current_st = st_error then
+                dm_regs.abstractcs.cmderr <= std_logic_vector(to_unsigned(2, dm_regs.abstractcs.cmderr'length));
+            end if;
+            trg_auto_exec <= '0';
+            if debug_vld_i = '1' then
+                case to_integer(unsigned(debug_adr_i)) is
+                    when C_DATA0 =>
+                        trg_auto_exec <= dm_regs.abstractauto.autoexecdata(0);
+                    when C_PROGBUF0 =>
+                        trg_auto_exec <= dm_regs.abstractauto.autoexecprogbuf(0);
+                    when C_PROGBUF1 =>
+                        trg_auto_exec <= dm_regs.abstractauto.autoexecprogbuf(1);
+                    when C_PROGBUF2 =>
+                        trg_auto_exec <= dm_regs.abstractauto.autoexecprogbuf(2);
+                    when C_PROGBUF3 =>
+                        trg_auto_exec <= dm_regs.abstractauto.autoexecprogbuf(3);
+                    when others =>                
+                        trg_auto_exec <= '0';
                 end case;
             end if;
         end if;
@@ -165,14 +215,36 @@ begin
                     debug_dat_o(11) <= dm_regs.abstractcs.relaxedpriv;
                     debug_dat_o(10 downto 8) <= dm_regs.abstractcs.cmderr;
                     debug_dat_o(3 downto 0) <= dm_regs.abstractcs.datacount;
+                when C_ABSTRACTAUTO =>
+                    debug_dat_o(31 downto 20) <= (others => '0');
+                    debug_dat_o(19 downto 16) <= dm_regs.abstractauto.autoexecprogbuf;
+                    debug_dat_o(15 downto 12) <= (others => '0');
+                    debug_dat_o(11 downto 1) <= (others => '0');
+                    debug_dat_o(0 downto 0) <= dm_regs.abstractauto.autoexecdata;
                 when C_PROGBUF0 => 
                     debug_dat_o <= dm_regs.progbuf0;
+                when C_PROGBUF1 => 
+                    debug_dat_o <= dm_regs.progbuf1;
+                when C_PROGBUF2 => 
+                    debug_dat_o <= dm_regs.progbuf2;
+                when C_PROGBUF3 => 
+                    debug_dat_o <= dm_regs.progbuf3;
                 when others =>
-                    
+                    debug_dat_o <= (others => '0');
             
             end case;
         end if;
     end process p_read;
+
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            debug_vld_o <= '0';
+        elsif rising_edge(clk_i) then
+            debug_vld_o <= debug_vld_i and not debug_we_i;
+        end if;
+    end process;
+    debug_rdy_o <= '1';
     
     hart_reset <= 
         '1' when dm_regs.dmcontrol.dmactive = '1' and dm_regs.dmcontrol.ndmreset = '1' else
@@ -193,15 +265,17 @@ begin
         elsif rising_edge(clk_i) then
             case current_st is
                 when st_idle =>
-                    if debug_vld_i = '1' and debug_we_i = '1' and unsigned(debug_adr_i) = C_COMMAND then
+                    if (debug_vld_i = '1' and debug_we_i = '1' and unsigned(debug_adr_i) = C_COMMAND) or trg_auto_exec = '1' then
                         current_st <= st_check;
+                    elsif dm_regs.dmcontrol.resumereq = '1' and dm_regs.dmstatus.allresumeack = '0' then
+                        current_st <= st_dret;
                     end if;
                 when st_check =>
-                    if unsigned(dm_regs.command.cmdtype) = 0 and unsigned(dm_regs_command_control_alias.aarsize) = 2 then
+                    if unsigned(dm_regs.command.cmdtype) = 0 and unsigned(dm_regs_command_control_alias.aarsize) = 2 and unsigned(dm_regs_command_control_alias.regno(15 downto 12)) = 16#1# then
                         if dm_regs_command_control_alias.transfer = '1' then
                             current_st <= st_transfer;
                         elsif dm_regs_command_control_alias.postexec = '1' then
-                            current_st <= st_progbuf;
+                            current_st <= st_progbuf0;
                         else
                             current_st <= st_error;
                         end if;
@@ -211,12 +285,24 @@ begin
                 when st_transfer =>
                     if instr_cmd_vld_i = '1' then
                         if dm_regs_command_control_alias.postexec = '1' then
-                            current_st <= st_progbuf;
+                            current_st <= st_progbuf0;
                         else
                             current_st <= st_ebreak;
                         end if;
                     end if;
-                when st_progbuf =>
+                when st_progbuf0 =>
+                    if instr_cmd_vld_i = '1' then
+                        current_st <= st_progbuf1;
+                    end if;
+                when st_progbuf1 =>
+                    if instr_cmd_vld_i = '1' then
+                        current_st <= st_progbuf2;
+                    end if;
+                when st_progbuf2 =>
+                    if instr_cmd_vld_i = '1' then
+                        current_st <= st_progbuf3;
+                    end if;
+                when st_progbuf3 =>
                     if instr_cmd_vld_i = '1' then
                         current_st <= st_ebreak;
                     end if;
@@ -226,6 +312,10 @@ begin
                     end if;
                 when st_error =>
                     current_st <= st_idle;
+                when st_dret =>
+                    if instr_cmd_vld_i = '1' then
+                        current_st <= st_idle;
+                    end if;
                 when others =>
                     current_st <= st_idle;
             end case;
@@ -250,9 +340,18 @@ begin
                         instr_rsp_dat_o(14 downto 12) <= RV32I_FN3_CSRRW;
                         instr_rsp_dat_o(11 downto 7) <= (others => '0');
                     end if;
-                when st_progbuf =>
+                when st_progbuf0 =>
                     instr_rsp_vld_o <= instr_cmd_vld_i;
                     instr_rsp_dat_o <= dm_regs.progbuf0;
+                when st_progbuf1 =>
+                    instr_rsp_vld_o <= instr_cmd_vld_i;
+                    instr_rsp_dat_o <= dm_regs.progbuf1;
+                when st_progbuf2 =>
+                    instr_rsp_vld_o <= instr_cmd_vld_i;
+                    instr_rsp_dat_o <= dm_regs.progbuf2;
+                when st_progbuf3 =>
+                    instr_rsp_vld_o <= instr_cmd_vld_i;
+                    instr_rsp_dat_o <= dm_regs.progbuf3;
                 when st_ebreak =>
                     instr_rsp_vld_o <= instr_cmd_vld_i;
                     instr_rsp_dat_o(6 downto 0) <= RV32I_OP_SYS;
@@ -260,12 +359,28 @@ begin
                     instr_rsp_dat_o(14 downto 12) <= (others => '0');
                     instr_rsp_dat_o(19 downto 15) <= (others => '0');
                     instr_rsp_dat_o(31 downto 20) <= x"001";
+                when st_dret =>
+                    instr_rsp_vld_o <= instr_cmd_vld_i;
+                    instr_rsp_dat_o <= x"7b200073"; -- DRET
                 when others =>
             end case;
         end if;
     end process;
 
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            dm_regs.dmstatus.allresumeack <= '0';
+        elsif rising_edge(clk_i) then
+            if current_st = st_dret then
+                dm_regs.dmstatus.allresumeack <= '1';
+            elsif dm_regs.dmcontrol.resumereq = '0' then
+                dm_regs.dmstatus.allresumeack <= '0';
+            end if;
+        end if;
+    end process;
+
     instr_cmd_rdy_o <= 
-        '1' when current_st = st_transfer or current_st = st_progbuf or current_st = st_ebreak else
+        '1' when current_st = st_transfer or current_st = st_progbuf0 or current_st = st_progbuf1 or current_st = st_progbuf2 or current_st = st_progbuf3 or current_st = st_ebreak or current_st = st_dret else
         '0';
 end architecture rtl;

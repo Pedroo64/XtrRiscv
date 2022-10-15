@@ -43,7 +43,8 @@ entity execute is
         csr_ready_i : in std_logic;
         exception_valid_i : in std_logic;
         trap_vector_i : in std_logic_vector(31 downto 0);
-        exception_pc_i : in std_logic_vector(31 downto 0);
+        mepc_i : in std_logic_vector(31 downto 0);
+        dpc_i : in std_logic_vector(31 downto 0);
         exception_pc_o : out std_logic_vector(31 downto 0);
         exception_taken_o : out std_logic;
         exception_exit_o : out std_logic;
@@ -254,7 +255,7 @@ begin
                                     when RV32I_SYS_MRET =>
                                         mret_o <= '1';
                                         load_pc <= '1';
-                                        next_pc <= exception_pc_i;
+                                        next_pc <= mepc_i;
                                         exception_exit_o <= '1';
                                     when RV32I_SYS_ECALL =>
                                         ecall <= '1';
@@ -267,7 +268,7 @@ begin
                                     when RV32I_SYS_DRET =>
                                         dret_o <= '1';
                                         load_pc <= '1';
-                                        next_pc <= exception_pc_i;
+                                        next_pc <= dpc_i;
                                         exception_exit_o <= '1';
                                     when others =>
                                 end case;

@@ -119,7 +119,7 @@ architecture rtl of cpu is
 
     signal csr_data0_cmd_dat, csr_data0_rsp_dat : std_logic_vector(31 downto 0);
     signal csr_data0_cmd_vld : std_logic;
-    signal dcsr : std_logic_vector(31 downto 0);
+    signal dcsr, csr_dpc : std_logic_vector(31 downto 0);
 
     signal debug_exception_valid, interrupt_exeception_valid : std_logic;
     signal debug_exception_taken, interrupt_exeception_taken : std_logic;
@@ -221,7 +221,9 @@ begin
             csr_ready_i => csr_rdy,
             exception_valid_i => exception_valid,
             trap_vector_i => mtvec,
-            exception_pc_i => csr_exception_pc,
+            mepc_i => csr_exception_pc,
+            dpc_i => csr_dpc,
+--            exception_pc_i => csr_exception_pc,
             exception_pc_o => ex_exception_pc,
             exception_taken_o => exception_taken,
             exception_exit_o => exception_exit,
@@ -275,6 +277,7 @@ begin
             mie_o => mie,
             mtvec_o => mtvec,
             mepc_o => csr_exception_pc,
+            dpc_o => csr_dpc,
             cause_debug_irq_i => debug_cause_debug,
             dm_halt_i => debug_halt,
             dm_data0_dat_i => csr_data0_cmd_dat,

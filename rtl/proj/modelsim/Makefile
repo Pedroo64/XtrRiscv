@@ -11,6 +11,8 @@ add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open proj.mpf; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
+		project addfile $(SRCS_PATH)/cpu/debug/jtag_dtm/dtm_pkg.vhd; \
+		project addfile $(SRCS_PATH)/cpu/debug/jtag_dtm/jtag_dtm.vhd; \
 		project addfile $(SRCS_PATH)/cpu/debug/debug_module_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/debug/debug_module.vhd; \
 		project addfile $(SRCS_PATH)/cpu/debug/debug_extension.vhd; \
@@ -33,6 +35,7 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/testbenches/src/sim_stdout.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/src/sim_file.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/src/sim_soc.vhd; \
+		project addfile $(SRCS_PATH)/testbenches/src/sim_jtag.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/tb_xtr_soc.vhd; \
 		exit -f" 
 

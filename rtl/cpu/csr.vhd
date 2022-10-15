@@ -31,6 +31,7 @@ entity csr is
         mie_o : out std_logic_vector(31 downto 0);
         mtvec_o : out std_logic_vector(31 downto 0);
         mepc_o : out std_logic_vector(31 downto 0);
+        dpc_o : out std_logic_vector(31 downto 0);
         cause_debug_irq_i : in std_logic;
         dm_halt_i : in std_logic;
         dm_data0_dat_i : in std_logic_vector(31 downto 0);
@@ -63,12 +64,12 @@ architecture rtl of csr is
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
     signal mtval : std_logic_vector(31 downto 0);
     -- debug csr
-    signal dcsr : std_logic_vector(31 downto 0);
-    signal dcsr_cause : std_logic_vector(2 downto 0);
-    signal dcsr_version : std_logic_vector(3 downto 0);
-    signal dcsr_ebreakm, dcsr_step : std_logic;
-    signal dpc : std_logic_vector(31 downto 0);
-    signal dm_data0 : std_logic_vector(31 downto 0);
+    signal dcsr : std_logic_vector(31 downto 0) := (others => '0');
+    signal dcsr_cause : std_logic_vector(2 downto 0) := (others => '0');
+    signal dcsr_version : std_logic_vector(3 downto 0) := (others => '0');
+    signal dcsr_ebreakm, dcsr_step : std_logic := '0';
+    signal dpc : std_logic_vector(31 downto 0) := (others => '0');
+    signal dm_data0 : std_logic_vector(31 downto 0) := (others => '0');
 begin
     
     process (clk_i, arst_i)
@@ -228,4 +229,7 @@ begin
     dcsr_o(5 downto 3) <= (others => '0');
     dcsr_o(2) <= dcsr_step;
     dcsr_o(1 downto 0) <= (others => '0');
+
+    dpc_o <= dpc;
+    dm_data0_dat_o <= dm_data0;
 end architecture rtl;
