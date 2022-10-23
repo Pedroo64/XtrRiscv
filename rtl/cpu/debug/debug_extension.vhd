@@ -61,6 +61,7 @@ begin
 
     cause_debug_o <= 
         '1' when current_st = st_halt and exception_taken_i = '1' else
+        '1' when current_st = st_idle and dcsr_i(C_DCSR_EBREAKM) = '1' else
         '0';
 
 end architecture rtl;
