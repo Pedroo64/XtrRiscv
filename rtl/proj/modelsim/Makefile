@@ -9,6 +9,8 @@ create_project:
 
 add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open proj.mpf; \
+		project addfile $(SRCS_PATH)/cpu/alu_pkg.vhd; \
+		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \

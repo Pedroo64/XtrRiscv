@@ -10,9 +10,9 @@ entity tb_xtr_soc is
 end entity tb_xtr_soc;
 
 architecture rtl of tb_xtr_soc is
-    constant C_CLK_PER   : time   := 20 ns;
-    signal arst          : std_logic;
-    signal clk           : std_logic;
+    constant C_CLK_PER : time   := 20 ns;
+    signal arst : std_logic;
+    signal clk : std_logic;
     signal t_interrupt, interrupt : std_logic := '0';
 begin
 
@@ -51,5 +51,5 @@ begin
         generic map (
             C_FREQ_IN => 50e6, C_RAM_SIZE => 16*1024*1024, C_INIT_FILE => C_INIT_FILE, C_OUTPUT_FILE => C_OUTPUT_FILE)
         port map (
-            arst_i => arst, clk_i => clk);
+            arst_i => arst, clk_i => clk, external_irq_i => interrupt);
 end architecture rtl;
