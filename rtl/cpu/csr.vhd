@@ -55,7 +55,7 @@ architecture rtl of csr is
     signal mtvec : std_logic_vector(31 downto 0) := (others => '0');
     signal mepc : std_logic_vector(31 downto 0) := (others => '0');
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
-    signal mtval : std_logic_vector(31 downto 0);
+    signal mtval : std_logic_vector(31 downto 0) := (others => '0');
 begin
     
     process (clk_i, arst_i)

@@ -49,7 +49,7 @@ begin
 
     u_xtr_soc : entity work.sim_soc
         generic map (
-            C_FREQ_IN => 50e6, C_RAM_SIZE => 16*1024*1024, C_INIT_FILE => C_INIT_FILE, C_OUTPUT_FILE => C_OUTPUT_FILE)
+            C_FREQ_IN => 50e6, C_RAM_SIZE => 2*1024*1024, C_INIT_FILE => C_INIT_FILE, C_OUTPUT_FILE => C_OUTPUT_FILE)
         port map (
             arst_i => arst, clk_i => clk, external_irq_i => interrupt);
 end architecture rtl;
