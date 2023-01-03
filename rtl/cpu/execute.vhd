@@ -63,7 +63,7 @@ architecture rtl of execute is
     signal load_pc, branch, latch_branch : std_logic;
     signal ecall, ebreak, mret : std_logic;
     signal sync_exception : std_logic;
-    signal alu1_op, alu2_op : std_logic_vector(2 downto 0);
+    signal alu1_op, alu2_op : alu_op_t;
     signal alu1_a, alu1_b, alu1_y : std_logic_vector(31 downto 0);
     signal alu2_a, alu2_b, alu2_y : std_logic_vector(31 downto 0);
     signal alu1_eq, alu1_ge, alu1_lt, alu1_geu, alu1_ltu : std_logic;
@@ -133,9 +133,9 @@ begin
                     when RV32I_FN3_SL =>
                         alu1_op <= ALU_OP_SLL;
                     when RV32I_FN3_SLT =>
-                        alu1_op <= ALU_OP_COMPARE;
+                        alu1_op <= ALU_OP_SLT;
                     when RV32I_FN3_SLTU =>
-                        alu1_op <= ALU_OP_COMPARE;
+                        alu1_op <= ALU_OP_SLTU;
                     when RV32I_FN3_XOR =>
                         alu1_op <= ALU_OP_XOR;
                     when RV32I_FN3_SR =>
@@ -149,41 +149,18 @@ begin
                     when RV32I_FN3_AND =>
                         alu1_op <= ALU_OP_AND;
                     when others =>
-                        alu1_op <= (others => '-');
+                        alu1_op <= ALU_OP_NOP;
                 end case;
             when RV32I_OP_BRANCH =>
-                alu1_op <= ALU_OP_COMPARE;
+                alu1_op <= ALU_OP_NOP;
             when RV32I_OP_SYS =>
                 alu1_op <= ALU_OP_XOR;
             when others =>
-                alu1_op <= (others => '-');
+                alu1_op <= ALU_OP_NOP;
         end case;
     end process;
 
-    process (opcode_i, funct3_i, alu1_lt, alu1_ltu, alu1_y)
-    begin
-        case opcode_i is
-            when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
-                if funct3_i = RV32I_FN3_SLT then
-                    if alu1_lt = '1' then
-                        rd_dat <= std_logic_vector(to_unsigned(1, rd_dat'length));
-                    else
-                        rd_dat <= std_logic_vector(to_unsigned(0, rd_dat'length));
-                    end if;
-                elsif funct3_i = RV32I_FN3_SLTU then
-                    if alu1_ltu = '1' then
-                        rd_dat <= std_logic_vector(to_unsigned(1, rd_dat'length));
-                    else
-                        rd_dat <= std_logic_vector(to_unsigned(0, rd_dat'length));
-                    end if;
-                else
-                    rd_dat <= alu1_y;
-                end if;
-            when others =>
-                rd_dat <= alu1_y;
-        end case;
-    end process;
-
+    rd_dat <= alu1_y;
 
     u_alu_2 : entity work.alu
         port map (
