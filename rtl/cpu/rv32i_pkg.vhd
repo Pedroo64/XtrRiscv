@@ -4,6 +4,21 @@ use IEEE.numeric_std.all;
 
 package rv32i_pkg is
     
+    type opcode_t is record
+        lui : std_logic;
+        auipc : std_logic;
+        jal : std_logic;
+        jalr : std_logic;
+        branch : std_logic;
+        load : std_logic;
+        store : std_logic;
+        reg_imm : std_logic;
+        reg_reg : std_logic;
+        fence : std_logic;
+        sys : std_logic;
+        illegal : std_logic;
+    end record opcode_t;
+
     -- RV32I Base Instruction Set Opcodes
 constant RV32I_OP_LUI       :   std_logic_vector(6 downto 0) := "0110111";
 constant RV32I_OP_AUIPC     :   std_logic_vector(6 downto 0) := "0010111";

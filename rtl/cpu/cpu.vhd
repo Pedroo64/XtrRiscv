@@ -2,6 +2,8 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
+use work.rv32i_pkg.all;
+
 entity cpu is
     port (
         arst_i : in std_logic;
@@ -39,7 +41,7 @@ architecture rtl of cpu is
     -- id -> ex
     signal id_ex_vld, id_ex_rd_we : std_logic;
     signal id_ex_pc : std_logic_vector(31 downto 0);
-    signal id_ex_opcode : std_logic_vector(6 downto 0);
+    signal id_ex_opcode : opcode_t;
     signal id_ex_immediate : std_logic_vector(31 downto 0);
     signal id_ex_funct3 : std_logic_vector(2 downto 0);
     signal id_ex_funct7 : std_logic_vector(6 downto 0);

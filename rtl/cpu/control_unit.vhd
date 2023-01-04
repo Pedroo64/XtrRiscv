@@ -10,7 +10,7 @@ entity control_unit is
         clk_i : in std_logic;
         srst_i : in std_logic;
         decode_valid_i : in std_logic;
-        decode_opcode_i : in std_logic_vector(6 downto 0);
+        decode_opcode_i : in opcode_t;
         decode_rs1_adr_i : in std_logic_vector(4 downto 0);
         decode_rs2_adr_i : in std_logic_vector(4 downto 0);
         decode_rd_adr_i : in std_logic_vector(4 downto 0);
@@ -72,31 +72,12 @@ begin
         '1';
 
     op_use_rs1 <= 
-        '1' when decode_opcode_i = RV32I_OP_REG_REG else
-        '1' when decode_opcode_i = RV32I_OP_LOAD else
-        '1' when decode_opcode_i = RV32I_OP_REG_IMM else
-        '1' when decode_opcode_i = RV32I_OP_SYS and decode_funct3_i(2) = '0' else
-        '1' when decode_opcode_i = RV32I_OP_JALR else
-        '1' when decode_opcode_i = RV32I_OP_STORE else
-        '1' when decode_opcode_i = RV32I_OP_BRANCH else
+        '1' when (decode_opcode_i.reg_reg or decode_opcode_i.load or decode_opcode_i.reg_imm or decode_opcode_i.jalr or decode_opcode_i.store or decode_opcode_i.branch) = '1' else
+        '1' when decode_opcode_i.sys = '1' and decode_funct3_i(2) = '0' else
         '0';
 
-    op_use_rs2 <= 
-        '1' when decode_opcode_i = RV32I_OP_REG_REG else
-        '1' when decode_opcode_i = RV32I_OP_STORE else
-        '1' when decode_opcode_i = RV32I_OP_BRANCH else
+    op_use_rs2 <=
+        '1' when (decode_opcode_i.reg_reg or decode_opcode_i.store or decode_opcode_i.branch) = '1' else
         '0';
-
-
---        RV32I_OP_REG_REG -- R
---        RV32I_OP_LOAD -- I
---        RV32I_OP_REG_IMM -- I
---        RV32I_OP_SYS -- I
---        RV32I_OP_JALR -- I
---        RV32I_OP_STORE -- S
---        RV32I_OP_BRANCH -- B
---        RV32I_OP_LUI -- U
---        RV32I_OP_AUIPC -- U
---        RV32I_OP_JAL -- J
 
 end architecture rtl;

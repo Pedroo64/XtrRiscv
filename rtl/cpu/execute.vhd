@@ -14,7 +14,7 @@ entity execute is
         enable_i : in std_logic;
         valid_i : in std_logic;
         pc_i : in std_logic_vector(31 downto 0);
-        opcode_i : in std_logic_vector(6 downto 0);
+        opcode_i : in opcode_t;
         immediate_i : in std_logic_vector(31 downto 0);
         rs1_adr_i : in std_logic_vector(4 downto 0);
         rs1_dat_i : in std_logic_vector(31 downto 0);
@@ -85,79 +85,57 @@ begin
         );
     
     alu1_a <= 
-        pc_i when opcode_i = RV32I_OP_AUIPC else
-        pc_i when opcode_i = RV32I_OP_JAL else
-        pc_i when opcode_i = RV32I_OP_JALR else
-        rs1_dat_i when opcode_i = RV32I_OP_REG_IMM else
-        rs1_dat_i when opcode_i = RV32I_OP_REG_REG else
-        rs1_dat_i when opcode_i = RV32I_OP_LOAD else
-        rs1_dat_i when opcode_i = RV32I_OP_STORE else
-        rs1_dat_i when opcode_i = RV32I_OP_BRANCH else
-        rs1_dat_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRW else
-        rs1_dat_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRS else
-        rs1_dat_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRC else
-        (5 to 31 => '0') & rs1_adr_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRWI else
-        (5 to 31 => '0') & rs1_adr_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRSI else
-        (5 to 31 => '0') & rs1_adr_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRCI else
+        pc_i when (opcode_i.auipc or opcode_i.jal or opcode_i.jalr) = '1' else
+        rs1_dat_i when (opcode_i.reg_imm or opcode_i.reg_reg or opcode_i.load or opcode_i.store or opcode_i.branch) = '1' else
+        rs1_dat_i when opcode_i.sys = '1' and funct3_i(2) = '0' else
+        (5 to 31 => '0') & rs1_adr_i when opcode_i.sys = '1' and funct3_i(2) = '1' else
         (others => '0');
 
     alu1_b <= 
-        immediate_i when opcode_i = RV32I_OP_LUI else
-        immediate_i when opcode_i = RV32I_OP_AUIPC else
-        immediate_i when opcode_i = RV32I_OP_REG_IMM else
-        immediate_i when opcode_i = RV32I_OP_LOAD else
-        immediate_i when opcode_i = RV32I_OP_STORE else
-        rs2_dat_i when opcode_i = RV32I_OP_REG_REG else
-        rs2_dat_i when opcode_i = RV32I_OP_BRANCH else
-        (others => '0') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRW else
-        (others => '0') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRS else
-        (others => '0') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRC else
-        (others => '0') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRWI else
-        (others => '0') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRSI else
-        (others => '1') when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_CSRRCI else
+        immediate_i when (opcode_i.lui or opcode_i.auipc or opcode_i.reg_imm or opcode_i.load or opcode_i.store) = '1' else
+        rs2_dat_i when (opcode_i.reg_reg or opcode_i.branch) = '1' else
+        (others => '0') when opcode_i.sys = '1' and (funct3_i = RV32I_FN3_CSRRW or funct3_i = RV32I_FN3_CSRRS or funct3_i = RV32I_FN3_CSRRWI or funct3_i = RV32I_FN3_CSRRSI) else
+        (others => '1') when opcode_i.sys = '1' and (funct3_i = RV32I_FN3_CSRRC or funct3_i = RV32I_FN3_CSRRCI) else
         std_logic_vector(to_unsigned(4, alu1_b'length));
 
     process (opcode_i, funct3_i, funct7_i(5))
     begin
-        case opcode_i is
-            when RV32I_OP_LUI | RV32I_OP_AUIPC | RV32I_OP_JAL | RV32I_OP_JALR | RV32I_OP_LOAD | RV32I_OP_STORE =>
-                alu1_op <= ALU_OP_ADD;
-            when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
-                case funct3_i is
-                    when RV32I_FN3_ADD =>
-                        if funct7_i(5) = '1' and opcode_i = RV32I_OP_REG_REG then
-                            alu1_op <= ALU_OP_SUB;
-                        else
-                            alu1_op <= ALU_OP_ADD;
-                        end if;
-                    when RV32I_FN3_SL =>
-                        alu1_op <= ALU_OP_SLL;
-                    when RV32I_FN3_SLT =>
-                        alu1_op <= ALU_OP_SLT;
-                    when RV32I_FN3_SLTU =>
-                        alu1_op <= ALU_OP_SLTU;
-                    when RV32I_FN3_XOR =>
-                        alu1_op <= ALU_OP_XOR;
-                    when RV32I_FN3_SR =>
-                        if funct7_i(5) = '1' then
-                            alu1_op <= ALU_OP_SRA;
-                        else
-                            alu1_op <= ALU_OP_SRL;
-                        end if;
-                    when RV32I_FN3_OR =>
-                        alu1_op <= ALU_OP_OR;
-                    when RV32I_FN3_AND =>
-                        alu1_op <= ALU_OP_AND;
-                    when others =>
-                        alu1_op <= ALU_OP_NOP;
-                end case;
-            when RV32I_OP_BRANCH =>
-                alu1_op <= ALU_OP_NOP;
-            when RV32I_OP_SYS =>
-                alu1_op <= ALU_OP_XOR;
-            when others =>
-                alu1_op <= ALU_OP_NOP;
-        end case;
+        if (opcode_i.lui or opcode_i.auipc or opcode_i.jal or opcode_i.jalr or opcode_i.load or opcode_i.store) = '1' then
+            alu1_op <= ALU_OP_ADD;
+        elsif (opcode_i.reg_imm or opcode_i.reg_reg) = '1' then
+            case funct3_i is
+                when RV32I_FN3_ADD =>
+                    if funct7_i(5) = '1' and opcode_i.reg_reg = '1' then
+                        alu1_op <= ALU_OP_SUB;
+                    else
+                        alu1_op <= ALU_OP_ADD;
+                    end if;
+                when RV32I_FN3_SL =>
+                    alu1_op <= ALU_OP_SLL;
+                when RV32I_FN3_SLT =>
+                    alu1_op <= ALU_OP_SLT;
+                when RV32I_FN3_SLTU =>
+                    alu1_op <= ALU_OP_SLTU;
+                when RV32I_FN3_XOR =>
+                    alu1_op <= ALU_OP_XOR;
+                when RV32I_FN3_SR =>
+                    if funct7_i(5) = '1' then
+                        alu1_op <= ALU_OP_SRA;
+                    else
+                        alu1_op <= ALU_OP_SRL;
+                    end if;
+                when RV32I_FN3_OR =>
+                    alu1_op <= ALU_OP_OR;
+                when RV32I_FN3_AND =>
+                    alu1_op <= ALU_OP_AND;
+                when others =>
+                    alu1_op <= ALU_OP_NOP;
+            end case;
+        elsif opcode_i.sys = '1' then
+            alu1_op <= ALU_OP_XOR;
+        else
+            alu1_op <= ALU_OP_NOP;
+        end if;
     end process;
 
     rd_dat <= alu1_y;
@@ -176,7 +154,7 @@ begin
         );
     
     alu2_a <= 
-        rs1_dat_i when opcode_i = RV32I_OP_JALR else
+        rs1_dat_i when opcode_i.jalr = '1' else
         pc_i;
 
     alu2_b <= immediate_i;
@@ -184,8 +162,8 @@ begin
     alu2_op <= ALU_OP_ADD;
 
     next_pc <= 
-        exception_pc_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "10" else
-        trap_vector_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_TRAP and immediate_i(1) = '0' else
+        exception_pc_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "10" else
+        trap_vector_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1) = '0' else
         trap_vector_i when exception_valid_i = '1' else
         alu2_y;
     
@@ -193,51 +171,45 @@ begin
 
     process (opcode_i, funct3_i, alu1_eq, alu1_lt, alu1_ge, alu1_ltu, alu1_geu)
     begin
-        case opcode_i is
-            when RV32I_OP_JAL | RV32I_OP_JALR =>
-                branch <= '1';
-            when RV32I_OP_BRANCH =>
-                case funct3_i is
-                    when RV32I_FN3_BEQ =>
-                        branch <= alu1_eq;
-                    when RV32I_FN3_BNE =>
-                        branch <= not alu1_eq;
-                    when RV32I_FN3_BLT =>
-                        branch <= alu1_lt;
-                    when RV32I_FN3_BGE =>
-                        branch <= alu1_ge;
-                    when RV32I_FN3_BLTU =>
-                        branch <= alu1_ltu;
-                    when RV32I_FN3_BGEU =>
-                        branch <= alu1_geu;
-                    when others =>
-                        branch <= '0';
-                end case;
-            when others =>
-                branch <= '0';
-        end case;
+        if (opcode_i.jal or opcode_i.jalr) = '1' then
+            branch <= '1';
+        elsif opcode_i.branch = '1' then
+            case funct3_i is
+                when RV32I_FN3_BEQ =>
+                    branch <= alu1_eq;
+                when RV32I_FN3_BNE =>
+                    branch <= not alu1_eq;
+                when RV32I_FN3_BLT =>
+                    branch <= alu1_lt;
+                when RV32I_FN3_BGE =>
+                    branch <= alu1_ge;
+                when RV32I_FN3_BLTU =>
+                    branch <= alu1_ltu;
+                when RV32I_FN3_BGEU =>
+                    branch <= alu1_geu;
+                when others =>
+                    branch <= '0';
+            end case;
+        else
+            branch <= '0';
+        end if;
     end process;
 
-    ecall <= enable_i and valid_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "00" else '0';
-    ebreak <= enable_i and valid_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "01" else '0';
-    mret <= enable_i and valid_i when opcode_i = RV32I_OP_SYS and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "10" else '0';
+
+    ecall <= enable_i and valid_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "00" else '0';
+    ebreak <= enable_i and valid_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "01" else '0';
+    mret <= enable_i and valid_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "10" else '0';
     
     writeback_valid <= 
-        valid_i and enable_i when opcode_i = RV32I_OP_LUI else 
-        valid_i and enable_i when opcode_i = RV32I_OP_AUIPC else 
-        valid_i and enable_i when opcode_i = RV32I_OP_JAL else
-        valid_i and enable_i when opcode_i = RV32I_OP_JALR else
-        valid_i and enable_i when opcode_i = RV32I_OP_REG_IMM else
-        valid_i and enable_i when opcode_i = RV32I_OP_REG_REG else
+        valid_i and enable_i when (opcode_i.lui or opcode_i.auipc or opcode_i.jal or opcode_i.jalr or opcode_i.reg_imm or opcode_i.reg_reg) = '1' else 
         '0';
 
     memory_valid <= 
-        valid_i and enable_i when opcode_i = RV32I_OP_LOAD else
-        valid_i and enable_i when opcode_i = RV32I_OP_STORE else
+        valid_i and enable_i when (opcode_i.load or opcode_i.store) = '1' else
         '0';
 
     csr_valid <= 
-        valid_i and enable_i when opcode_i = RV32I_OP_SYS and unsigned(funct3_i) /= 0 else
+        valid_i and enable_i when opcode_i.sys = '1' and unsigned(funct3_i) /= 0 else
         '0';
 
     process (clk_i, arst_i)
@@ -281,11 +253,7 @@ begin
                 memory_address_o <= alu1_y;
                 memory_data_o <= rs2_dat_i;
                 memory_size_o <= funct3_i(2 downto 0);
-                if opcode_i = RV32I_OP_STORE then
-                    memory_we_o <= '1';
-                else
-                    memory_we_o <= '0';
-                end if;
+                memory_we_o <= opcode_i.store;
             else
                 sync_exception <= '0';
                 ecall_o <= '0';
