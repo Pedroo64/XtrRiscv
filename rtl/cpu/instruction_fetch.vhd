@@ -23,91 +23,96 @@ entity instruction_fecth is
 end entity instruction_fecth;
 
 architecture rtl of instruction_fecth is
+    type fetch_st_t is (st_idle, st_halt, st_fetch);
+    signal current_st, next_st : fetch_st_t;
     signal pc : unsigned(31 downto 0);
-    signal instr_dat_hold : std_logic_vector(31 downto 0);
     signal cmd_vld : std_logic;
-    signal d_decode_rdy : std_logic;
 begin
     
+    process (current_st, en_i, decode_rdy_i)
+    begin
+        case current_st is
+            when st_idle =>
+                if en_i = '1' then
+                    if decode_rdy_i = '1' then
+                        next_st <= st_fetch;
+                    else
+                        next_st <= st_halt;
+                    end if;
+                else
+                    next_st <= st_idle;
+                end if;
+            when st_halt =>
+                if en_i = '0' then
+                    next_st <= st_idle;
+                elsif decode_rdy_i = '1' then
+                    next_st <= st_fetch;
+                else
+                    next_st <= st_halt;
+                end if;
+            when st_fetch =>
+                if en_i = '0' then
+                    next_st <= st_idle;
+                elsif decode_rdy_i = '0' then
+                    next_st <= st_halt;
+                else
+                    next_st <= st_fetch;
+                end if;
+            when others =>
+                next_st <= st_idle;
+        end case;
+    end process;
+
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            current_st <= st_idle;
+        elsif rising_edge(clk_i) then
+            if srst_i = '1' then
+                current_st <= st_idle;
+            else
+                current_st <= next_st;
+            end if;
+        end if;
+    end process;
+
+    cmd_vld <= 
+        '1' when current_st = st_fetch and decode_rdy_i = '1' else
+        '1' when current_st = st_halt and decode_rdy_i = '1' else
+        '0';
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
             pc <= (others => '0');
-            cmd_vld <= '0';
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
                 pc <= (others => '0');
-                cmd_vld <= '0';
             else
-                cmd_vld <= '0';
-                if en_i = '1' then
-                    cmd_vld <= '1';
-                    if load_pc_i = '1' then
-                        pc <= unsigned(pc_i);
-                    elsif cmd_vld = '1' and cmd_rdy_i = '1' and decode_rdy_i = '1' then
-                        pc <= pc + 4;
-                    end if;
+                if load_pc_i = '1' then
+                    pc <= unsigned(pc_i);
+                elsif cmd_vld = '1' and cmd_rdy_i = '1' then
+                    pc <= pc + 4;
                 end if;
---                if true then
---                    if load_pc_i = '1' then
---                        pc <= unsigned(pc_i);
---                    elsif en_i = '1' and cmd_rdy_i = '1' and decode_rdy_i = '1' then
---                        pc <= pc + 4;
---                    end if;
---                end if;
             end if;
         end if;
     end process;
     
-    cmd_adr_o <= std_logic_vector(pc);
-    cmd_vld_o <= 
-        '1' when decode_rdy_i = '1' and cmd_vld = '1' else
-        '0';
---    cmd_vld_o <= 
---        '1' when en_i = '1' and decode_rdy_i = '1' else 
---        '0';
-    
-    instr_o <= 
-        instr_dat_hold when decode_rdy_i = '1' and d_decode_rdy = '0' else
-        rsp_dat_i;
-    instr_vld_o <= 
-        '1' when decode_rdy_i = '1' and d_decode_rdy = '0' else
-        rsp_vld_i;
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if decode_rdy_i = '1' then
+            if cmd_vld = '1' then
                 pc_o <= std_logic_vector(pc);
             end if;
         end if;
     end process;
 
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if rsp_vld_i = '1' then
-                instr_dat_hold <= rsp_dat_i;
-            end if;
-        end if;
-    end process;
-
---    process (clk_i, arst_i)
---    begin
---        if arst_i = '1' then
---            instr_vld_o <= '0';
---        elsif rising_edge(clk_i) then
---            if decode_rdy_i = '1' then
---                instr_vld_o <= rsp_vld_i;
---                instr_o <= rsp_dat_i;
---                pc_o <= std_logic_vector(pc);
---            end if;
---        end if;
---    end process;
+    cmd_adr_o <= std_logic_vector(pc);
+    cmd_vld_o <= cmd_vld;
     
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            d_decode_rdy <= decode_rdy_i;
-        end if;
-    end process;
+    instr_o <= rsp_dat_i;
+    instr_vld_o <=
+        '1' when current_st = st_halt and decode_rdy_i = '1' else 
+        rsp_vld_i;
+
 end architecture rtl;

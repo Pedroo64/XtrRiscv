@@ -19,35 +19,28 @@ end entity regfile;
 
 architecture rtl of regfile is
     type regfile_t is array (natural range <>) of std_logic_vector(31 downto 0);
-    signal reg : regfile_t(0 to 31);
-        -- XST attributes
-        attribute ram_style: string;
-        attribute ram_style of reg: signal is "distributed";
-    
-        -- Lattice Diamond attributes
-        attribute syn_ramstyle: string;
-        attribute syn_ramstyle of reg: signal is "distributed";
-    
-        -- Altera Quartus attributes
-        attribute ramstyle: string;
-        attribute ramstyle of reg: signal is "distributed";
+    signal reg : regfile_t(0 to 31) := (others => (others => '0'));
+    -- XST attributes
+    attribute ram_style: string;
+    attribute ram_style of reg: signal is "distributed";
+    -- Lattice Diamond attributes
+    attribute syn_ramstyle: string;
+    attribute syn_ramstyle of reg: signal is "distributed";
+    -- Altera Quartus attributes
+    attribute ramstyle: string;
+    attribute ramstyle of reg: signal is "distributed";
 begin
     
-    process (clk_i, arst_i)
+    process (clk_i)
     begin
-        if arst_i = '1' then
-            reg <= (others => (others => '0'));
-        elsif rising_edge(clk_i) then
-            if srst_i = '1' then
-                reg <= (others => (others => '0'));
-            else
-                if rd_we_i = '1' and unsigned(rd_adr_i) /= 0 then
-                    reg(to_integer(unsigned(rd_adr_i))) <= rd_dat_i;
-                end if;
-                rs1_dat_o <= reg(to_integer(unsigned(rs1_adr_i)));
-                rs2_dat_o <= reg(to_integer(unsigned(rs2_adr_i)));
+        if rising_edge(clk_i) then
+            if rd_we_i = '1' and unsigned(rd_adr_i) /= 0 then
+                reg(to_integer(unsigned(rd_adr_i))) <= rd_dat_i;
             end if;
+            rs1_dat_o <= reg(to_integer(unsigned(rs1_adr_i)));
+            rs2_dat_o <= reg(to_integer(unsigned(rs2_adr_i)));
         end if;
     end process;
+
     
 end architecture rtl;
