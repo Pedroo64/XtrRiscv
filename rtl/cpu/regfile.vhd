@@ -20,21 +20,13 @@ end entity regfile;
 architecture rtl of regfile is
     type regfile_t is array (natural range <>) of std_logic_vector(31 downto 0);
     signal reg : regfile_t(0 to 31) := (others => (others => '0'));
-    -- XST attributes
-    attribute ram_style: string;
-    attribute ram_style of reg: signal is "distributed";
-    -- Lattice Diamond attributes
-    attribute syn_ramstyle: string;
-    attribute syn_ramstyle of reg: signal is "distributed";
-    -- Altera Quartus attributes
-    attribute ramstyle: string;
-    attribute ramstyle of reg: signal is "distributed";
+    signal we : std_logic;
 begin
-    
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if rd_we_i = '1' and unsigned(rd_adr_i) /= 0 then
+            if we = '1' then
                 reg(to_integer(unsigned(rd_adr_i))) <= rd_dat_i;
             end if;
             rs1_dat_o <= reg(to_integer(unsigned(rs1_adr_i)));
@@ -42,5 +34,6 @@ begin
         end if;
     end process;
 
-    
+    we <= '0' when unsigned(rd_adr_i) = 0 else rd_we_i;
+
 end architecture rtl;

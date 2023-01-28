@@ -33,12 +33,14 @@ entity execute is
         writeback_ready_i : in std_logic;
         pc_o : out std_logic_vector(31 downto 0);
         load_pc_o : out std_logic;
+        memory_rd_adr_o : out std_logic_vector(4 downto 0);
         memory_valid_o : out std_logic;
         memory_address_o : out std_logic_vector(31 downto 0);
         memory_data_o : out std_logic_vector(31 downto 0);
         memory_we_o : out std_logic;
         memory_size_o : out std_logic_vector(2 downto 0);
         memory_ready_i : in std_logic;
+        csr_rd_adr_o : out std_logic_vector(4 downto 0);
         csr_valid_o : out std_logic;
         csr_address_o : out std_logic_vector(11 downto 0);
         csr_data_o : out std_logic_vector(31 downto 0);
@@ -69,6 +71,7 @@ architecture rtl of execute is
     signal alu1_eq, alu1_ge, alu1_lt, alu1_geu, alu1_ltu : std_logic;
     signal branch_pc, next_pc, epc, pc : std_logic_vector(31 downto 0);
     signal rd_dat : std_logic_vector(31 downto 0);
+    signal writeback_ready, memory_ready, csr_ready : std_logic;
 begin
     
     u_alu_1 : entity work.alu
@@ -86,21 +89,19 @@ begin
     
     alu1_a <= 
         pc_i when (opcode_i.auipc or opcode_i.jal or opcode_i.jalr) = '1' else
-        rs1_dat_i when (opcode_i.reg_imm or opcode_i.reg_reg or opcode_i.load or opcode_i.store or opcode_i.branch) = '1' else
-        rs1_dat_i when opcode_i.sys = '1' and funct3_i(2) = '0' else
-        (5 to 31 => '0') & rs1_adr_i when opcode_i.sys = '1' and funct3_i(2) = '1' else
-        (others => '0');
+        rs1_dat_i when (opcode_i.reg_imm or opcode_i.reg_reg) = '1' else
+        (others => '0') when opcode_i.lui = '1' else
+        (others => '-');
 
     alu1_b <= 
-        immediate_i when (opcode_i.lui or opcode_i.auipc or opcode_i.reg_imm or opcode_i.load or opcode_i.store) = '1' else
-        rs2_dat_i when (opcode_i.reg_reg or opcode_i.branch) = '1' else
-        (others => '0') when opcode_i.sys = '1' and (funct3_i = RV32I_FN3_CSRRW or funct3_i = RV32I_FN3_CSRRS or funct3_i = RV32I_FN3_CSRRWI or funct3_i = RV32I_FN3_CSRRSI) else
-        (others => '1') when opcode_i.sys = '1' and (funct3_i = RV32I_FN3_CSRRC or funct3_i = RV32I_FN3_CSRRCI) else
-        std_logic_vector(to_unsigned(4, alu1_b'length));
+        immediate_i when (opcode_i.lui or opcode_i.auipc or opcode_i.reg_imm) = '1' else
+        rs2_dat_i when opcode_i.reg_reg = '1' else
+        std_logic_vector(to_unsigned(4, alu1_b'length)) when (opcode_i.jal or opcode_i.jalr) = '1' else
+        (others => '-');
 
     process (opcode_i, funct3_i, funct7_i(5))
     begin
-        if (opcode_i.lui or opcode_i.auipc or opcode_i.jal or opcode_i.jalr or opcode_i.load or opcode_i.store) = '1' then
+        if (opcode_i.lui or opcode_i.auipc or opcode_i.jal or opcode_i.jalr) = '1' then
             alu1_op <= ALU_OP_ADD;
         elsif (opcode_i.reg_imm or opcode_i.reg_reg) = '1' then
             case funct3_i is
@@ -131,8 +132,6 @@ begin
                 when others =>
                     alu1_op <= ALU_OP_NOP;
             end case;
-        elsif opcode_i.sys = '1' then
-            alu1_op <= ALU_OP_XOR;
         else
             alu1_op <= ALU_OP_NOP;
         end if;
@@ -154,8 +153,9 @@ begin
         );
     
     alu2_a <= 
-        rs1_dat_i when opcode_i.jalr = '1' else
-        pc_i;
+        rs1_dat_i when opcode_i.jalr = '1' or opcode_i.load = '1' or opcode_i.store = '1' else
+        pc_i when opcode_i.branch = '1' or opcode_i.jal = '1' else
+        (others => '-');
 
     alu2_b <= immediate_i;
 
@@ -169,32 +169,43 @@ begin
     
     load_pc <= branch or ecall or ebreak or mret;
 
-    process (opcode_i, funct3_i, alu1_eq, alu1_lt, alu1_ge, alu1_ltu, alu1_geu)
+    block_branch : block
+        signal a, b : unsigned(31 downto 0);
+        signal y_eq, y_lt, y_ltu, y_ge, y_geu : std_logic;
     begin
-        if (opcode_i.jal or opcode_i.jalr) = '1' then
-            branch <= '1';
-        elsif opcode_i.branch = '1' then
-            case funct3_i is
-                when RV32I_FN3_BEQ =>
-                    branch <= alu1_eq;
-                when RV32I_FN3_BNE =>
-                    branch <= not alu1_eq;
-                when RV32I_FN3_BLT =>
-                    branch <= alu1_lt;
-                when RV32I_FN3_BGE =>
-                    branch <= alu1_ge;
-                when RV32I_FN3_BLTU =>
-                    branch <= alu1_ltu;
-                when RV32I_FN3_BGEU =>
-                    branch <= alu1_geu;
-                when others =>
-                    branch <= '0';
-            end case;
-        else
-            branch <= '0';
-        end if;
-    end process;
-
+        a <= unsigned(rs1_dat_i);
+        b <= unsigned(rs2_dat_i);
+        y_eq <= '1' when a = b else '0';
+        y_lt <= '1' when signed(a) < signed(b) else '0';
+        y_ltu <= '1' when a < b else '0';
+        y_ge <= '1' when signed(a) >= signed(b) else '0';
+        y_geu <= '1' when a >= b else '0';
+        process (opcode_i, funct3_i, y_eq, y_lt, y_ge, y_ltu, y_geu)
+        begin
+            if (opcode_i.jal or opcode_i.jalr) = '1' then
+                branch <= '1';
+            elsif opcode_i.branch = '1' then
+                case funct3_i is
+                    when RV32I_FN3_BEQ =>
+                        branch <= y_eq;
+                    when RV32I_FN3_BNE =>
+                        branch <= not y_eq;
+                    when RV32I_FN3_BLT =>
+                        branch <= y_lt;
+                    when RV32I_FN3_BGE =>
+                        branch <= y_ge;
+                    when RV32I_FN3_BLTU =>
+                        branch <= y_ltu;
+                    when RV32I_FN3_BGEU =>
+                        branch <= y_geu;
+                    when others =>
+                        branch <= '0';
+                end case;
+            else
+                branch <= '0';
+            end if;
+        end process;        
+    end block;
 
     ecall <= enable_i and valid_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "00" else '0';
     ebreak <= enable_i and valid_i when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "01" else '0';
@@ -212,54 +223,118 @@ begin
         valid_i and enable_i when opcode_i.sys = '1' and unsigned(funct3_i) /= 0 else
         '0';
 
-    process (clk_i, arst_i)
+
+    block_wb : block
+        signal cmd_rdy, cmd_vld : std_logic;
+        signal rsp_rdy, rsp_vld : std_logic;
+        signal cmd_dat, rsp_dat : std_logic_vector(1 + 5 + 32 - 1 downto 0);
     begin
-        if arst_i = '1' then
-            latch_writeback_valid <= '0';
-            latch_memory_valid <= '0';
-            latch_csr_valid <= '0';
-        elsif rising_edge(clk_i) then
-            if srst_i = '1' then
-                latch_writeback_valid <= '0';
-                latch_memory_valid <= '0';
-                latch_csr_valid <= '0';
-            else
-                if next_stage_ready = '1' then
-                    latch_writeback_valid <= writeback_valid;
-                    latch_memory_valid <= memory_valid;
-                    latch_csr_valid <= csr_valid;
-                end if;
-            end if;
-        end if;
-    end process;
-    writeback_valid_o <= latch_writeback_valid;
-    memory_valid_o <= latch_memory_valid;
-    csr_valid_o <= latch_csr_valid;
+        cmd_dat <=
+            rd_we_i &
+            rd_adr_i &
+            rd_dat;
+        cmd_vld <= writeback_valid;
+        writeback_ready <= cmd_rdy;
+        u_data_handshake : entity work.data_handshake
+            generic map (
+                G_DATA_WIDTH => cmd_dat'length
+            )
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                command_ready_o => cmd_rdy,
+                command_data_i => cmd_dat,
+                command_valid_i => cmd_vld,
+                response_data_o => rsp_dat,
+                response_valid_o => rsp_vld,
+                response_ready_i => rsp_rdy
+            );
+        rd_we_o <= rsp_dat(37);
+        rd_dat_o <= rsp_dat(31 downto 0);
+        rd_adr_o <= rsp_dat(36 downto 32);
+        writeback_valid_o <= rsp_vld;
+        rsp_rdy <= writeback_ready_i;
+    end block;
+    block_mem : block
+        signal cmd_rdy, cmd_vld : std_logic;
+        signal rsp_rdy, rsp_vld : std_logic;
+        signal cmd_dat, rsp_dat : std_logic_vector(1 + 3 + 5 + 32 + 32 - 1 downto 0);
+    begin
+        cmd_dat <=
+            opcode_i.store & 
+            funct3_i(2 downto 0) &
+            rd_adr_i &
+            alu2_y &
+            rs2_dat_i;
+        cmd_vld <= memory_valid;
+        memory_ready <= cmd_rdy;
+        u_data_handshake : entity work.data_handshake
+            generic map (
+                G_DATA_WIDTH => cmd_dat'length
+            )
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                command_ready_o => cmd_rdy,
+                command_data_i => cmd_dat,
+                command_valid_i => cmd_vld,
+                response_data_o => rsp_dat,
+                response_valid_o => rsp_vld,
+                response_ready_i => rsp_rdy
+            );
+        memory_address_o <= rsp_dat(63 downto 32);
+        memory_data_o <= rsp_dat(31 downto 0);
+        memory_rd_adr_o <= rsp_dat(68 downto 64);
+        memory_size_o <= rsp_dat(71 downto 69);
+        memory_we_o <= rsp_dat(72);
+        memory_valid_o <= rsp_vld;
+        rsp_rdy <= memory_ready_i;
+    end block;
+    block_csr : block
+        signal cmd_rdy, cmd_vld : std_logic;
+        signal rsp_rdy, rsp_vld : std_logic;
+        signal cmd_dat, rsp_dat : std_logic_vector(3 + 5 + 12 + 32 - 1 downto 0);
+        signal csr_dat : std_logic_vector(31 downto 0);
+    begin
+        csr_dat <= 
+            rs1_dat_i when funct3_i(2) = '0' else
+            (5 to 31 => '0') & rs1_adr_i;
+        cmd_dat <=
+            funct3_i &
+            rd_adr_i &
+            immediate_i(11 downto 0) &
+            csr_dat;
+        cmd_vld <= csr_valid;
+        csr_ready <= cmd_rdy;
+        u_data_handshake : entity work.data_handshake
+            generic map (
+                G_DATA_WIDTH => cmd_dat'length
+            )
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                command_ready_o => cmd_rdy,
+                command_data_i => cmd_dat,
+                command_valid_i => cmd_vld,
+                response_data_o => rsp_dat,
+                response_valid_o => rsp_vld,
+                response_ready_i => rsp_rdy
+            );
+        csr_address_o <= rsp_dat(43 downto 32);
+        csr_data_o <= rsp_dat(31 downto 0);
+        csr_rd_adr_o <= rsp_dat(48 downto 44);
+        csr_valid_o <= rsp_vld;
+        funct3_o <= rsp_dat(51 downto 49);
+        rsp_rdy <= memory_ready_i;
+    end block;
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if (enable_i and valid_i and next_stage_ready) = '1' then
-                funct7_o <= funct7_i;
-                funct3_o <= funct3_i;
-                rd_adr_o <= rd_adr_i;
-                rd_dat_o <= rd_dat;
-                rd_we_o <= rd_we_i;
-                ecall_o <= ecall;
-                ebreak_o <= ebreak;
-                mret_o <= mret;
-                sync_exception <= ecall or ebreak;
-                csr_address_o <= immediate_i(11 downto 0);
-                csr_data_o <= rd_dat;
-                memory_address_o <= alu1_y;
-                memory_data_o <= rs2_dat_i;
-                memory_size_o <= funct3_i(2 downto 0);
-                memory_we_o <= opcode_i.store;
-            else
-                sync_exception <= '0';
-                ecall_o <= '0';
-                ebreak_o <= '0';
-                mret_o <= '0';
-            end if;
+            ecall_o <= ecall;
+            ebreak_o <= ebreak;
+            mret_o <= mret;
+            sync_exception <= ecall or ebreak;
             load_pc_o <= (enable_i and valid_i and load_pc and next_stage_ready) or exception_valid_i;
             pc_o <= next_pc;
             if (enable_i and valid_i) = '1' then
@@ -279,9 +354,9 @@ begin
         std_logic_vector(unsigned(pc) + 4);
 
     next_stage_ready <= 
-        '0' when latch_writeback_valid = '1' and writeback_ready_i = '0' else
-        '0' when latch_memory_valid = '1' and memory_ready_i = '0' else
-        '0' when latch_csr_valid = '1' and csr_ready_i = '0' else
+        '0' when writeback_valid = '1' and writeback_ready_i = '0' else
+        '0' when memory_valid = '1' and memory_ready_i = '0' else
+        '0' when csr_valid = '1' and csr_ready_i = '0' else
         '1';
     ready_o <= enable_i and next_stage_ready;
     exception_pc_o <= epc;

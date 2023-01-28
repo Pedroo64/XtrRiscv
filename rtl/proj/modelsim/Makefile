@@ -26,6 +26,7 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/utils/utils.vhd; \
 		project addfile $(SRCS_PATH)/utils/xtr_def.vhd; \
 		project addfile $(SRCS_PATH)/utils/xtr_abr.vhd; \
+		project addfile $(SRCS_PATH)/utils/data_handshake.vhd; \
 		project addfile $(SRCS_PATH)/cpu/xtr_cpu.vhd; \
 		project addfile $(SRCS_PATH)/soc/ram/bram.vhd; \
 		project addfile $(SRCS_PATH)/soc/ram/xtr_ram.vhd; \
@@ -37,6 +38,9 @@ add_sources: create_project
 
 compile: add_sources
 	$(VSIM) -c $(VSIM_FLAGS) -do "project open proj.mpf; project compileall; exit -f"
+
+open_project:
+	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf;"
 
 clean:
 	rm -r work

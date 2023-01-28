@@ -21,6 +21,8 @@
 !targets.cmake
 !toolchain.cmake
 !*.ld
+# Cocotb
+!*.py
 !*/
 
 # CMake
@@ -33,3 +35,4 @@ CMakeFiles
 *.runs
 # Radiant
 *impl_1*
+*impl*

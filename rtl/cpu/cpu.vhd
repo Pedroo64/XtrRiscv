@@ -107,8 +107,7 @@ begin
 -- Fetch
     if_rst <= cu_if_rst or srst_i;
     if_en <= '1';
---    if_load_pc <= wb_load_pc;
---    if_pc <= wb_pc;
+
     u_if : entity work.instruction_fecth
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => if_rst,
@@ -143,7 +142,6 @@ begin
             rs1_adr_latch_o => id_rs1_adr_latch,
             rs2_adr_latch_o => id_rs2_adr_latch
         );
-
 
 -- Register file
     rs1_adr <= id_rs1_adr;
@@ -187,12 +185,14 @@ begin
             writeback_ready_i => wb_ex_rdy,
             pc_o => if_pc,
             load_pc_o => if_load_pc,
+            memory_rd_adr_o => ex_mem_rd_adr,
             memory_valid_o => ex_mem_vld,
             memory_address_o => ex_mem_adr,
             memory_data_o => ex_mem_dat,
             memory_we_o => ex_mem_we,
             memory_size_o => ex_mem_siz,
             memory_ready_i => mem_rdy,
+            csr_rd_adr_o => ex_csr_rd_adr,
             csr_valid_o => ex_csr_vld,
             csr_address_o => ex_csr_adr,
             csr_data_o => ex_csr_dat,
@@ -209,8 +209,6 @@ begin
             ready_o => ex_rdy
         );
 
-
-
 -- memory
     mem_en <= '1';
     u_mem : entity work.memory
@@ -218,20 +216,19 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             en_i => mem_en, vld_i => ex_mem_vld, rdy_o => mem_rdy,
             adr_i => ex_mem_adr, we_i => ex_mem_we, dat_i => ex_mem_dat, siz_i => ex_mem_siz,
-            rd_adr_i => ex_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
+            rd_adr_i => ex_mem_rd_adr, rd_adr_o => mem_wb_rd_adr, rd_we_o => mem_wb_rd_we, rd_dat_o => mem_wb_rd_dat,
             cmd_adr_o => data_cmd_adr_o, cmd_vld_o => data_cmd_vld_o, cmd_we_o => data_cmd_we_o, cmd_siz_o => data_cmd_siz_o, cmd_dat_o => data_cmd_dat_o,
             cmd_rdy_i => data_cmd_rdy_i, rsp_vld_i => data_rsp_vld_i, rsp_dat_i => data_rsp_dat_i);
 
 -- csr
     csr_en <= '1';
-
     u_csr : entity work.csr
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
             srst_i => srst_i,
             valid_i => ex_csr_vld,
-            rd_adr_i => ex_rd_adr,
+            rd_adr_i => ex_csr_rd_adr,
             address_i => ex_csr_adr,
             data_i => ex_csr_dat,
             funct3_i => ex_funct3,
@@ -253,7 +250,6 @@ begin
             mtvec_o => mtvec,
             mepc_o => csr_exception_pc
         );
-  
 
 -- writeback
     ex_wb_rd_we <= ex_rd_we and ex_wb_vld;
@@ -277,7 +273,6 @@ begin
             execute_ready_o => wb_ex_rdy,
             csr_ready_o => wb_csr_rdy
         );
-
 
 -- control unit
     u_control_unit : entity work.control_unit

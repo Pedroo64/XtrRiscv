@@ -44,7 +44,7 @@ architecture rtl of csr is
             when "10" =>
                 ret := current_csr or csr_dat;
             when others =>
-                ret := current_csr and csr_dat;
+                ret := current_csr and (not csr_dat);
         end case;
         return ret;
     end function;
@@ -56,8 +56,36 @@ architecture rtl of csr is
     signal mepc : std_logic_vector(31 downto 0) := (others => '0');
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
     signal mtval : std_logic_vector(31 downto 0) := (others => '0');
+    signal csr_result : std_logic_vector(31 downto 0);
 begin
-    
+
+    block_alu : block
+        signal alu_a, alu_b, alu_y : std_logic_vector(31 downto 0);
+    begin
+        alu_a <= data_i;
+        with address_i select
+            alu_b <= 
+                mscratch when CSR_MSCRATCH,
+                mstatus when CSR_MSTATUS,
+                mie when CSR_MIE,
+                mtvec when CSR_MTVEC,
+                mepc when CSR_MEPC,
+                mcause when CSR_MCAUSE,
+                mtval when CSR_MTVAL,
+                (others => '-') when others;
+        
+
+        with funct3_i(1 downto 0) select
+            alu_y <= 
+                alu_a when "01",
+                alu_a or alu_b when "10",
+                alu_a and (not alu_b) when "11",
+                (others => '0') when others;
+
+        csr_result <= alu_y;
+    end block;
+
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -74,15 +102,15 @@ begin
                     case address_i is
                         when CSR_MSCRATCH =>
                             rd_dat_o <= mscratch;
-                            mscratch <= write_csr(data_i, mscratch, funct3_i);
+                            mscratch <= csr_result;
                         when CSR_MSTATUS =>
                             rd_dat_o <= mstatus;
                         when CSR_MIE =>
                             rd_dat_o <= mie;
-                            mie <= write_csr(data_i, mie, funct3_i);
+                            mie <= csr_result;
                         when CSR_MTVEC =>
                             rd_dat_o <= mtvec;
-                            mtvec <= write_csr(data_i, mtvec, funct3_i);
+                            mtvec <= csr_result;
                         when CSR_MEPC =>
                             rd_dat_o <= mepc;
                         when CSR_MCAUSE =>
@@ -115,17 +143,17 @@ begin
                     mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
                 end if;
             elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MCAUSE then
-                mcause <= write_csr(data_i, mcause, funct3_i);
+                mcause <= csr_result;
             end if;
             if exception_taken_i = '1' then
                 mepc <= exception_pc_i;
             elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MEPC then
-                mepc <= write_csr(data_i, mepc, funct3_i);
+                mepc <= csr_result;
             end if;
             if exception_taken_i = '1' and ebreak_i = '1' then
                 mtval <= exception_pc_i;
             elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MTVAL then
-                mtval <= write_csr(data_i, mtval, funct3_i);
+                mtval <= csr_result;
             end if;
 
         end if;
@@ -152,7 +180,7 @@ begin
                     mstatus(7) <= '1';
                     mstatus(12 downto 11) <= "11";
                 elsif valid_i = '1' and ready_i = '1' and address_i = CSR_MSTATUS then
-                    mstatus <= write_csr(data_i, mstatus, funct3_i);
+                    mstatus <= csr_result;
                 end if;
             end if;
         end if;
