@@ -6,10 +6,12 @@ use work.xtr_def.all;
 
 entity sim_soc is
     generic (
-        C_FREQ_IN : integer := 50e6;
-        C_RAM_SIZE : integer := 8192;
-        C_INIT_FILE : string := "none";
-        C_OUTPUT_FILE : string
+        G_FREQ_IN : integer := 50e6;
+        G_RAM_SIZE : integer := 8192;
+        G_INIT_FILE : string := "none";
+        G_OUTPUT_FILE : string;
+        G_CPU_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_CPU_WRITEBACK_BYPASS : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -44,6 +46,10 @@ begin
     sys_rst <= rst_hold(rst_hold'left);
 
     u_xtr_cpu : entity work.xtr_cpu
+        generic map (
+            G_BOOT_ADDRESS => G_CPU_BOOT_ADDRESS,
+            G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS
+        )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
@@ -60,7 +66,7 @@ begin
 
     u_xtr_ram : entity work.xtr_ram
         generic map (
-            C_RAM_SIZE => C_RAM_SIZE, C_INIT_FILE => C_INIT_FILE)
+            C_RAM_SIZE => G_RAM_SIZE, C_INIT_FILE => G_INIT_FILE)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => '0',
             instr_cmd_i => instr_cmd, instr_rsp_o => instr_rsp,
@@ -83,12 +89,12 @@ begin
             arst_i => arst_i, clk_i => clk_i,
             xtr_cmd_i => xtr_cmd_lyr_2(0), xtr_rsp_o => xtr_rsp_lyr_2(0));
     
-    gen_file_output: if C_OUTPUT_FILE /= "none" generate
+    gen_file_output: if G_OUTPUT_FILE /= "none" generate
         -- 8XXX XXX1 0000 0000
         -- FXXX XXX1 FFFF FFFF
         u_sim_file : entity work.sim_file
             generic map (
-                C_OUTPUT_FILE => C_OUTPUT_FILE)
+                C_OUTPUT_FILE => G_OUTPUT_FILE)
             port map (
                 arst_i => arst_i, clk_i => clk_i,
                 xtr_cmd_i => xtr_cmd_lyr_2(1), xtr_rsp_o => xtr_rsp_lyr_2(1));        

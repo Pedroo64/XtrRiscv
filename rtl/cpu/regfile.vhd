@@ -21,18 +21,28 @@ architecture rtl of regfile is
     type regfile_t is array (natural range <>) of std_logic_vector(31 downto 0);
     signal reg : regfile_t(0 to 31) := (others => (others => '0'));
     signal we : std_logic;
+    signal rs1_dat, rs2_dat : std_logic_vector(31 downto 0);
 begin
 
     process (clk_i)
     begin
         if rising_edge(clk_i) then
+            rs1_dat <= reg(to_integer(unsigned(rs1_adr_i)));
+            rs2_dat <= reg(to_integer(unsigned(rs2_adr_i)));
             if we = '1' then
                 reg(to_integer(unsigned(rd_adr_i))) <= rd_dat_i;
+                if rs1_adr_i = rd_adr_i then
+                    rs1_dat <= rd_dat_i;
+                end if;
+                if rs2_adr_i = rd_adr_i then
+                    rs2_dat <= rd_dat_i;
+                end if;
             end if;
-            rs1_dat_o <= reg(to_integer(unsigned(rs1_adr_i)));
-            rs2_dat_o <= reg(to_integer(unsigned(rs2_adr_i)));
         end if;
     end process;
+
+    rs1_dat_o <= rs1_dat;
+    rs2_dat_o <= rs2_dat;
 
     we <= '0' when unsigned(rd_adr_i) = 0 else rd_we_i;
 

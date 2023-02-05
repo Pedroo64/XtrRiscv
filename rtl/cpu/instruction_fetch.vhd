@@ -3,6 +3,9 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 entity instruction_fecth is
+    generic (
+        G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0')
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
@@ -84,10 +87,10 @@ begin
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            pc <= (others => '0');
+            pc <= unsigned(G_BOOT_ADDRESS);
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
-                pc <= (others => '0');
+                pc <= unsigned(G_BOOT_ADDRESS);
             else
                 if load_pc_i = '1' then
                     pc <= unsigned(pc_i);

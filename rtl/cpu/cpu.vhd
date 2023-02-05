@@ -5,6 +5,10 @@ use IEEE.numeric_std.all;
 use work.rv32i_pkg.all;
 
 entity cpu is
+    generic (
+        G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_WRITEBACK_BYPASS : boolean := FALSE
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
@@ -98,6 +102,7 @@ architecture rtl of cpu is
     signal cu_if_rst, cu_id_rst, cu_ex_rst : std_logic;
     signal cu_if_en, cu_id_en, cu_ex_en : std_logic;
     signal cu_branching : std_logic;
+    signal cu_rs1_wb_bypass, cu_rs2_wb_bypass : std_logic;
     -- interrupt handler
     signal exception_valid, exception_taken, exception_exit : std_logic;
     signal ex_exception_pc, csr_exception_pc : std_logic_vector(31 downto 0);
@@ -109,6 +114,9 @@ begin
     if_en <= '1';
 
     u_if : entity work.instruction_fecth
+        generic map (
+            G_BOOT_ADDRESS => G_BOOT_ADDRESS
+        )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => if_rst,
             en_i => if_en, decode_rdy_i => id_rdy,
@@ -155,9 +163,20 @@ begin
             rs1_adr_i => rs1_adr, rs1_dat_o => rs1_dat, rs2_adr_i => rs2_adr, rs2_dat_o => rs2_dat,
             rd_adr_i => rd_adr, rd_we_i => rd_we, rd_dat_i => rd_dat);
           
--- Execute      
+-- Execute
+block_execute : block
+    signal rs1, rs2 : std_logic_vector(31 downto 0);
+begin
     ex_rst <= srst_i;
     ex_en <= cu_ex_en;
+
+    rs1 <= 
+        wb_rd_dat when cu_rs1_wb_bypass = '1' else
+        rs1_dat;
+    rs2 <= 
+        wb_rd_dat when cu_rs2_wb_bypass = '1' else
+        rs2_dat;
+
     u_execute : entity work.execute
         port map (
             arst_i => arst_i,
@@ -169,9 +188,9 @@ begin
             opcode_i => id_ex_opcode,
             immediate_i => id_ex_immediate,
             rs1_adr_i => id_rs1_adr_latch,
-            rs1_dat_i => rs1_dat,
+            rs1_dat_i => rs1,
             rs2_adr_i => id_rs2_adr_latch,
-            rs2_dat_i => rs2_dat,
+            rs2_dat_i => rs2,
             rd_adr_i => id_ex_rd_adr,
             rd_we_i => id_ex_rd_we,
             funct3_i => id_ex_funct3,
@@ -208,6 +227,8 @@ begin
             ebreak_o => ebreak,
             ready_o => ex_rdy
         );
+    
+end block;
 
 -- memory
     mem_en <= '1';
@@ -276,6 +297,9 @@ begin
 
 -- control unit
     u_control_unit : entity work.control_unit
+        generic map (
+            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS
+        )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
@@ -294,7 +318,9 @@ begin
             writeback_branch_i => if_load_pc,
             fetch_reset_o => cu_if_rst,
             decode_reset_o => cu_id_rst,
-            execute_enable_o => cu_ex_en
+            execute_enable_o => cu_ex_en,
+            rs1_writeback_bypass_o => cu_rs1_wb_bypass,
+            rs2_writeback_bypass_o => cu_rs2_wb_bypass
         );
 
 -- interrupt handler

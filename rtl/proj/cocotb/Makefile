@@ -1,6 +1,7 @@
 # Makefile
 INIT_FILE ?= "none"
 OUTPUT_FILE ?= "none"
+WRITEBACK_BYPASS ?= false
 ROOT_DIR =$(PWD)/../..
 
 # defaults
@@ -40,8 +41,9 @@ TOPLEVEL = tb_xtr_soc
 # MODULE is the basename of the Python test file
 MODULE = main
 
-SIM_ARGS += -gC_INIT_FILE=$(INIT_FILE)
-SIM_ARGS += -gC_OUTPUT_FILE=$(OUTPUT_FILE)
+SIM_ARGS += -gG_INIT_FILE=$(INIT_FILE)
+SIM_ARGS += -gG_OUTPUT_FILE=$(OUTPUT_FILE)
+SIM_ARGS += -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS)
 SIM_ARGS += --ieee-asserts=disable
 # SIM_ARGS += --vcd=waveform.vcd
 EXTRA_ARGS += -fsynopsys

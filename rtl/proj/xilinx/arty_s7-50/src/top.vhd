@@ -28,10 +28,11 @@ begin
     arst <= not arst_n;
     clk <= pin_clk_i;
 
-    xtr_soc_inst : entity work.xtr_soc
+    u_xtr_soc : entity work.xtr_soc
         generic map (
-            C_FREQ_IN => C_FREQ, C_RAM_SIZE => C_RAM_SIZE, C_INIT_FILE => C_INIT_FILE,
-            C_UART => 1, C_BOOT_TRAP => TRUE)
+            G_FREQ_IN => C_FREQ, G_RAM_SIZE => C_RAM_SIZE, G_INIT_FILE => C_INIT_FILE,
+            G_UART => 1, G_BOOT_TRAP => TRUE,
+            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_WRITEBACK_BYPASS => TRUE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 

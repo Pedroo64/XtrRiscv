@@ -2,6 +2,10 @@ VSIM        ?= vsim
 VSIM_FLAGS  ?=
 SRCS_PATH=../..
 
+INIT_FILE	?= "none"
+OUTPUT_FILE	?= "none"
+WRITEBACK_BYPASS ?= FALSE
+
 all: compile
 
 create_project:
@@ -41,6 +45,17 @@ compile: add_sources
 
 open_project:
 	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf;"
+
+start_sim:
+	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS); \
+		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_if/*; \
+		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_id/*; \
+		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
+		add wave -divider "execute" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/block_execute/u_execute/*; \
+		add wave -divider "mem" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_mem/*; \
+		add wave -divider "wb" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_wb/*; \
+		add wave -divider "cu" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_control_unit/*; \
+		set NumericStdNoWarnings 1; config wave -signalnamewidth 1"
 
 clean:
 	rm -r work

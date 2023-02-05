@@ -6,18 +6,20 @@ use work.xtr_def.all;
 
 entity xtr_soc is
     generic (
-        C_FREQ_IN : integer := 50e6;
-        C_RAM_SIZE : integer := 8192;
-        C_INIT_FILE : string := "none";
-        C_UART : integer range 0 to 4 := 4;
-        C_BOOT_TRAP : boolean := false
+        G_FREQ_IN : integer := 50e6;
+        G_RAM_SIZE : integer := 8192;
+        G_INIT_FILE : string := "none";
+        G_UART : integer range 0 to 4 := 4;
+        G_BOOT_TRAP : boolean := false;
+        G_CPU_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_CPU_WRITEBACK_BYPASS : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
-        uart_rx_i : in std_logic_vector(C_UART - 1 downto 0);
-        uart_tx_o : out std_logic_vector(C_UART - 1 downto 0);
+        uart_rx_i : in std_logic_vector(G_UART - 1 downto 0);
+        uart_tx_o : out std_logic_vector(G_UART - 1 downto 0);
         external_irq_i : in std_logic
     );
 end entity xtr_soc;
@@ -48,6 +50,10 @@ begin
     sys_rst <= rst_hold(rst_hold'left) or srst_i;
 
     u_xtr_cpu : entity work.xtr_cpu
+        generic map (
+            G_BOOT_ADDRESS => G_CPU_BOOT_ADDRESS,
+            G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS
+        )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
@@ -64,7 +70,7 @@ begin
 
     u_xtr_ram : entity work.xtr_ram
         generic map (
-            C_RAM_SIZE => C_RAM_SIZE, C_INIT_FILE => C_INIT_FILE)
+            C_RAM_SIZE => G_RAM_SIZE, C_INIT_FILE => G_INIT_FILE)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             instr_cmd_i => instr_cmd, instr_rsp_o => instr_rsp,
@@ -72,7 +78,7 @@ begin
 
     u_xtr_peripherials : entity work.xtr_peripherials
         generic map (
-            C_FREQ_IN => C_FREQ_IN, C_UART => C_UART, C_BOOT_TRAP => C_BOOT_TRAP)
+            C_FREQ_IN => G_FREQ_IN, C_UART => G_UART, C_BOOT_TRAP => G_BOOT_TRAP)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             xtr_cmd_i => xtr_cmd_lyr_1(1), xtr_rsp_o => xtr_rsp_lyr_1(1),

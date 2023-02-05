@@ -4,8 +4,9 @@ use IEEE.numeric_std.all;
 
 entity tb_xtr_soc is
     generic (
-        C_INIT_FILE : string := "none";
-        C_OUTPUT_FILE : string := "none"
+        G_INIT_FILE : string := "none";
+        G_OUTPUT_FILE : string := "none";
+        G_WRITEBACK_BYPASS : boolean := FALSE
     );
 end entity tb_xtr_soc;
 
@@ -49,7 +50,8 @@ begin
 
     u_xtr_soc : entity work.sim_soc
         generic map (
-            C_FREQ_IN => 50e6, C_RAM_SIZE => 2*1024*1024, C_INIT_FILE => C_INIT_FILE, C_OUTPUT_FILE => C_OUTPUT_FILE)
+            G_FREQ_IN => 50e6, G_RAM_SIZE => 2*1024*1024, G_INIT_FILE => G_INIT_FILE, G_OUTPUT_FILE => G_OUTPUT_FILE, 
+            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS)
         port map (
             arst_i => arst, clk_i => clk, external_irq_i => interrupt);
 end architecture rtl;
