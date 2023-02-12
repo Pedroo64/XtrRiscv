@@ -60,7 +60,6 @@ end entity execute;
 
 architecture rtl of execute is
     signal writeback_valid, memory_valid, csr_valid : std_logic;
-    signal latch_writeback_valid, latch_memory_valid, latch_csr_valid : std_logic;
     signal next_stage_ready : std_logic;
     signal load_pc, branch, latch_branch : std_logic;
     signal ecall, ebreak, mret : std_logic;

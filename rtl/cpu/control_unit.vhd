@@ -40,13 +40,6 @@ architecture rtl of control_unit is
     signal d_writeback_rd_adr : std_logic_vector(4 downto 0);
     signal rs1_writeback_bypass, rs2_writeback_bypass : std_logic;
 begin
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            d_writeback_rd_we <= writeback_rd_we_i;
-            d_writeback_rd_adr <= writeback_rd_adr_i;
-        end if;
-    end process;
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then

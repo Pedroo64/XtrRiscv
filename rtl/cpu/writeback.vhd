@@ -25,9 +25,23 @@ entity writeback is
 end entity writeback;
 
 architecture rtl of writeback is
-    
+    signal next_rd_we : std_logic;
+    signal next_rd_dat : std_logic_vector(31 downto 0);
+    signal next_rd_adr : std_logic_vector(4 downto 0);
 begin
-    
+
+    next_rd_we <= (memory_rd_we_i or csr_rd_we_i or execute_rd_we_i);
+
+    next_rd_dat <= 
+        memory_rd_dat_i when memory_rd_we_i = '1' else
+        csr_rd_dat_i when csr_rd_we_i = '1' else
+        execute_rd_dat_i;
+
+    next_rd_adr <= 
+        memory_rd_adr_i when memory_rd_we_i = '1' else
+        csr_rd_adr_i when csr_rd_we_i = '1' else
+        execute_rd_adr_i;
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -36,18 +50,16 @@ begin
             if srst_i = '1' then
                 rd_we_o <= '0';
             else
-                rd_we_o <= (memory_rd_we_i or csr_rd_we_i or execute_rd_we_i);
-                if memory_rd_we_i = '1' then
-                    rd_adr_o <= memory_rd_adr_i;
-                    rd_dat_o <= memory_rd_dat_i;
-                elsif csr_rd_we_i = '1' then
-                    rd_adr_o <= csr_rd_adr_i;
-                    rd_dat_o <= csr_rd_dat_i;
-                else
-                    rd_adr_o <= execute_rd_adr_i;
-                    rd_dat_o <= execute_rd_dat_i;
-                end if;
+                rd_we_o <= next_rd_we;
             end if;
+        end if;
+    end process;
+
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            rd_adr_o <= next_rd_adr;
+            rd_dat_o <= next_rd_dat;
         end if;
     end process;
 

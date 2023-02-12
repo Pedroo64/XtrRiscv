@@ -19,13 +19,13 @@ entity data_handshake is
 end entity data_handshake;
 
 architecture rtl of data_handshake is
-    
+    signal response_valid : std_logic;
 begin
     
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if command_valid_i = '1' and response_ready_i = '1' then
+            if response_ready_i = '1' then
                 response_data_o <= command_data_i;
             end if;
         end if;
@@ -34,16 +34,15 @@ begin
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            response_valid_o <= '0';
+            response_valid <= '0';
         elsif rising_edge(clk_i) then
-            if command_valid_i = '1' and response_ready_i = '1' then -- SET
-                response_valid_o <= '1';
-            elsif response_ready_i = '1' then -- RESET
-                response_valid_o <= '0';
+            if response_ready_i = '1' then
+                response_valid <= command_valid_i;
             end if;
         end if;
     end process;
 
-    command_ready_o <= response_ready_i;
+    response_valid_o <= response_valid;
+    command_ready_o <= '0' when response_valid = '1' and response_ready_i = '0' else '1';
 
 end architecture rtl;
