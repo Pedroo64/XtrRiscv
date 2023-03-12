@@ -6,9 +6,6 @@
         <Source name="../src/top.vhd" type="VHDL" type_short="VHDL">
             <Options top_module="top"/>
         </Source>
-        <Source name="../../../../cpu/alu_pkg.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
         <Source name="../../../../cpu/alu.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
@@ -90,7 +87,7 @@
         <Source name="../../../../soc/uart/xtr_uart.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
-        <Source name="../../../../utils/data_handshake.vhd" type="VHDL" type_short="VHDL">
+        <Source name="../../../../cpu/shifter.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
         <Source name="../constraints/constraints.pdc" type="Physical Constraints File" type_short="PDC">

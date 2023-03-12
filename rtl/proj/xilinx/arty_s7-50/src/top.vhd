@@ -4,9 +4,9 @@ use IEEE.numeric_std.all;
 
 entity top is
     generic (
-        C_FREQ      : integer := 100e6;
-        C_RAM_SIZE  : integer := 32*1024;
-        C_INIT_FILE : string := "../../../soft/bin/test.mem"
+        G_FREQ      : integer := 100e6;
+        G_RAM_SIZE  : integer := 64*1024;
+        G_INIT_FILE : string := "../../../soft/bin/test.mem"
     );
     port (
         pin_arst_n_i : in std_logic;
@@ -30,9 +30,9 @@ begin
 
     u_xtr_soc : entity work.xtr_soc
         generic map (
-            G_FREQ_IN => C_FREQ, G_RAM_SIZE => C_RAM_SIZE, G_INIT_FILE => C_INIT_FILE,
+            G_FREQ_IN => G_FREQ, G_RAM_SIZE => G_RAM_SIZE, G_INIT_FILE => G_INIT_FILE,
             G_UART => 1, G_BOOT_TRAP => TRUE,
-            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_WRITEBACK_BYPASS => TRUE)
+            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_WRITEBACK_BYPASS => FALSE, G_FULL_BARREL_SHIFTER => FALSE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 

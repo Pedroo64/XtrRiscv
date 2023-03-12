@@ -7,7 +7,8 @@ use work.xtr_def.all;
 entity xtr_cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
-        G_WRITEBACK_BYPASS : boolean := FALSE
+        G_WRITEBACK_BYPASS : boolean := FALSE;
+        G_FULL_BARREL_SHIFTER : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
@@ -34,7 +35,8 @@ begin
     u_cpu : entity work.cpu
         generic map (
             G_BOOT_ADDRESS => G_BOOT_ADDRESS,
-            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS
+            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,

@@ -7,7 +7,8 @@ use work.rv32i_pkg.all;
 entity cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
-        G_WRITEBACK_BYPASS : boolean := FALSE
+        G_WRITEBACK_BYPASS : boolean := FALSE;
+        G_FULL_BARREL_SHIFTER : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -165,10 +166,13 @@ begin
           
 -- Execute
 block_execute : block
+    signal execute_ready : std_logic;
     signal rs1, rs2 : std_logic_vector(31 downto 0);
 begin
     ex_rst <= srst_i;
-    ex_en <= cu_ex_en;
+    ex_en <= cu_ex_en and id_ex_vld and execute_ready;
+
+    ex_rdy <= cu_ex_en and execute_ready;
 
     rs1 <= 
         wb_rd_dat when cu_rs1_wb_bypass = '1' else
@@ -178,6 +182,9 @@ begin
         rs2_dat;
 
     u_execute : entity work.execute
+        generic map (
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
+        )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
@@ -225,7 +232,7 @@ begin
             mret_o => mret,
             ecall_o => ecall,
             ebreak_o => ebreak,
-            ready_o => ex_rdy
+            ready_o => execute_ready
         );
     
 end block;
@@ -334,7 +341,6 @@ end block;
             external_irq_i => external_irq_i,
             timer_irq_i => timer_irq_i,
             exception_valid_o => exception_valid,
-            exception_taken_i => exception_taken,
             cause_external_irq_o => cause_external_irq,
             cause_timer_irq_o => cause_timer_irq
         );

@@ -5,6 +5,7 @@ SRCS_PATH=../..
 INIT_FILE	?= "none"
 OUTPUT_FILE	?= "none"
 WRITEBACK_BYPASS ?= FALSE
+FULL_BARREL_SHIFTER ?= FALSE
 
 all: compile
 
@@ -13,9 +14,9 @@ create_project:
 
 add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open proj.mpf; \
-		project addfile $(SRCS_PATH)/cpu/alu_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
+		project addfile $(SRCS_PATH)/cpu/shifter.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_decode.vhd; \
@@ -47,7 +48,7 @@ open_project:
 	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf;"
 
 start_sim:
-	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS); \
+	$(VSIM) $(VSIM_FLAGS) -do "project open proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER); \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_if/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_id/*; \
 		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \

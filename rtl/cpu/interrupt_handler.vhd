@@ -14,7 +14,6 @@ entity interrupt_handler is
         external_irq_i : in std_logic;
         timer_irq_i : in std_logic;
         exception_valid_o : out std_logic;
-        exception_taken_i : in std_logic;
         cause_external_irq_o : out std_logic;
         cause_timer_irq_o : out std_logic
     );
@@ -45,9 +44,7 @@ begin
                             end if;
                         end if;
                     when st_external | st_timer =>
-                        if exception_taken_i = '1' then
                             current_st <= st_idle;
-                        end if;
                     when others =>
                 end case;
             end if;
@@ -63,7 +60,7 @@ begin
         '0';
 
     exception_valid_o <= 
-        '1' when exception_valid = '1' and exception_taken_i = '0' else
+        '1' when exception_valid = '1' else
         '0';
 
     cause_external_irq_o <= 

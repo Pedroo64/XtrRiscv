@@ -32,7 +32,8 @@ end entity instruction_decode;
 
 architecture rtl of instruction_decode is
     signal vld, ready : std_logic;
-    signal rs1_adr_latch, rs2_adr_latch : std_logic_vector(4 downto 0);
+    signal comb_rs1_adr, comb_rs2_adr : std_logic_vector(4 downto 0);
+    signal rs1_adr, rs2_adr : std_logic_vector(4 downto 0);
     signal opcode : std_logic_vector(6 downto 0);
     signal s_opcode : opcode_t;
 begin
@@ -83,9 +84,9 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if en_i = '1' and vld_i = '1' and rdy_i = '1' then
-                rs1_adr_latch <= instr_dat_i(19 downto 15);
-                rs2_adr_latch <= instr_dat_i(24 downto 20);
+            if vld_i = '1' and ready = '1' then
+                rs1_adr <= comb_rs1_adr;
+                rs2_adr <= comb_rs2_adr;
                 pc_o <= pc_i;
                 funct3_o <= instr_dat_i(14 downto 12);
                 funct7_o <= instr_dat_i(31 downto 25);
@@ -129,12 +130,17 @@ begin
         end if;
     end process;
 
-    rs1_adr_o <= 
-        instr_dat_i(19 downto 15) when ready = '1' else 
-        rs1_adr_latch;
-    rs2_adr_o <= 
-        instr_dat_i(24 downto 20) when ready = '1' else 
-        rs2_adr_latch;
+    comb_rs1_adr <= 
+        (others => '0') when s_opcode.lui = '1' and ready = '1' else
+        instr_dat_i(19 downto 15) when ready = '1' else
+        rs1_adr;
+
+    comb_rs2_adr <=
+        instr_dat_i(24 downto 20) when ready = '1' else
+        rs2_adr;
+
+    rs1_adr_o <= comb_rs1_adr;
+    rs2_adr_o <= comb_rs2_adr;
         
     process (clk_i, arst_i)
     begin
@@ -144,14 +150,14 @@ begin
             if srst_i = '1' then
                 vld <= '0';
             else
-                if en_i = '1' and vld_i = '1' and rdy_i = '1' then
+                if vld_i = '1' and ready = '1' then
                     case opcode is
                         when RV32I_OP_LUI | RV32I_OP_AUIPC | RV32I_OP_JAL | RV32I_OP_JALR | RV32I_OP_BRANCH | RV32I_OP_LOAD | RV32I_OP_STORE | RV32I_OP_REG_IMM | RV32I_OP_REG_REG | RV32I_OP_FENCE | RV32I_OP_SYS =>
                             vld <= '1';
                         when others =>
                             vld <= '0';
                     end case;
-                elsif vld = '1' and rdy_i = '1' then
+                elsif ready = '1' then
                     vld <= '0';
                 end if;
             end if;        
@@ -166,7 +172,7 @@ begin
 
     vld_o <= vld;
 
-    rs1_adr_latch_o <= rs1_adr_latch;
-    rs2_adr_latch_o <= rs2_adr_latch;
+    rs1_adr_latch_o <= rs1_adr;
+    rs2_adr_latch_o <= rs2_adr;
 
 end architecture rtl;

@@ -2,16 +2,17 @@
 INIT_FILE ?= "none"
 OUTPUT_FILE ?= "none"
 WRITEBACK_BYPASS ?= false
+FULL_BARREL_SHIFTER ?= false
 ROOT_DIR =$(PWD)/../..
 
 # defaults
 SIM ?= ghdl
 TOPLEVEL_LANG ?= vhdl
 
-VHDL_SOURCES += $(ROOT_DIR)/cpu/alu_pkg.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/rv32i_pkg.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/csr_def.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/shifter.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_fetch.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_decode.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/execute.vhd
@@ -44,6 +45,7 @@ MODULE = main
 SIM_ARGS += -gG_INIT_FILE=$(INIT_FILE)
 SIM_ARGS += -gG_OUTPUT_FILE=$(OUTPUT_FILE)
 SIM_ARGS += -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS)
+SIM_ARGS += -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER)
 SIM_ARGS += --ieee-asserts=disable
 # SIM_ARGS += --vcd=waveform.vcd
 EXTRA_ARGS += -fsynopsys
