@@ -106,6 +106,8 @@ begin
     end generate gen_light_shifter;
     gen_full_shifter: if G_FULL_BARREL_SHIFTER = TRUE generate
         signal done : std_logic;
+        signal right0, right1, right2, right3, right4 : std_logic_vector(31 downto 0);
+        signal left0, left1, left2, left3, left4 : std_logic_vector(31 downto 0);
     begin
         process (clk_i, arst_i)
         begin
@@ -124,22 +126,27 @@ begin
             end if;
         end process;
 
+        right0 <= (16 to 31 => type_i(0) and data_i(31)) & data_i(31 downto 16) when shift_i(4) = '1' else data_i;
+        right1 <= (24 to 31 => type_i(0) and data_i(31)) & right0(31 downto  8) when shift_i(3) = '1' else right0;
+        right2 <= (28 to 31 => type_i(0) and data_i(31)) & right1(31 downto  4) when shift_i(2) = '1' else right1;
+        right3 <= (30 to 31 => type_i(0) and data_i(31)) & right2(31 downto  2) when shift_i(1) = '1' else right2;
+        right4 <= (31 to 31 => type_i(0) and data_i(31)) & right3(31 downto  1) when shift_i(0) = '1' else right3;
+
+        left0 <= data_i(15 downto 0) & (0 to 15 => '0') when shift_i(4) = '1' else data_i;
+        left1 <=  left0(23 downto 0) & (0 to 7  => '0') when shift_i(3) = '1' else left0;
+        left2 <=  left1(27 downto 0) & (0 to 3  => '0') when shift_i(2) = '1' else left1;
+        left3 <=  left2(29 downto 0) & (0 to 1  => '0') when shift_i(1) = '1' else left2;
+        left4 <=  left3(30 downto 0) & (0 to 0  => '0') when shift_i(0) = '1' else left3;
+
         process (clk_i)
         begin
             if rising_edge(clk_i) then
                 if start_i = '1' and ready = '1' then
-                    --if type_i(1) = '0' then
-                    --    data_o <= left_in5;
-                    --else
-                    --    data_o <= right_in5;
-                    --end if;
-                    case to_integer(unsigned(type_i)) is
-                        when 16#0# => data_o <= std_logic_vector(shift_left(unsigned(data_i), to_integer(unsigned(shift_i))));
-                        when 16#1# => data_o <= std_logic_vector(shift_left(signed(data_i), to_integer(unsigned(shift_i))));
-                        when 16#2# => data_o <= std_logic_vector(shift_right(unsigned(data_i), to_integer(unsigned(shift_i))));
-                        when 16#3# => data_o <= std_logic_vector(shift_right(signed(data_i), to_integer(unsigned(shift_i))));
-                        when others =>
-                    end case;
+                    if type_i(1) = '0' then
+                        data_o <= left4;
+                    else
+                        data_o <= right4;
+                    end if;
                 end if;
             end if;
         end process;

@@ -159,6 +159,9 @@ begin
     rd_we <= wb_rd_we;
     rd_dat <= wb_rd_dat;
     u_regfile : entity work.regfile
+        generic map (
+            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS
+        )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             rs1_adr_i => rs1_adr, rs1_dat_o => rs1_dat, rs2_adr_i => rs2_adr, rs2_dat_o => rs2_dat,

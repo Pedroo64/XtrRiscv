@@ -28,7 +28,7 @@ end entity instruction_fecth;
 architecture rtl of instruction_fecth is
     type fetch_st_t is (st_idle, st_halt, st_fetch);
     signal current_st, next_st : fetch_st_t;
-    signal pc : unsigned(31 downto 0);
+    signal pc : unsigned(29 downto 0);
     signal cmd_vld : std_logic;
 begin
     
@@ -80,22 +80,21 @@ begin
     end process;
 
     cmd_vld <= 
-        '1' when current_st = st_fetch and decode_rdy_i = '1' else
-        '1' when current_st = st_halt and decode_rdy_i = '1' else
+        '1' when (current_st = st_fetch or current_st = st_halt) and decode_rdy_i = '1' else
         '0';
 
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            pc <= unsigned(G_BOOT_ADDRESS);
+            pc <= unsigned(G_BOOT_ADDRESS(31 downto 2));
         elsif rising_edge(clk_i) then
             if srst_i = '1' then
-                pc <= unsigned(G_BOOT_ADDRESS);
+                pc <= unsigned(G_BOOT_ADDRESS(31 downto 2));
             else
                 if load_pc_i = '1' then
-                    pc <= unsigned(pc_i);
+                    pc <= unsigned(pc_i(31 downto 2));
                 elsif cmd_vld = '1' and cmd_rdy_i = '1' then
-                    pc <= pc + 4;
+                    pc <= pc + 1;
                 end if;
             end if;
         end if;
@@ -105,12 +104,12 @@ begin
     begin
         if rising_edge(clk_i) then
             if cmd_vld = '1' then
-                pc_o <= std_logic_vector(pc);
+                pc_o <= std_logic_vector(pc & "00");
             end if;
         end if;
     end process;
 
-    cmd_adr_o <= std_logic_vector(pc);
+    cmd_adr_o <= std_logic_vector(pc & "00");
     cmd_vld_o <= cmd_vld;
     
     instr_o <= rsp_dat_i;
