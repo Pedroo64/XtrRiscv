@@ -38,21 +38,26 @@ architecture rtl of cpu is
     signal fetch_en, fetch_branch, fetch_load, fetch_valid : std_logic;
     signal fetch_pc, fetch_pc_next : unsigned(31 downto 0);
     signal fetch_load_pc, fetch_instr : std_logic_vector(31 downto 0);
+-- prefetch
+    signal prefetch_flush : std_logic;
+    signal prefetch_data : std_logic_vector(31 downto 0);
+    signal prefetch_en, prefetch_valid : std_logic;
 -- decode
     signal decode_en, decode_valid : std_logic;
-    signal decode_instr, decode_pc, decode_imm : std_logic_vector(31 downto 0);
+    signal decode_instr, decode_imm : std_logic_vector(31 downto 0);
     signal decode_opcode : opcode_t;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
 -- execute
+    signal execute_instr : std_logic_vector(31 downto 0); -- USED ONLY FOR DEBUGGING
     signal execute_en, execute_valid : std_logic;
     signal execute_opcode : opcode_t;
     signal execute_rd_we, execute_mem_write, execute_mem_read : std_logic;
     signal execute_funct3 : std_logic_vector(2 downto 0);
     signal execute_funct7 : std_logic_vector(6 downto 0);
     signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
-    signal execute_rs1_dat, execute_rs2_dat, execute_imm, execute_pc : std_logic_vector(31 downto 0);
+    signal execute_rs1_dat, execute_rs2_dat, execute_imm, execute_pc, execute_pc_next : std_logic_vector(31 downto 0);
     signal execute_alu_arith_op, execute_alu_signed_op : std_logic;
     signal execute_alu_logic_op : std_logic_vector(1 downto 0);
     signal execute_alu_a, execute_alu_b : std_logic_vector(31 downto 0);
@@ -91,6 +96,7 @@ architecture rtl of cpu is
 -- control unit
     signal fetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
     signal decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
+    signal d_decode_flush : std_logic;
     signal rs1_hazard, rs2_hazard : std_logic;
     signal decode_op_use_rs1, decode_op_use_rs2 : std_logic;
     signal decode_rs1_zero, decode_rs2_zero : std_logic;
@@ -151,10 +157,25 @@ begin
     instr_cmd_vld_o <= fetch_en and booted;
     fetch_instr <= instr_rsp_dat_i;
     fetch_valid <= instr_rsp_vld_i;
+-- prefetch
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            prefetch_valid <= '0';
+        elsif rising_edge(clk_i) then
+            if prefetch_flush = '1' then
+                prefetch_valid <= '0';
+            elsif prefetch_en = '1' then
+                prefetch_valid <= fetch_en;
+            end if;
+        end if;
+    end process;
+
+    prefetch_en <= decode_en;
+    prefetch_data <= fetch_instr;
 
 -- decode stage
     decode_en <= not decode_stall;
-    decode_instr <= fetch_instr;
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -163,7 +184,7 @@ begin
             if decode_flush = '1' then
                 decode_valid <= '0';
             elsif decode_en = '1' then
-                decode_valid <= fetch_en;
+                decode_valid <= prefetch_valid;
             end if;
         end if;
     end process;
@@ -171,7 +192,7 @@ begin
     begin
         if rising_edge(clk_i) then
             if decode_en = '1' then
-                decode_pc <= std_logic_vector(fetch_pc);
+                decode_instr <= prefetch_data;
             end if;
         end if;
     end process;
@@ -234,8 +255,8 @@ begin
     begin
         if rising_edge(clk_i) then
             if execute_en = '1' then
+                execute_instr <= decode_instr;
                 execute_opcode <= decode_opcode;
-                execute_pc <= decode_pc;
                 execute_imm <= decode_imm;
                 execute_rs1_adr <= decode_rs1_adr;
                 execute_rs2_adr <= decode_rs2_adr;
@@ -243,6 +264,18 @@ begin
                 execute_funct3 <= decode_funct3;
                 execute_funct7 <= decode_funct7;
             end if;
+        end if;
+    end process;
+
+    execute_pc_next <= 
+        std_logic_vector(fetch_pc_next) when (execute_en and fetch_load) = '1' else
+        std_logic_vector(unsigned(execute_pc) + 4) when (execute_en and execute_valid) = '1' else
+        execute_pc;
+
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            execute_pc <= execute_pc_next;
         end if;
     end process;
 
@@ -409,9 +442,10 @@ begin
 -- memory-csr
     csr_enable <= (memory_en and memory_valid) when memory_opcode.sys = '1' and memory_funct3 /= "000" else '0';
     csr_execption_entry <= (memory_en and memory_valid and (memory_ecall or memory_ebreak)) or interrupt_taken;
+--    csr_execption_entry <= (memory_en and memory_valid and (memory_ecall or memory_ebreak)) or interrupt_taken;
     csr_exeception_pc <= 
         memory_pc when (memory_ecall or memory_ebreak) = '1' else
-        memory_branch_pc when memory_branch = '1' else
+        memory_branch_pc when (memory_branch and memory_valid) = '1' else
         execute_pc;
     csr_execption_exit <= memory_en and memory_valid and memory_mret;
 
@@ -550,11 +584,21 @@ begin
     execute_stall <= memory_stall;
     memory_stall <= ((memory_mem_write or memory_mem_read) and memory_valid and not data_cmd_rdy_i) or not execute_shift_ready;
     writeback_stall <= '0';
-
+    
+    prefetch_flush <= fetch_load;
     decode_flush <= fetch_load;
     execute_flush <= decode_rs1_dependency or decode_rs2_dependency or fetch_load;
     memory_flush <= fetch_load;
     writeback_flush <= '0';
+
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            d_decode_flush <= '0';
+        elsif rising_edge(clk_i) then
+            d_decode_flush <= decode_flush;
+        end if;
+    end process;
 
 -- interrupt handler
     u_interrupt_handler : entity work.interrupt_handler
