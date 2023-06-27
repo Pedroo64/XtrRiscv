@@ -32,6 +32,8 @@ architecture rtl of sim_soc is
     signal xtr_rsp_lyr_2 : v_xtr_rsp_t(0 to 3);
     signal timer_irq, external_irq : std_logic;
     signal rst_rq : std_logic;
+    signal memory_test_delay_cnt : unsigned(2 downto 0);
+    signal memory_test_reg : std_logic_vector(31 downto 0);
 begin
     -- Hold reset for at least 4 clock cycles
     process (clk_i)
@@ -74,8 +76,8 @@ begin
             instr_cmd_i => instr_cmd, instr_rsp_o => instr_rsp,
             dat_cmd_i => xtr_cmd_lyr_1(0), dat_rsp_o => xtr_rsp_lyr_1(0));
 
-    -- 8XXX XXX0 0000 0000
-    -- FXXX XXX3 FFFF FFFF
+    -- 8XX0 0000
+    -- FXX3 FFFF
     u_xtr_abr_lyr2 : entity work.xtr_abr
         generic map (
             C_MMSB => 17, C_MLSB => 18, C_SLAVES => 4)
@@ -84,16 +86,16 @@ begin
             xtr_cmd_i => xtr_cmd_lyr_1(1), xtr_rsp_o => xtr_rsp_lyr_1(1),
             v_xtr_cmd_o => xtr_cmd_lyr_2, v_xtr_rsp_i => xtr_rsp_lyr_2);
 
-    -- 8XXX XXX0 0000 0000
-    -- FXXX XXX0 FFFF FFFF
+    -- 8XX0 0000
+    -- FXX0 FFFF
     u_sim_stdout : entity work.sim_stdout
         port map (
             arst_i => arst_i, clk_i => clk_i,
             xtr_cmd_i => xtr_cmd_lyr_2(0), xtr_rsp_o => xtr_rsp_lyr_2(0));
     
     gen_file_output: if G_OUTPUT_FILE /= "none" generate
-        -- 8XXX XXX1 0000 0000
-        -- FXXX XXX1 FFFF FFFF
+        -- 8XX1 0000
+        -- FXX1 FFFF
         u_sim_file : entity work.sim_file
             generic map (
                 C_OUTPUT_FILE => G_OUTPUT_FILE)
@@ -103,8 +105,8 @@ begin
     end generate gen_file_output;
 
 
-    -- 8XXX XXX2 0000 0000
-    -- FXXX XXX2 FFFF FFFF
+    -- 8XX2 0000
+    -- FXX2 FFFF
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -113,8 +115,35 @@ begin
                     assert false report "Finished simulation" severity failure;
                 end if;
             end if;
+            xtr_rsp_lyr_2(2).vld <= xtr_cmd_lyr_2(2).vld and not xtr_cmd_lyr_2(2).we;
         end if;
     end process;
+    xtr_rsp_lyr_2(2).rdy <= '1';
+    xtr_rsp_lyr_2(2).dat <= x"DEADBEEF";
+
+    -- Memory delay test
+    -- 8XX3 0000
+    -- FXX3 FFFF
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if xtr_cmd_lyr_2(3).vld = '1' and memory_test_delay_cnt(memory_test_delay_cnt'left) = '0' then
+                memory_test_delay_cnt <= memory_test_delay_cnt + 1;
+            else
+                memory_test_delay_cnt <= (others => '0');
+            end if;
+        end if;
+        if xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '1' and xtr_rsp_lyr_2(3).rdy = '1' then
+            for i in 0 to 3 loop
+                if xtr_cmd_lyr_2(3).sel(0) = '1' then
+                    memory_test_reg(i*8 + 7 downto i*8) <= xtr_cmd_lyr_2(3).dat(i*8 + 7 downto i*8);
+                end if;
+            end loop;
+        end if;
+        xtr_rsp_lyr_2(3).dat <= memory_test_reg;
+        xtr_rsp_lyr_2(3).vld <= xtr_cmd_lyr_2(3).vld and not xtr_cmd_lyr_2(3).we;
+    end process;
+    xtr_rsp_lyr_2(3).rdy <= memory_test_delay_cnt(memory_test_delay_cnt'left);
 
 
 end architecture rtl;
