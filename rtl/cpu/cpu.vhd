@@ -7,6 +7,7 @@ use work.rv32i_pkg.all;
 entity cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE
     );
@@ -96,15 +97,18 @@ architecture rtl of cpu is
 -- control unit
     signal fetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
     signal decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
-    signal d_decode_flush : std_logic;
-    signal rs1_hazard, rs2_hazard : std_logic;
     signal decode_op_use_rs1, decode_op_use_rs2 : std_logic;
     signal decode_rs1_zero, decode_rs2_zero : std_logic;
+    signal execute_op_use_rs1, execute_op_use_rs2 : std_logic;
     signal decode_execute_rs1_dependency, decode_execute_rs2_dependency : std_logic;
     signal decode_memory_rs1_dependency, decode_memory_rs2_dependency : std_logic;
     signal decode_rs1_dependency, decode_rs2_dependency : std_logic;
+    signal control_multicycle_op : std_logic;
+    signal control_memory_forward_rs1, control_memory_forward_rs2 : std_logic;
+    signal control_memory_forward_dat : std_logic_vector(31 downto 0);
 -- register file
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
+    signal regfile_rs1_dat, regfile_rs2_dat : std_logic_vector(31 downto 0);
 -- CSR
     signal csr_enable : std_logic;
     signal csr_address : std_logic_vector(11 downto 0);
@@ -268,7 +272,7 @@ begin
     end process;
 
     execute_pc_next <= 
-        std_logic_vector(fetch_pc_next) when (execute_en and fetch_load) = '1' else
+        std_logic_vector(fetch_pc_next(31 downto 2) & "00") when (execute_en and fetch_load) = '1' else
         std_logic_vector(unsigned(execute_pc) + 4) when (execute_en and execute_valid) = '1' else
         execute_pc;
 
@@ -278,6 +282,13 @@ begin
             execute_pc <= execute_pc_next;
         end if;
     end process;
+
+    execute_rs1_dat <= 
+        control_memory_forward_dat when control_memory_forward_rs1 = '1' else
+        regfile_rs1_dat;
+    execute_rs2_dat <= 
+        control_memory_forward_dat when control_memory_forward_rs2 = '1' else
+        regfile_rs2_dat;
 
     execute_rd_we <= execute_opcode.reg_reg or execute_opcode.load or execute_opcode.reg_imm or execute_opcode.sys or execute_opcode.jalr or execute_opcode.lui or execute_opcode.auipc or execute_opcode.jal;
     execute_mem_write <= execute_opcode.store;
@@ -331,9 +342,6 @@ begin
     execute_shift_start <= 
         (execute_en and execute_valid) when (execute_opcode.reg_imm or execute_opcode.reg_reg) = '1' and (execute_funct3 = RV32I_FN3_SL or execute_funct3 = RV32I_FN3_SR) else
         '0';
-
---    execute_shift_flush <= execute_flush or srst_i;
-    execute_shift_flush <= srst_i;
 
     u_shifter : entity work.shifter
         generic map (
@@ -442,7 +450,6 @@ begin
 -- memory-csr
     csr_enable <= (memory_en and memory_valid) when memory_opcode.sys = '1' and memory_funct3 /= "000" else '0';
     csr_execption_entry <= (memory_en and memory_valid and (memory_ecall or memory_ebreak)) or interrupt_taken;
---    csr_execption_entry <= (memory_en and memory_valid and (memory_ecall or memory_ebreak)) or interrupt_taken;
     csr_exeception_pc <= 
         memory_pc when (memory_ecall or memory_ebreak) = '1' else
         memory_branch_pc when (memory_branch and memory_valid) = '1' else
@@ -557,10 +564,10 @@ begin
             srst_i => srst_i,
             rs1_en_i => regfile_rs1_en,
             rs1_adr_i => decode_rs1_adr,
-            rs1_dat_o => execute_rs1_dat,
+            rs1_dat_o => regfile_rs1_dat,
             rs2_en_i => regfile_rs2_en,
             rs2_adr_i => decode_rs2_adr,
-            rs2_dat_o => execute_rs2_dat,
+            rs2_dat_o => regfile_rs2_dat,
             rd_adr_i => writeback_rd_adr,
             rd_we_i => regfile_rd_we,
             rd_dat_i => writeback_rd_dat
@@ -571,32 +578,46 @@ begin
     decode_op_use_rs2 <= decode_opcode.reg_reg or decode_opcode.store or decode_opcode.branch;
     decode_rs1_zero <= '1' when unsigned(decode_rs1_adr) = 0 else '0';
     decode_rs2_zero <= '1' when unsigned(decode_rs2_adr) = 0 else '0';
-    decode_execute_rs1_dependency <= (execute_rd_we and execute_valid) when decode_rs1_adr = execute_rd_adr else '0';
-    decode_execute_rs2_dependency <= (execute_rd_we and execute_valid) when decode_rs2_adr = execute_rd_adr else '0';
-    decode_memory_rs1_dependency <= (memory_rd_we and memory_valid) when decode_rs1_adr = memory_rd_adr else '0';
-    decode_memory_rs2_dependency <= (memory_rd_we and memory_valid) when decode_rs2_adr = memory_rd_adr else '0';
+    decode_memory_rs1_dependency <= 
+        (memory_rd_we and memory_valid) when decode_rs1_adr = memory_rd_adr and G_MEMORY_BYPASS = FALSE else 
+        (memory_rd_we and memory_valid) when decode_rs1_adr = memory_rd_adr and memory_opcode.load = '1' and G_MEMORY_BYPASS = TRUE else 
+        '0';
+    decode_memory_rs2_dependency <= 
+        (memory_rd_we and memory_valid) when decode_rs2_adr = memory_rd_adr and G_MEMORY_BYPASS = FALSE else
+        (memory_rd_we and memory_valid) when decode_rs2_adr = memory_rd_adr and memory_opcode.load = '1' and G_MEMORY_BYPASS = TRUE else
+        '0';
 
     decode_rs1_dependency <= decode_op_use_rs1 when decode_rs1_zero = '0' and (decode_execute_rs1_dependency or decode_memory_rs1_dependency) = '1' else '0';
     decode_rs2_dependency <= decode_op_use_rs2 when decode_rs2_zero = '0' and (decode_execute_rs2_dependency or decode_memory_rs2_dependency) = '1' else '0';
 
-    fetch_stall <= (decode_rs1_dependency or decode_rs2_dependency or memory_stall) and not fetch_load;
-    decode_stall <= (decode_rs1_dependency or decode_rs2_dependency or memory_stall);
+    fetch_stall <= decode_stall and not fetch_load;
+    decode_stall <= decode_rs1_dependency or decode_rs2_dependency or execute_stall or control_multicycle_op;
     execute_stall <= memory_stall;
     memory_stall <= ((memory_mem_write or memory_mem_read) and memory_valid and not data_cmd_rdy_i) or not execute_shift_ready;
     writeback_stall <= '0';
     
     prefetch_flush <= fetch_load;
     decode_flush <= fetch_load;
-    execute_flush <= decode_rs1_dependency or decode_rs2_dependency or fetch_load;
+    execute_flush <= decode_rs1_dependency or decode_rs2_dependency or fetch_load or control_multicycle_op;
     memory_flush <= fetch_load;
     writeback_flush <= '0';
 
-    process (clk_i, arst_i)
+    execute_shift_flush <= fetch_load;
+    control_multicycle_op <= '1' when (execute_shift_start and execute_shift_ready) = '1' and G_FULL_BARREL_SHIFTER = FALSE else '0';
+
+-- control-forward
+    control_memory_forward_dat <= writeback_alu_data;
+
+    control_memory_forward_rs1 <= '1' when execute_rs1_adr = writeback_rd_adr and (execute_op_use_rs1 and writeback_rd_we and writeback_valid) = '1' and G_MEMORY_BYPASS = TRUE else '0';
+    control_memory_forward_rs2 <= '1' when execute_rs2_adr = writeback_rd_adr and (execute_op_use_rs2 and writeback_rd_we and writeback_valid) = '1' and G_MEMORY_BYPASS = TRUE else '0';
+
+    process (clk_i)
     begin
-        if arst_i = '1' then
-            d_decode_flush <= '0';
-        elsif rising_edge(clk_i) then
-            d_decode_flush <= decode_flush;
+        if rising_edge(clk_i) then
+            if execute_en = '1' then
+                execute_op_use_rs1 <= decode_op_use_rs1 and not decode_rs1_zero;
+                execute_op_use_rs2 <= decode_op_use_rs2 and not decode_rs2_zero;
+            end if;
         end if;
     end process;
 
