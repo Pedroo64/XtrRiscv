@@ -102,10 +102,12 @@ architecture rtl of cpu is
     signal execute_op_use_rs1, execute_op_use_rs2 : std_logic;
     signal decode_execute_rs1_dependency, decode_execute_rs2_dependency : std_logic;
     signal decode_memory_rs1_dependency, decode_memory_rs2_dependency : std_logic;
+    signal decode_writeback_rs1_dependency, decode_writeback_rs2_dependency : std_logic;
     signal decode_rs1_dependency, decode_rs2_dependency : std_logic;
     signal control_multicycle_op : std_logic;
     signal control_memory_forward_rs1, control_memory_forward_rs2 : std_logic;
-    signal control_memory_forward_dat : std_logic_vector(31 downto 0);
+    signal control_writeback_forward_rs1, control_writeback_forward_rs2 : std_logic := '0';
+    signal control_memory_forward_dat, control_writeback_forward_dat : std_logic_vector(31 downto 0);
 -- register file
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_dat, regfile_rs2_dat : std_logic_vector(31 downto 0);
@@ -285,9 +287,11 @@ begin
 
     execute_rs1_dat <= 
         control_memory_forward_dat when control_memory_forward_rs1 = '1' else
+        control_writeback_forward_dat when control_writeback_forward_rs1 = '1' else
         regfile_rs1_dat;
     execute_rs2_dat <= 
         control_memory_forward_dat when control_memory_forward_rs2 = '1' else
+        control_writeback_forward_dat when control_writeback_forward_rs2 = '1' else
         regfile_rs2_dat;
 
     execute_rd_we <= execute_opcode.reg_reg or execute_opcode.load or execute_opcode.reg_imm or execute_opcode.sys or execute_opcode.jalr or execute_opcode.lui or execute_opcode.auipc or execute_opcode.jal;
@@ -586,9 +590,15 @@ begin
         (memory_rd_we and memory_valid) when decode_rs2_adr = memory_rd_adr and G_MEMORY_BYPASS = FALSE else
         (memory_rd_we and memory_valid) when decode_rs2_adr = memory_rd_adr and memory_opcode.load = '1' and G_MEMORY_BYPASS = TRUE else
         '0';
+    decode_writeback_rs1_dependency <= 
+        (writeback_rd_we and writeback_valid) when decode_rs1_adr = writeback_rd_adr and G_WRITEBACK_BYPASS = FALSE else
+        '0';
+    decode_writeback_rs2_dependency <= 
+        (writeback_rd_we and writeback_valid) when decode_rs2_adr = writeback_rd_adr and G_WRITEBACK_BYPASS = FALSE else
+        '0';
 
-    decode_rs1_dependency <= decode_op_use_rs1 when decode_rs1_zero = '0' and (decode_execute_rs1_dependency or decode_memory_rs1_dependency) = '1' else '0';
-    decode_rs2_dependency <= decode_op_use_rs2 when decode_rs2_zero = '0' and (decode_execute_rs2_dependency or decode_memory_rs2_dependency) = '1' else '0';
+    decode_rs1_dependency <= decode_op_use_rs1 when decode_rs1_zero = '0' and (decode_execute_rs1_dependency or decode_memory_rs1_dependency or decode_writeback_rs1_dependency) = '1' else '0';
+    decode_rs2_dependency <= decode_op_use_rs2 when decode_rs2_zero = '0' and (decode_execute_rs2_dependency or decode_memory_rs2_dependency or decode_writeback_rs2_dependency) = '1' else '0';
 
     fetch_stall <= decode_stall and not fetch_load;
     decode_stall <= decode_rs1_dependency or decode_rs2_dependency or execute_stall or control_multicycle_op;
@@ -620,6 +630,24 @@ begin
             end if;
         end if;
     end process;
+
+gen_writeback_forward : if G_WRITEBACK_BYPASS = TRUE generate
+    signal forward_valid : std_logic;
+    signal forward_rd_adr : std_logic_vector(4 downto 0);
+    signal forward_rd_dat : std_logic_vector(31 downto 0);
+begin
+    control_writeback_forward_dat <= forward_rd_dat;
+    control_writeback_forward_rs1 <= '1' when execute_rs1_adr = forward_rd_adr and (execute_op_use_rs1 and forward_valid) = '1' else '0';
+    control_writeback_forward_rs2 <= '1' when execute_rs2_adr = forward_rd_adr and (execute_op_use_rs2 and forward_valid) = '1' else '0';
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            forward_valid <= writeback_valid and writeback_rd_we;
+            forward_rd_adr <= writeback_rd_adr;
+            forward_rd_dat <= writeback_rd_dat;
+        end if;
+    end process;
+end generate;
 
 -- interrupt handler
     u_interrupt_handler : entity work.interrupt_handler

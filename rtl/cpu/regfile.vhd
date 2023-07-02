@@ -31,19 +31,9 @@ begin
         if rising_edge(clk_i) then
             if rs1_en_i = '1' then
                 rs1_dat <= reg(to_integer(unsigned(rs1_adr_i)));
-                if we = '1' then
-                    if rs1_adr_i = rd_adr_i then
-                        rs1_dat <= rd_dat_i;
-                    end if;
-                end if;
             end if;
             if rs2_en_i = '1' then
                 rs2_dat <= reg(to_integer(unsigned(rs2_adr_i)));
-                if we = '1' then
-                    if rs2_adr_i = rd_adr_i then
-                        rs2_dat <= rd_dat_i;
-                    end if;
-                end if;
             end if;
             if we = '1' then
                 reg(to_integer(unsigned(rd_adr_i))) <= rd_dat_i;
