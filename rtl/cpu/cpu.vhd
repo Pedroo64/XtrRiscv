@@ -105,7 +105,7 @@ architecture rtl of cpu is
     signal decode_writeback_rs1_dependency, decode_writeback_rs2_dependency : std_logic;
     signal decode_rs1_dependency, decode_rs2_dependency : std_logic;
     signal control_multicycle_op : std_logic;
-    signal control_memory_forward_rs1, control_memory_forward_rs2 : std_logic;
+    signal control_memory_forward_rs1, control_memory_forward_rs2 : std_logic := '0';
     signal control_writeback_forward_rs1, control_writeback_forward_rs2 : std_logic := '0';
     signal control_memory_forward_dat, control_writeback_forward_dat : std_logic_vector(31 downto 0);
 -- register file
@@ -616,11 +616,6 @@ begin
     control_multicycle_op <= '1' when (execute_shift_start and execute_shift_ready) = '1' and G_FULL_BARREL_SHIFTER = FALSE else '0';
 
 -- control-forward
-    control_memory_forward_dat <= writeback_alu_data;
-
-    control_memory_forward_rs1 <= '1' when execute_rs1_adr = writeback_rd_adr and (execute_op_use_rs1 and writeback_rd_we and writeback_valid) = '1' and G_MEMORY_BYPASS = TRUE else '0';
-    control_memory_forward_rs2 <= '1' when execute_rs2_adr = writeback_rd_adr and (execute_op_use_rs2 and writeback_rd_we and writeback_valid) = '1' and G_MEMORY_BYPASS = TRUE else '0';
-
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -630,6 +625,19 @@ begin
             end if;
         end if;
     end process;
+
+gen_memory_forward : if G_MEMORY_BYPASS = TRUE generate
+    signal forward_valid : std_logic;
+    signal forward_rd_adr : std_logic_vector(4 downto 0);
+    signal forward_rd_dat : std_logic_vector(31 downto 0);
+begin
+    forward_valid <= writeback_rd_we and writeback_valid;
+    forward_rd_adr <= writeback_rd_adr;
+    forward_rd_dat <= writeback_alu_data;
+    control_memory_forward_dat <= writeback_alu_data;
+    control_memory_forward_rs1 <= '1' when execute_rs1_adr = forward_rd_adr and (execute_op_use_rs1 and forward_valid) = '1' else '0';
+    control_memory_forward_rs2 <= '1' when execute_rs2_adr = forward_rd_adr and (execute_op_use_rs2 and forward_valid) = '1' else '0';
+end generate;
 
 gen_writeback_forward : if G_WRITEBACK_BYPASS = TRUE generate
     signal forward_valid : std_logic;
