@@ -12,6 +12,8 @@ entity xtr_soc is
         G_UART : integer range 0 to 4 := 4;
         G_BOOT_TRAP : boolean := false;
         G_CPU_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_CPU_EXECUTE_BYPASS : boolean := FALSE;
+        G_CPU_MEMORY_BYPASS : boolean := FALSE;
         G_CPU_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE
     );
@@ -53,6 +55,8 @@ begin
     u_xtr_cpu : entity work.xtr_cpu
         generic map (
             G_BOOT_ADDRESS => G_CPU_BOOT_ADDRESS,
+            G_EXECUTE_BYPASS => G_CPU_EXECUTE_BYPASS,
+            G_MEMORY_BYPASS => G_CPU_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS,
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
         )

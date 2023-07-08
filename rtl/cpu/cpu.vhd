@@ -7,6 +7,7 @@ use work.rv32i_pkg.all;
 entity cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE
@@ -63,7 +64,7 @@ architecture rtl of cpu is
     signal execute_alu_logic_op : std_logic_vector(1 downto 0);
     signal execute_alu_a, execute_alu_b : std_logic_vector(31 downto 0);
     signal execute_alu_arith : std_logic_vector(32 downto 0);
-    signal execute_alu_logic : std_logic_vector(31 downto 0);
+    signal execute_alu_logic, execute_alu_data : std_logic_vector(31 downto 0);
     signal execute_alu_lt : std_logic;
     signal execute_alu_address_a, execute_alu_address_b, execute_alu_address_r : std_logic_vector(31 downto 0);
     signal execute_ecall, execute_ebreak, execute_mret : std_logic;
@@ -81,7 +82,7 @@ architecture rtl of cpu is
     signal memory_pc, memory_branch_pc : std_logic_vector(31 downto 0);
     signal memory_branch, memory_branching : std_logic;
     signal memory_rd_adr : std_logic_vector(4 downto 0);
-    signal memory_alu_arith, memory_alu_logic, memory_alu_address, memory_alu_data, memory_rs2_dat, memory_rd_dat : std_logic_vector(31 downto 0);
+    signal memory_alu_address, memory_alu_data, memory_rs2_dat, memory_rd_dat : std_logic_vector(31 downto 0);
     signal memory_alu_eq, memory_alu_lt : std_logic;
     signal memory_ecall, memory_ebreak, memory_mret : std_logic;
 -- writeback
@@ -105,9 +106,10 @@ architecture rtl of cpu is
     signal decode_writeback_rs1_dependency, decode_writeback_rs2_dependency : std_logic;
     signal decode_rs1_dependency, decode_rs2_dependency : std_logic;
     signal control_multicycle_op : std_logic;
+    signal control_execute_forward_rs1, control_execute_forward_rs2 : std_logic := '0';
     signal control_memory_forward_rs1, control_memory_forward_rs2 : std_logic := '0';
     signal control_writeback_forward_rs1, control_writeback_forward_rs2 : std_logic := '0';
-    signal control_memory_forward_dat, control_writeback_forward_dat : std_logic_vector(31 downto 0);
+    signal control_execute_forward_dat, control_memory_forward_dat, control_writeback_forward_dat : std_logic_vector(31 downto 0);
 -- register file
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_dat, regfile_rs2_dat : std_logic_vector(31 downto 0);
@@ -286,10 +288,12 @@ begin
     end process;
 
     execute_rs1_dat <= 
+        control_execute_forward_dat when control_execute_forward_rs1 = '1' else
         control_memory_forward_dat when control_memory_forward_rs1 = '1' else
         control_writeback_forward_dat when control_writeback_forward_rs1 = '1' else
         regfile_rs1_dat;
     execute_rs2_dat <= 
+        control_execute_forward_dat when control_execute_forward_rs2 = '1' else
         control_memory_forward_dat when control_memory_forward_rs2 = '1' else
         control_writeback_forward_dat when control_writeback_forward_rs2 = '1' else
         regfile_rs2_dat;
@@ -327,6 +331,9 @@ begin
     
     execute_alu_lt <= execute_alu_arith(execute_alu_arith'left);
 
+    execute_alu_data <= 
+                    execute_alu_logic when ((execute_opcode.reg_imm or execute_opcode.reg_reg) = '1' and (execute_funct3 = RV32I_FN3_XOR or execute_funct3 = RV32I_FN3_OR or execute_funct3 = RV32I_FN3_AND)) else
+                    execute_alu_arith(31 downto 0); 
     execute_alu_address_a <= execute_pc when (execute_opcode.jal or execute_opcode.branch) = '1' else execute_rs1_dat;
     execute_alu_address_b <= execute_imm;
     execute_alu_address_r <= std_logic_vector(unsigned(execute_alu_address_a) + unsigned(execute_alu_address_b));
@@ -392,8 +399,7 @@ begin
                 memory_rd_adr <= execute_rd_adr;
                 memory_funct3 <= execute_funct3;
                 memory_funct7 <= execute_funct7;
-                memory_alu_arith <= execute_alu_arith(execute_alu_arith'left - 1 downto 0);
-                memory_alu_logic <= execute_alu_logic;
+                memory_alu_data <= execute_alu_data;
                 memory_alu_lt <= execute_alu_lt;
                 memory_alu_address <= execute_alu_address_r;
                 memory_rs2_dat <= execute_rs2_dat;
@@ -416,7 +422,7 @@ begin
         end if;
     end process;
 
-    memory_alu_eq <= '1' when memory_alu_arith(31 downto 0) = (0 to 31 => '0') else '0';
+    memory_alu_eq <= '1' when memory_alu_data = (0 to 31 => '0') else '0';
 
     process (memory_opcode, memory_alu_eq, memory_alu_lt, memory_funct3)
     begin
@@ -436,11 +442,11 @@ begin
     end process;
     memory_branch_pc <= memory_alu_address;
 
-    memory_alu_data <= 
-        memory_alu_logic when ((memory_opcode.reg_imm or memory_opcode.reg_reg) = '1' and (memory_funct3 = RV32I_FN3_XOR or memory_funct3 = RV32I_FN3_OR or memory_funct3 = RV32I_FN3_AND)) else
+    memory_rd_dat <= 
+        csr_read_data when memory_opcode.sys = '1' else
         execute_shift_result when (memory_opcode.reg_imm or memory_opcode.reg_reg) = '1' and (memory_funct3 = RV32I_FN3_SL or memory_funct3 = RV32I_FN3_SR) else
         (1 to 31 => '0') & memory_alu_lt when (memory_opcode.reg_imm or memory_opcode.reg_reg) = '1' and (memory_funct3 = RV32I_FN3_SLT or memory_funct3 = RV32I_FN3_SLTU) else
-        memory_alu_arith(31 downto 0);
+        memory_alu_data;
 
     data_cmd_adr_o <= memory_alu_address;
     data_cmd_dat_o <= 
@@ -533,7 +539,7 @@ begin
             end if;
         end if;
     end process;
-    memory_rd_dat <= csr_read_data when memory_opcode.sys = '1' else memory_alu_data;
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -596,6 +602,14 @@ begin
     decode_op_use_rs2 <= decode_opcode.reg_reg or decode_opcode.store or decode_opcode.branch;
     decode_rs1_zero <= '1' when unsigned(decode_rs1_adr) = 0 else '0';
     decode_rs2_zero <= '1' when unsigned(decode_rs2_adr) = 0 else '0';
+    decode_execute_rs1_dependency <= 
+        (execute_rd_we and execute_valid) when decode_rs1_adr = execute_rd_adr and G_EXECUTE_BYPASS = FALSE else
+        (execute_rd_we and execute_valid) when decode_rs1_adr = execute_rd_adr and execute_opcode.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        '0';
+    decode_execute_rs2_dependency <= 
+        (execute_rd_we and execute_valid) when decode_rs2_adr = execute_rd_adr and G_EXECUTE_BYPASS = FALSE else 
+        (execute_rd_we and execute_valid) when decode_rs2_adr = execute_rd_adr and execute_opcode.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        '0';
     decode_memory_rs1_dependency <= 
         (memory_rd_we and memory_valid) when decode_rs1_adr = memory_rd_adr and G_MEMORY_BYPASS = FALSE else 
         (memory_rd_we and memory_valid) when decode_rs1_adr = memory_rd_adr and memory_opcode.load = '1' and G_MEMORY_BYPASS = TRUE else 
@@ -639,6 +653,19 @@ begin
             end if;
         end if;
     end process;
+
+gen_execute_forward : if G_EXECUTE_BYPASS = TRUE generate
+    signal forward_valid : std_logic;
+    signal forward_rd_adr : std_logic_vector(4 downto 0);
+    signal forward_rd_dat : std_logic_vector(31 downto 0);
+begin
+    forward_valid <= memory_rd_we and memory_valid;
+    forward_rd_adr <= memory_rd_adr;
+    forward_rd_dat <= memory_rd_dat;
+    control_execute_forward_dat <= forward_rd_dat;
+    control_execute_forward_rs1 <= '1' when execute_rs1_adr = forward_rd_adr and (execute_op_use_rs1 and forward_valid) = '1' else '0';
+    control_execute_forward_rs2 <= '1' when execute_rs2_adr = forward_rd_adr and (execute_op_use_rs2 and forward_valid) = '1' else '0';
+end generate;
 
 gen_memory_forward : if G_MEMORY_BYPASS = TRUE generate
     signal forward_valid : std_logic;
