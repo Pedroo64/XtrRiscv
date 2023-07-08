@@ -648,7 +648,7 @@ begin
     forward_valid <= writeback_rd_we and writeback_valid;
     forward_rd_adr <= writeback_rd_adr;
     forward_rd_dat <= writeback_alu_data;
-    control_memory_forward_dat <= writeback_alu_data;
+    control_memory_forward_dat <= forward_rd_dat;
     control_memory_forward_rs1 <= '1' when execute_rs1_adr = forward_rd_adr and (execute_op_use_rs1 and forward_valid) = '1' else '0';
     control_memory_forward_rs2 <= '1' when execute_rs2_adr = forward_rd_adr and (execute_op_use_rs2 and forward_valid) = '1' else '0';
 end generate;
