@@ -9,11 +9,12 @@ entity csr is
         arst_i : in std_logic;
         clk_i : in std_logic;
         srst_i : in std_logic;
-        enable_i : in std_logic;
-        funct3_i : in std_logic_vector(2 downto 0);
-        address_i : in std_logic_vector(11 downto 0);
-        data_i : in std_logic_vector(31 downto 0);
-        data_o : out std_logic_vector(31 downto 0);
+        write_enable_i : in std_logic;
+        write_address_i : in std_logic_vector(11 downto 0);
+        write_data_i : in std_logic_vector(31 downto 0);
+        read_enable_i : in std_logic;
+        read_address_i : in std_logic_vector(11 downto 0);
+        read_data_o : out std_logic_vector(31 downto 0);
         exception_pc_i : in std_logic_vector(31 downto 0);
         exception_taken_i : in std_logic;
         exception_exit_i : in std_logic;
@@ -39,9 +40,9 @@ architecture rtl of csr is
     signal mcause : std_logic_vector(31 downto 0) := (others => '0');
     signal mtval : std_logic_vector(31 downto 0) := (others => '0');
 begin
-    we <= enable_i;
+    we <= write_enable_i;
 
-    with address_i select
+    with read_address_i select
         csr_read <= 
             mscratch        when CSR_MSCRATCH,
             mie             when CSR_MSTATUS,
@@ -52,30 +53,21 @@ begin
             mtval           when CSR_MTVAL,
             (others => '0') when others;
 
-    block_alu : block
-        signal alu_a, alu_b, alu_y : std_logic_vector(31 downto 0);
-    begin
-        alu_a <= data_i;
-        alu_b <= csr_read;
-        with funct3_i(1 downto 0) select
-            alu_y <= 
-                alu_a or alu_b when "10",
-                alu_a and (not alu_b) when "11",
-                alu_a when others;
-        csr_write <= alu_y;
-    end block;
+    csr_write <= write_data_i;
 
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            data_o <= csr_read;
+            if read_enable_i = '1' then
+                read_data_o <= csr_read;
+            end if;
         end if;
     end process;
 
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if address_i = CSR_MSCRATCH and we = '1' then
+            if write_address_i = CSR_MSCRATCH and we = '1' then
                 mscratch <= csr_write;
             end if;
         end if;
@@ -87,10 +79,10 @@ begin
             mtvec <= (others => '0');
             mie <= (others => '0');
         elsif rising_edge(clk_i) then
-            if address_i = CSR_MTVEC and we = '1' then
+            if write_address_i = CSR_MTVEC and we = '1' then
                 mtvec <= csr_write;
             end if;
-            if address_i = CSR_MIE and we = '1' then
+            if write_address_i = CSR_MIE and we = '1' then
                 mie <= csr_write;
             end if;
         end if;
@@ -109,17 +101,17 @@ begin
                 elsif cause_timer_irq_i = '1' then
                     mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
                 end if;
-            elsif address_i = CSR_MCAUSE and we = '1' then
+            elsif write_address_i = CSR_MCAUSE and we = '1' then
                 mcause <= csr_write;
             end if;
             if exception_taken_i = '1' then
                 mepc <= exception_pc_i;
-            elsif address_i = CSR_MEPC and we = '1' then
+            elsif write_address_i = CSR_MEPC and we = '1' then
                 mepc <= csr_write;
             end if;
             if exception_taken_i = '1' and ebreak_i = '1' then
                 mtval <= exception_pc_i;
-            elsif address_i = CSR_MTVAL and we = '1' then
+            elsif write_address_i = CSR_MTVAL and we = '1' then
                 mtval <= csr_write;
             end if;
 
@@ -146,7 +138,7 @@ begin
                     mstatus(3) <= mstatus(7);
                     mstatus(7) <= '1';
                     mstatus(12 downto 11) <= "11";
-                elsif address_i = CSR_MSTATUS and we = '1' then
+                elsif write_address_i = CSR_MSTATUS and we = '1' then
                     mstatus <= csr_write;
                 end if;
             end if;
@@ -157,6 +149,5 @@ begin
     mie_o <= mie;
     mtvec_o <= mtvec;
     mepc_o <= mepc;
-    
-    
+
 end architecture rtl;

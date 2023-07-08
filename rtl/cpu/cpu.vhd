@@ -81,7 +81,7 @@ architecture rtl of cpu is
     signal memory_pc, memory_branch_pc : std_logic_vector(31 downto 0);
     signal memory_branch, memory_branching : std_logic;
     signal memory_rd_adr : std_logic_vector(4 downto 0);
-    signal memory_alu_arith, memory_alu_logic, memory_alu_address, memory_alu_data, memory_rs2_dat : std_logic_vector(31 downto 0);
+    signal memory_alu_arith, memory_alu_logic, memory_alu_address, memory_alu_data, memory_rs2_dat, memory_rd_dat : std_logic_vector(31 downto 0);
     signal memory_alu_eq, memory_alu_lt : std_logic;
     signal memory_ecall, memory_ebreak, memory_mret : std_logic;
 -- writeback
@@ -112,8 +112,8 @@ architecture rtl of cpu is
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_dat, regfile_rs2_dat : std_logic_vector(31 downto 0);
 -- CSR
-    signal csr_enable : std_logic;
-    signal csr_address : std_logic_vector(11 downto 0);
+    signal csr_write_en, csr_read_en : std_logic;
+    signal csr_write_address, csr_read_address : std_logic_vector(11 downto 0);
     signal csr_write_data, csr_read_data : std_logic_vector(31 downto 0);
     signal csr_ecall, csr_ebreak : std_logic;
     signal csr_exeception_pc, csr_exeception_entry_vector, csr_exeception_exit_vector : std_logic_vector(31 downto 0);
@@ -451,8 +451,11 @@ begin
     data_cmd_we_o <= memory_mem_write and memory_valid;
     data_cmd_siz_o <= memory_funct3(1 downto 0);
 
+-- execute-csr
+    csr_read_en <= execute_valid when execute_opcode.sys = '1' else '0';
+    csr_read_address <= execute_imm(11 downto 0);
 -- memory-csr
-    csr_enable <= (memory_en and memory_valid) when memory_opcode.sys = '1' and memory_funct3 /= "000" else '0';
+    csr_write_en <= (memory_en and memory_valid) when memory_opcode.sys = '1' and memory_funct3 /= "000" else '0';
     csr_execption_entry <= (memory_en and memory_valid and (memory_ecall or memory_ebreak)) or interrupt_taken;
     csr_exeception_pc <= 
         memory_pc when (memory_ecall or memory_ebreak) = '1' else
@@ -463,30 +466,41 @@ begin
     csr_ecall <= memory_ecall;
     csr_ebreak <= memory_ebreak;
 
-    process (clk_i)
+    block_csr_alu : block
+        signal csr_alu_op_a : std_logic_vector(31 downto 0);
     begin
-        if rising_edge(clk_i) then
-            if memory_en = '1' then
-                csr_address <= execute_imm(11 downto 0);
-                if execute_funct3(2) = '1' then
-                    csr_write_data <= (5 to 31 => '0') & execute_rs1_adr;
-                else
-                    csr_write_data <= execute_rs1_dat;
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if memory_en = '1' then
+                    csr_write_address <= execute_imm(11 downto 0);
+                    if execute_funct3(2) = '1' then
+                        csr_alu_op_a <= (5 to 31 => '0') & execute_rs1_adr;
+                    else
+                        csr_alu_op_a <= execute_rs1_dat;
+                    end if;
                 end if;
             end if;
-        end if;
-    end process;
+        end process;
+
+        with memory_funct3(1 downto 0) select
+            csr_write_data <= 
+                csr_alu_op_a or csr_read_data when "10",
+                csr_alu_op_a and (not csr_read_data) when "11",
+                csr_alu_op_a when others;
+    end block;
 
     u_csr : entity work.csr
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
             srst_i => srst_i,
-            enable_i => csr_enable,
-            funct3_i => memory_funct3,
-            address_i => csr_address,
-            data_i => csr_write_data,
-            data_o => csr_read_data,
+            write_enable_i => csr_write_en,
+            write_address_i => csr_write_address,
+            write_data_i => csr_write_data,
+            read_enable_i => csr_read_en,
+            read_address_i => csr_read_address,
+            read_data_o => csr_read_data,
             exception_pc_i => csr_exeception_pc,
             exception_taken_i => csr_execption_entry,
             exception_exit_i => csr_execption_exit,
@@ -519,6 +533,7 @@ begin
             end if;
         end if;
     end process;
+    memory_rd_dat <= csr_read_data when memory_opcode.sys = '1' else memory_alu_data;
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -527,7 +542,7 @@ begin
                 writeback_mem_read <= memory_mem_read;
                 writeback_opcode <= memory_opcode;
                 writeback_rd_adr <= memory_rd_adr;
-                writeback_alu_data <= memory_alu_data;
+                writeback_alu_data <= memory_rd_dat;
                 writeback_funct3 <= memory_funct3;
                 writeback_mem_adr <= memory_alu_address(1 downto 0);
             end if;
@@ -553,7 +568,6 @@ begin
 
     writeback_rd_dat <= 
         writeback_mem_data when writeback_mem_read = '1' else
-        csr_read_data when writeback_opcode.sys = '1' else 
         writeback_alu_data;
 
 -- regfile
@@ -602,7 +616,7 @@ begin
 
     fetch_stall <= decode_stall and not fetch_load;
     decode_stall <= decode_rs1_dependency or decode_rs2_dependency or execute_stall or control_multicycle_op;
-    execute_stall <= memory_stall;
+    execute_stall <= memory_stall or (csr_write_en and csr_read_en);
     memory_stall <= ((memory_mem_write or memory_mem_read) and memory_valid and not data_cmd_rdy_i) or not execute_shift_ready;
     writeback_stall <= '0';
     
