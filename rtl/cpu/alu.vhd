@@ -28,6 +28,7 @@ begin
         logic_result_o <= 
             a_i and b_i when "11",
             a_i or b_i when "10",
-            a_i xor b_i when others;
+            a_i xor b_i when "00",
+            (others => '-') when others;
 
 end architecture rtl;

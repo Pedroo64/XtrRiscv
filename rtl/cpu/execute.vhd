@@ -11,334 +11,178 @@ entity execute is
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
-        srst_i : in std_logic;
+        flush_i : in std_logic;
         enable_i : in std_logic;
         valid_i : in std_logic;
-        pc_i : in std_logic_vector(31 downto 0);
+        instr_i : in std_logic_vector(31 downto 0);
         opcode_i : in opcode_t;
-        immediate_i : in std_logic_vector(31 downto 0);
         rs1_adr_i : in std_logic_vector(4 downto 0);
-        rs1_dat_i : in std_logic_vector(31 downto 0);
         rs2_adr_i : in std_logic_vector(4 downto 0);
-        rs2_dat_i : in std_logic_vector(31 downto 0);
         rd_adr_i : in std_logic_vector(4 downto 0);
         rd_we_i : in std_logic;
+        immediate_i : in std_logic_vector(31 downto 0);
         funct3_i : in std_logic_vector(2 downto 0);
         funct7_i : in std_logic_vector(6 downto 0);
+        rs1_dat_i : in std_logic_vector(31 downto 0);
+        rs2_dat_i : in std_logic_vector(31 downto 0);
+        valid_o : out std_logic;
+        opcode_o : out opcode_t;
         rd_adr_o : out std_logic_vector(4 downto 0);
-        rd_dat_o : out std_logic_vector(31 downto 0);
         rd_we_o : out std_logic;
+        alu_result_a_o : out std_logic_vector(31 downto 0);
+        alu_result_b_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
-        funct7_o : out std_logic_vector(6 downto 0);
-        writeback_valid_o : out std_logic;
-        writeback_ready_i : in std_logic;
-        pc_o : out std_logic_vector(31 downto 0);
-        load_pc_o : out std_logic;
-        memory_rd_adr_o : out std_logic_vector(4 downto 0);
-        memory_valid_o : out std_logic;
-        memory_address_o : out std_logic_vector(31 downto 0);
-        memory_data_o : out std_logic_vector(31 downto 0);
-        memory_we_o : out std_logic;
-        memory_size_o : out std_logic_vector(2 downto 0);
-        memory_ready_i : in std_logic;
-        csr_rd_adr_o : out std_logic_vector(4 downto 0);
-        csr_valid_o : out std_logic;
-        csr_address_o : out std_logic_vector(11 downto 0);
-        csr_data_o : out std_logic_vector(31 downto 0);
-        csr_ready_i : in std_logic;
-        exception_valid_i : in std_logic;
-        trap_vector_i : in std_logic_vector(31 downto 0);
-        exception_pc_i : in std_logic_vector(31 downto 0);
-        exception_pc_o : out std_logic_vector(31 downto 0);
-        exception_taken_o : out std_logic;
-        exception_exit_o : out std_logic;
-        mret_o : out std_logic;
-        ecall_o : out std_logic;
-        ebreak_o : out std_logic;
+        shifter_result_o : out std_logic_vector(31 downto 0);
+        target_pc_i : in std_logic_vector(31 downto 0);
+        load_pc_i : in std_logic;
+        current_pc_o : out std_logic_vector(31 downto 0);
+        multicycle_o : out std_logic;
         ready_o : out std_logic
     );
 end entity execute;
 
 architecture rtl of execute is
-    signal enable : std_logic;
-    signal opcode : opcode_t;
-    signal comb_writeback_valid, comb_memory_valid, comb_csr_valid : std_logic;
-    signal writeback_valid, memory_valid, csr_valid : std_logic;
-    signal ready : std_logic;
+    signal valid : std_logic;
+    signal rs1_adr, rs2_adr, rd_adr : std_logic_vector(4 downto 0);
+    signal rd_we : std_logic;
+    signal immediate : std_logic_vector(31 downto 0);
     signal funct3 : std_logic_vector(2 downto 0);
-    signal rd_adr : std_logic_vector(4 downto 0);
-    signal comb_ecall, comb_ebreak, comb_mret : std_logic;
-    signal branch, ecall, ebreak, mret : std_logic;
-    signal data : std_logic_vector(31 downto 0);
-    -- PC
-    signal last_pc, next_pc, branch_pc : std_logic_vector(31 downto 0);
-    signal load_pc : std_logic;
-    -- ALU
-    signal alu_arith_result, alu_logic_result, alu_arith_address : std_logic_vector(31 downto 0);
-    signal alu_lt, alu_eq : std_logic;
-    -- Shifter
-    signal shifter_data : std_logic_vector(31 downto 0);
-    signal shifter_ready, shifter_done : std_logic;
+    signal funct7 : std_logic_vector(6 downto 0);
+    signal alu_result_a, alu_result_b : std_logic_vector(31 downto 0);
+    signal opcode : opcode_t;
+-- PC
+    signal pc, pc_incr : std_logic_vector(31 downto 0);
+-- ALU
+    signal alu_arith, alu_signed : std_logic;
+    signal alu_logic : std_logic_vector(1 downto 0);
+    signal alu_a, alu_b : std_logic_vector(31 downto 0);
+    signal alu_arith_r : std_logic_vector(32 downto 0);
+    signal alu_logic_r : std_logic_vector(31 downto 0);
+-- SHIFTER
+    signal shifter_start, shifter_ready : std_logic;
+    signal shifter_shmt : std_logic_vector(4 downto 0);
+    signal shifter_type : std_logic_vector(1 downto 0);
+    signal shifter_data_in, shifter_data_out : std_logic_vector(31 downto 0);
+-- DEBUG
+    signal instr : std_logic_vector(31 downto 0);
 begin
-
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            enable <= enable_i;
+            if enable_i = '1' then
+                rs1_adr <= rs1_adr_i;
+                rs2_adr <= rs2_adr_i;
+                rd_adr <= rd_adr_i;
+                rd_we <= rd_we_i;
+                immediate <= immediate_i;
+                funct3 <= funct3_i;
+                funct7 <= funct7_i;
+                opcode <= opcode_i;
+                instr <= instr_i;
+            end if;
+        end if;
+    end process;
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            valid <= '0';
+        elsif rising_edge(clk_i) then
+            if enable_i = '1' then
+                if flush_i = '1' then
+                    valid <= '0';
+                else
+                    valid <= valid_i;
+                end if;
+            end if;       
+        end if;
+    end process;
+    valid_o <= valid;
+    opcode_o <= opcode;
+    rd_adr_o <= rd_adr;
+    rd_we_o <= rd_we;
+    alu_result_a_o <= alu_result_a;
+    alu_result_b_o <= alu_result_b;
+    funct3_o <= funct3;
+    current_pc_o <= pc;
+    ready_o <= shifter_ready;
+    multicycle_o <= valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';
+-- PC
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if enable_i = '1' then
+                if load_pc_i = '1' then
+                    pc <= target_pc_i;
+                elsif valid = '1' then
+                    pc <= pc_incr;
+                end if;
+            end if;
+        end if;
+    end process;
+    pc_incr <= std_logic_vector(unsigned(pc) + 4);
+-- ALU
+    u_alu : entity work.alu
+        port map (
+            a_i => alu_a,
+            b_i => alu_b,
+            signed_i => alu_signed,
+            arith_op_i => alu_arith,
+            logic_op_i => alu_logic,
+            arith_result_o => alu_arith_r,
+            logic_result_o => alu_logic_r
+        );
+    alu_a <= 
+        pc when (opcode.auipc or opcode.jal or opcode.branch) = '1' else
+        rs1_dat_i;
+
+    alu_b <= 
+        immediate when (opcode.reg_reg) = '0' else
+        rs2_dat_i;
+
+    alu_arith <= (opcode.reg_reg and funct7(5)) or (funct3(1) and (opcode.reg_reg or opcode.reg_imm)); -- SLT
+    alu_signed <= not funct3(0); -- SLT
+    alu_logic <= funct3(1 downto 0);
+
+    process (opcode, pc_incr, funct3, alu_logic_r, alu_arith_r, rs2_dat_i)
+    begin
+        if (opcode.jal or opcode.jalr or opcode.branch) = '1' then
+            alu_result_a <= pc_incr;
+            alu_result_b <= alu_arith_r(31 downto 0);
+        else
+            if (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(2)) = '1' then
+                alu_result_a <= alu_logic_r;
+            elsif (opcode.reg_reg or opcode.reg_imm) = '1' and (funct3(1)) = '1' then
+                alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+            else
+                alu_result_a <= alu_arith_r(31 downto 0);
+            end if;
+            alu_result_b <= rs2_dat_i;
         end if;
     end process;
 
-    block_alu_res : block
-        signal op_signed : std_logic;
-        signal op_a, op_b : std_logic_vector(31 downto 0);
-        signal arith_op : std_logic;
-        signal logic_op : std_logic_vector(1 downto 0);
-        signal arith_res : std_logic_vector(32 downto 0);
-        signal logic_res : std_logic_vector(31 downto 0);
-        signal comb_eq : std_logic;
-    begin
-        op_a <= 
-            pc_i when (opcode_i.auipc) = '1' else
-            rs1_dat_i;
-        op_b <= 
-            immediate_i when (opcode_i.lui or opcode_i.reg_imm or opcode_i.auipc) = '1' else
-            rs2_dat_i;
+-- SHIFTER
+    u_shifter : entity work.shifter
+    generic map (
+        G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
+    )
+    port map (
+        arst_i => arst_i,
+        clk_i => clk_i,
+        srst_i => '0',
+        shift_i => shifter_shmt,
+        type_i => shifter_type,
+        data_i => shifter_data_in,
+        start_i => shifter_start,
+        data_o => shifter_data_out,
+        done_o => open,
+        ready_o => shifter_ready
+    );
 
-        arith_op <= 
-            '1' when (funct7_i(5) = '1' and opcode_i.reg_reg = '1') or ((opcode_i.reg_reg = '1' or opcode_i.reg_imm = '1') and funct3_i(1) = '1') or (opcode_i.branch = '1') else
-            '0';
-
-        logic_op <= funct3_i(1 downto 0);
-
-        op_signed <= 
-            '1' when (opcode_i.branch = '1' and funct3_i(2 downto 1) = "10") or ((opcode_i.reg_imm or opcode_i.reg_reg) = '1' and funct3_i(1 downto 0) = "10") else
-            '0';
-
-        u_alu : entity work.alu
-            port map (
-                a_i => op_a,
-                b_i => op_b,
-                signed_i => op_signed,
-                arith_op_i => arith_op,
-                logic_op_i => logic_op,
-                arith_result_o => arith_res,
-                logic_result_o => logic_res
-            );
-        
-        comb_eq <= '1' when rs1_dat_i = rs2_dat_i else '0';
-
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-                if enable_i = '1' then
-                    alu_arith_result <= arith_res(31 downto 0);
-                    alu_logic_result <= logic_res;
-                    alu_eq <= comb_eq;
-                    alu_lt <= arith_res(32);
-                end if;
-            end if;
-        end process;
-
-    end block;
-
-    block_alu_address : block
-        signal op_a, op_b : std_logic_vector(31 downto 0);
-    begin
-        op_a <= 
-            pc_i when (opcode_i.jal or opcode_i.branch) = '1' else
-            rs1_dat_i;
-        op_b <= immediate_i;
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-                if enable_i = '1' then
-                    alu_arith_address <= std_logic_vector(unsigned(op_a) + unsigned(op_b));
-                end if;
-            end if;
-        end process;
-    end block;
-
-    block_shifter : block
-        signal shifter_start : std_logic;
-        signal shift_type : std_logic_vector(1 downto 0);
-        signal shift : std_logic_vector(4 downto 0);
-    begin
-        shifter_start <= 
-            enable_i when (opcode_i.reg_imm or opcode_i.reg_reg) = '1' and (funct3_i = RV32I_FN3_SL or funct3_i = RV32I_FN3_SR) else
-            '0';
-
-        shift_type <= 
-            "10" when funct3_i = RV32I_FN3_SR and funct7_i(5) = '0' else
-            "11" when funct3_i = RV32I_FN3_SR and funct7_i(5) = '1' else
-            "00";
-        shift <= 
-            immediate_i(4 downto 0) when opcode_i.reg_imm = '1' else
-            rs2_dat_i(4 downto 0);
-        
-        u_shifter : entity work.shifter
-            generic map (
-                G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
-            )
-            port map (
-                arst_i => arst_i,
-                clk_i => clk_i,
-                srst_i => srst_i,
-                shift_i => shift,
-                type_i => shift_type,
-                data_i => rs1_dat_i,
-                start_i => shifter_start,
-                data_o => shifter_data,
-                done_o => shifter_done,
-                ready_o => shifter_ready,
-                ready_i => writeback_ready_i
-            );
-    end block;
-
-    block_branch : block
-    begin 
-        process (opcode, funct3, alu_eq, alu_lt)
-        begin
-            if (opcode.jal or opcode.jalr) = '1' then
-                branch <= '1';
-            elsif opcode.branch = '1' then
-                case funct3 is
-                    when RV32I_FN3_BEQ =>
-                        branch <= alu_eq;
-                    when RV32I_FN3_BNE =>
-                        branch <= not alu_eq;
-                    when RV32I_FN3_BLT | RV32I_FN3_BLTU =>
-                        branch <= alu_lt;
-                    when RV32I_FN3_BGE | RV32I_FN3_BGEU =>
-                        branch <= not alu_lt;
-                    when others =>
-                        branch <= '0';
-                end case;
-            else
-                branch <= '0';
-            end if;
-        end process;
-    end block;
-
-    comb_ecall <= '1' when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "00" else '0';
-    comb_ebreak <= '1' when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "01" else '0';
-    comb_mret <= '1' when opcode_i.sys = '1' and funct3_i = RV32I_FN3_TRAP and immediate_i(1 downto 0) = "10" else '0';
-
-    comb_writeback_valid <= 
-        '0' when ((opcode_i.reg_imm or opcode_i.reg_reg) = '1' and (funct3_i = RV32I_FN3_SL or funct3_i = RV32I_FN3_SR)) or ((opcode_i.load or opcode_i.store) = '1') or opcode_i.sys = '1' else
-        '1';
-
-    comb_memory_valid <= 
-        '1' when (opcode_i.load or opcode_i.store) = '1' else
+    shifter_shmt <= alu_b(4 downto 0);
+    shifter_type <= funct3(2) & funct7(5);
+    shifter_data_in <= rs1_dat_i;
+    shifter_start <= 
+        valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) else
         '0';
-
-    comb_csr_valid <= 
-        '1' when opcode_i.sys = '1' and unsigned(funct3_i) /= 0 else
-        '0';
-
-    block_general : block
-    begin
-        process (clk_i, arst_i)
-        begin
-            if arst_i = '1' then
-                writeback_valid <= '0';
-                memory_valid <= '0';
-                csr_valid <= '0';
-            elsif rising_edge(clk_i) then
-                if srst_i = '1' then
-                    writeback_valid <= '0';
-                    memory_valid <= '0';
-                    csr_valid <= '0';
-                else
-                    if enable_i = '1' then
-                        writeback_valid <= comb_writeback_valid;
-                        memory_valid <= comb_memory_valid;
-                        csr_valid <= comb_csr_valid;
-                    elsif ready = '1' then
-                        writeback_valid <= '0';
-                        memory_valid <= '0';
-                        csr_valid <= '0';
-                    end if;
-                end if;
-            end if;
-        end process;
-
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-                if enable_i = '1' then
-                    opcode <= opcode_i;
-                    rd_adr <= rd_adr_i;
-                    ecall <= comb_ecall;
-                    ebreak <= comb_ebreak;
-                    mret <= comb_mret;
-                    memory_data_o <= rs2_dat_i;
-                    memory_we_o <= opcode_i.store;
-                    funct3 <= funct3_i;
-                    csr_address_o <= immediate_i(11 downto 0);
-                    funct7_o <= funct7_i;
-                    if funct3_i(2) = '0' then
-                        csr_data_o <= rs1_dat_i;
-                    else
-                        csr_data_o <= (5 to 31 => '0') & rs1_adr_i;
-                    end if;
-                    last_pc <= pc_i;
-                    rd_we_o <= rd_we_i;
-                end if;
-            end if;
-        end process;
-
-        data <= 
-            alu_logic_result when ((opcode.reg_imm or opcode.reg_reg) and funct3(2)) = '1' else
-            (1 to 31 => '0') & alu_lt when (opcode.reg_reg = '1' or opcode.reg_imm = '1') and (funct3 = RV32I_FN3_SLT or funct3 = RV32I_FN3_SLTU) else
-            alu_arith_result;
-
-        branch_pc <= alu_arith_address;
-        next_pc <= std_logic_vector(unsigned(last_pc) + 4);
-
-        funct3_o <= funct3;
-        rd_adr_o <= rd_adr;
-        rd_dat_o <= 
-            shifter_data when shifter_done = '1' else
-            next_pc when (opcode.jal or opcode.jalr) = '1' else
-            data;
-        pc_o <= 
-            trap_vector_i when (ecall or ebreak or exception_valid_i) = '1' else
-            exception_pc_i when mret = '1' else 
-            branch_pc;
-
-        load_pc <= (ecall or ebreak or branch or mret) and enable;
-
-        load_pc_o <= load_pc or exception_valid_i;
-        memory_rd_adr_o <= rd_adr;
-        memory_address_o <= alu_arith_address;
-        memory_size_o <= funct3;
-        csr_rd_adr_o <= rd_adr;
-        ecall_o <= ecall;
-        ebreak_o <= ebreak;
-        mret_o <= mret;
-        exception_taken_o <= ecall or ebreak or exception_valid_i;
-        exception_exit_o <= mret;
-        exception_pc_o <= 
-            last_pc when (ecall or ebreak) = '1' else
-            branch_pc when branch = '1' else
-            next_pc;
-    end block;
-
-    ready <= 
-        '0' when shifter_ready = '0' or (writeback_valid = '1' and writeback_ready_i = '0') or (memory_valid = '1' and memory_ready_i = '0') or (csr_valid = '1' and csr_ready_i = '0') else
-        '1';
-
---    ready <= 
---        '0' when shifter_ready = '0' else
---        '0' when writeback_valid = '1' and writeback_ready_i = '0' else
---        '0' when memory_valid = '1' and memory_ready_i = '0' else
---        '0' when csr_valid = '1' and csr_ready_i = '0' else
---        '1';
-
-    ready_o <= ready;
-
-    writeback_valid_o <= writeback_valid or shifter_done;
-    memory_valid_o <= memory_valid;
-    csr_valid_o <= csr_valid;
-
+    shifter_result_o <= shifter_data_out;
 end architecture rtl;

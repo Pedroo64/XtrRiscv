@@ -1,6 +1,8 @@
 # Makefile
 INIT_FILE ?= "none"
 OUTPUT_FILE ?= "none"
+EXECUTE_BYPASS ?= false
+MEMORY_BYPASS ?= false
 WRITEBACK_BYPASS ?= false
 FULL_BARREL_SHIFTER ?= false
 ROOT_DIR =$(PWD)/../..
@@ -9,6 +11,7 @@ ROOT_DIR =$(PWD)/../..
 SIM ?= ghdl
 TOPLEVEL_LANG ?= vhdl
 
+VHDL_SOURCES += $(ROOT_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/rv32i_pkg.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/csr_def.vhd
@@ -22,6 +25,7 @@ VHDL_SOURCES += $(ROOT_DIR)/cpu/csr.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/regfile.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/control_unit.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/interrupt_handler.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/branch_unit.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/cpu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/utils/utils.vhd
 VHDL_SOURCES += $(ROOT_DIR)/utils/xtr_def.vhd
@@ -44,6 +48,8 @@ MODULE = main
 
 SIM_ARGS += -gG_INIT_FILE=$(INIT_FILE)
 SIM_ARGS += -gG_OUTPUT_FILE=$(OUTPUT_FILE)
+SIM_ARGS += -gG_EXECUTE_BYPASS=$(EXECUTE_BYPASS)
+SIM_ARGS += -gG_MEMORY_BYPASS=$(MEMORY_BYPASS)
 SIM_ARGS += -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS)
 SIM_ARGS += -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER)
 SIM_ARGS += --ieee-asserts=disable

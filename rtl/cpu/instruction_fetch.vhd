@@ -10,111 +10,65 @@ entity instruction_fecth is
         arst_i : in std_logic;
         clk_i : in std_logic;
         srst_i : in std_logic;
-        en_i : in std_logic;
+        flush_i : in std_logic;
+        enable_i : in std_logic;
         load_pc_i : in std_logic;
-        pc_i : in std_logic_vector(31 downto 0);
+        target_pc_i : in std_logic_vector(31 downto 0);
         cmd_adr_o : out std_logic_vector(31 downto 0);
-        cmd_vld_o : out std_logic; 
-        rsp_dat_i : in std_logic_vector(31 downto 0);
+        cmd_vld_o : out std_logic;
         cmd_rdy_i : in std_logic;
+        rsp_dat_i : in std_logic_vector(31 downto 0);
         rsp_vld_i : in std_logic;
-        pc_o : out std_logic_vector(31 downto 0);
+        valid_o : out std_logic;
         instr_o : out std_logic_vector(31 downto 0);
-        instr_vld_o : out std_logic;
-        decode_rdy_i : in std_logic
+        booted_o : out std_logic
     );
 end entity instruction_fecth;
 
 architecture rtl of instruction_fecth is
-    type fetch_st_t is (st_idle, st_halt, st_fetch);
-    signal current_st, next_st : fetch_st_t;
-    signal pc : unsigned(29 downto 0);
-    signal cmd_vld : std_logic;
+    signal booted, valid : std_logic;
+    signal pc, next_pc : std_logic_vector(31 downto 0);
 begin
-    
-    process (current_st, en_i, decode_rdy_i)
+    process (clk_i, arst_i)
     begin
-        case current_st is
-            when st_idle =>
-                if en_i = '1' then
-                    if decode_rdy_i = '1' then
-                        next_st <= st_fetch;
-                    else
-                        next_st <= st_halt;
-                    end if;
-                else
-                    next_st <= st_idle;
-                end if;
-            when st_halt =>
-                if en_i = '0' then
-                    next_st <= st_idle;
-                elsif decode_rdy_i = '1' then
-                    next_st <= st_fetch;
-                else
-                    next_st <= st_halt;
-                end if;
-            when st_fetch =>
-                if en_i = '0' then
-                    next_st <= st_idle;
-                elsif decode_rdy_i = '0' then
-                    next_st <= st_halt;
-                else
-                    next_st <= st_fetch;
-                end if;
-            when others =>
-                next_st <= st_idle;
-        end case;
+        if arst_i = '1' then
+            booted <= '0';
+        elsif rising_edge(clk_i) then
+            booted <= not srst_i;
+        end if;
     end process;
 
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            current_st <= st_idle;
+            valid <= '0';
         elsif rising_edge(clk_i) then
-            if srst_i = '1' then
-                current_st <= st_idle;
-            else
-                current_st <= next_st;
-            end if;
-        end if;
-    end process;
-
-    cmd_vld <= 
-        '1' when (current_st = st_fetch or current_st = st_halt) and decode_rdy_i = '1' else
-        '0';
-
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            pc <= unsigned(G_BOOT_ADDRESS(31 downto 2));
-        elsif rising_edge(clk_i) then
-            if srst_i = '1' then
-                pc <= unsigned(G_BOOT_ADDRESS(31 downto 2));
-            else
-                if load_pc_i = '1' then
-                    pc <= unsigned(pc_i(31 downto 2));
-                elsif cmd_vld = '1' and cmd_rdy_i = '1' then
-                    pc <= pc + 1;
+            if enable_i = '1' then
+                if flush_i = '1' then
+                    valid <= '0';
+                else
+                    valid <= booted and cmd_rdy_i;
                 end if;
             end if;
         end if;
     end process;
-    
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if cmd_vld = '1' then
-                pc_o <= std_logic_vector(pc & "00");
+            if enable_i = '1' and cmd_rdy_i = '1' then
+                pc <= next_pc;
             end if;
         end if;
     end process;
+    next_pc <= 
+        target_pc_i when load_pc_i = '1' else
+        std_logic_vector(unsigned(pc) + 4);
 
-    cmd_adr_o <= std_logic_vector(pc & "00");
-    cmd_vld_o <= cmd_vld;
-    
+    cmd_adr_o <= pc;
+    cmd_vld_o <= booted and enable_i;
+    valid_o <= valid;
     instr_o <= rsp_dat_i;
-    instr_vld_o <=
-        '1' when current_st = st_halt and decode_rdy_i = '1' else 
-        rsp_vld_i;
+    booted_o <= booted;
 
 end architecture rtl;
