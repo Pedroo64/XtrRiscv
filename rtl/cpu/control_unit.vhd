@@ -40,6 +40,7 @@ entity control_unit is
         execute_enable_o : out std_logic;
         memory_flush_o : out std_logic;
         memory_enable_o : out std_logic;
+        memory_cmd_en_o : out std_logic;
         writeback_flush_o : out std_logic;
         writeback_enable_o : out std_logic
     );
@@ -78,7 +79,7 @@ begin
     fetch_stall <= decode_stall and not load_pc_i;
     decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard or execute_multicycle_i))) and not load_pc_i;
     execute_stall <= memory_stall;
-    memory_stall <= not (memory_ready_i and execute_ready_i);
+    memory_stall <= not (memory_ready_i and execute_ready_i) or writeback_stall;
     writeback_stall <= not writeback_ready_i;
 
     fetch_flush <= load_pc_i;
@@ -98,4 +99,6 @@ begin
     execute_enable_o <= not execute_stall;
     memory_enable_o <= not memory_stall;
     writeback_enable_o <= not writeback_stall;
+
+    memory_cmd_en_o <= writeback_ready_i;
 end architecture rtl;

@@ -27,6 +27,7 @@ entity memory is
         funct3_o : out std_logic_vector(2 downto 0);
         alu_result_a_o : out std_logic_vector(31 downto 0);
         alu_result_b_o : out std_logic_vector(31 downto 0);
+        cmd_en_i : in std_logic;
         cmd_adr_o : out std_logic_vector(31 downto 0);
         cmd_dat_o : out std_logic_vector(31 downto 0);
         cmd_vld_o : out std_logic;
@@ -87,7 +88,7 @@ begin
         alu_result_b(15 downto 0) & alu_result_b(15 downto 0) when funct3(1 downto 0) = "01" else
         alu_result_b;
     cmd_valid <= (opcode.store or opcode.load) and valid;
-    cmd_vld_o <= cmd_valid;
+    cmd_vld_o <= cmd_valid and cmd_en_i;
     cmd_we_o <= opcode.store;
     cmd_siz_o <= funct3(1 downto 0);
 
@@ -99,8 +100,6 @@ begin
             ready_o <= '1';
         end if;
     end process;
-
---    ready_o <= (opcode.store or opcode.load) and cmd_rdy_i;
 
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;

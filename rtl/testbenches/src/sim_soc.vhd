@@ -38,7 +38,7 @@ architecture rtl of sim_soc is
     type memory_command_st_t is (st_idle, st_delay_cmd, st_delay_read);
     signal memory_current_st : memory_command_st_t;
     signal memory_test_delay_cnt : unsigned(2 downto 0) := (others => '0');
-    signal memory_test_reg : std_logic_vector(31 downto 0);
+    signal memory_test_reg : std_logic_vector(31 downto 0) := (others => '0');
 begin
     -- Hold reset for at least 4 clock cycles
     process (clk_i)
@@ -153,6 +153,8 @@ begin
     -- Memory delay test
     -- 8XX3 0000
     -- FXX3 FFFF
+    -- Write/Read at 0x80030000 to stimulate not ready command state
+    -- Read at 0x80038000 to stimulate delayed read state
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -175,7 +177,7 @@ begin
             end if;
         end if;
     end process;
-    xtr_rsp_lyr_2(3).dat <= memory_test_reg;
+    xtr_rsp_lyr_2(3).dat <= memory_test_reg when xtr_rsp_lyr_2(3).vld = '1' else (others => 'X');
     xtr_rsp_lyr_2(3).rdy <= '1' when xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' and memory_current_st = st_idle else memory_test_delay_cnt(memory_test_delay_cnt'left);
     
 end architecture rtl;

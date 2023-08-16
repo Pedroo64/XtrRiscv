@@ -65,7 +65,7 @@ architecture rtl of cpu is
 -- execute-shifter
     signal execute_shifter_result : std_logic_vector(31 downto 0);
 -- memory
-    signal memory_en, memory_flush, memory_valid, memory_ready : std_logic;
+    signal memory_en, memory_flush, memory_valid, memory_ready, memory_cmd_en : std_logic;
     signal memory_opcode : opcode_t;
     signal memory_rd_adr : std_logic_vector(4 downto 0);
     signal memory_rd_dat : std_logic_vector(31 downto 0);
@@ -217,6 +217,7 @@ begin
             funct3_o => memory_funct3,
             alu_result_a_o => memory_alu_result_a,
             alu_result_b_o => memory_alu_result_b,
+            cmd_en_i => memory_cmd_en,
             cmd_adr_o => data_cmd_adr_o,
             cmd_dat_o => data_cmd_dat_o,
             cmd_vld_o => data_cmd_vld_o,
@@ -283,6 +284,7 @@ begin
             execute_enable_o => execute_en,
             memory_flush_o => memory_flush,
             memory_enable_o => memory_en,
+            memory_cmd_en_o => memory_cmd_en,
             writeback_flush_o => writeback_flush,
             writeback_enable_o => writeback_en
         );
