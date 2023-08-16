@@ -29,6 +29,9 @@ entity execute is
         opcode_o : out opcode_t;
         rd_adr_o : out std_logic_vector(4 downto 0);
         rd_we_o : out std_logic;
+        rs1_adr_o : out std_logic_vector(4 downto 0);
+        rs2_adr_o : out std_logic_vector(4 downto 0);
+        immediate_o : out std_logic_vector(31 downto 0);
         alu_result_a_o : out std_logic_vector(31 downto 0);
         alu_result_b_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
@@ -102,7 +105,10 @@ begin
     rd_we_o <= rd_we;
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;
+    immediate_o <= immediate;
     funct3_o <= funct3;
+    rs1_adr_o <= rs1_adr;
+    rs2_adr_o <= rs2_adr;
     current_pc_o <= pc;
     ready_o <= shifter_ready;
     multicycle_o <= valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';

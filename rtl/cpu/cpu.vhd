@@ -10,7 +10,8 @@ entity cpu is
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
-        G_FULL_BARREL_SHIFTER : boolean := FALSE
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_ZICSR : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -35,6 +36,9 @@ entity cpu is
 end entity cpu;
 
 architecture rtl of cpu is
+    constant C_ECALL : boolean := G_ZICSR;
+    constant C_EBREAK : boolean := G_ZICSR;
+    constant C_INTERRUPTS : boolean := G_ZICSR;
     signal ctl_booted : std_logic;
 -- fetch
     signal fetch_en, fetch_flush, fetch_valid, fetch_load_pc : std_logic;
@@ -53,9 +57,9 @@ architecture rtl of cpu is
 -- execute
     signal execute_en, execute_flush, execute_valid, execute_ready : std_logic;
     signal execute_opcode : opcode_t;
-    signal execute_rd_adr : std_logic_vector(4 downto 0);
+    signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
     signal execute_rd_we : std_logic;
-    signal execute_pc, execute_rs1_dat, execute_rs2_dat, execute_alu_result_a, execute_alu_result_b : std_logic_vector(31 downto 0);
+    signal execute_pc, execute_rs1_dat, execute_rs2_dat, execute_alu_result_a, execute_alu_result_b, execute_imm : std_logic_vector(31 downto 0);
     signal execute_funct3 : std_logic_vector(2 downto 0);
     signal execute_multicycle : std_logic;
 -- execute-shifter
@@ -74,8 +78,12 @@ architecture rtl of cpu is
     signal writeback_rd_dat : std_logic_vector(31 downto 0);
     signal writeback_rd_we : std_logic;
 -- branch unit
-    signal branch_load_pc : std_logic;
+    signal branch_load_pc, branch_branch : std_logic;
     signal branch_target_pc : std_logic_vector(31 downto 0);
+-- csr
+    signal csr_exception_target_pc : std_logic_vector(31 downto 0) := (others => '-');
+    signal csr_exception_load_pc : std_logic := '0';
+    signal csr_read_dat : std_logic_vector(31 downto 0) := (others => '0');
 -- regfile
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr : std_logic_vector(4 downto 0);
@@ -170,6 +178,9 @@ begin
             opcode_o => execute_opcode,
             rd_adr_o => execute_rd_adr,
             rd_we_o => execute_rd_we,
+            immediate_o => execute_imm,
+            rs1_adr_o => execute_rs1_adr,
+            rs2_adr_o => execute_rs2_adr,
             alu_result_a_o => execute_alu_result_a,
             alu_result_b_o => execute_alu_result_b,
             funct3_o => execute_funct3,
@@ -197,6 +208,7 @@ begin
             alu_result_a_i => execute_alu_result_a,
             alu_result_b_i => execute_alu_result_b,
             shifter_result_i => execute_shifter_result,
+            csr_read_data_i => csr_read_dat,
             valid_o => memory_valid,
             opcode_o => memory_opcode,
             rd_adr_o => memory_rd_adr,
@@ -291,10 +303,45 @@ begin
             memory_enable_i => memory_en,
             memory_opcode_i => memory_opcode,
             memory_funct3_i => memory_funct3,
-            memory_target_pc_i => memory_alu_result_b, -- TODO change this to memory_alu_result_b
+            memory_target_pc_i => memory_alu_result_b,
+            exception_target_pc_i => csr_exception_target_pc,
+            exception_load_pc_i => csr_exception_load_pc,
             target_pc_o => branch_target_pc,
-            load_pc_o => branch_load_pc
+            load_pc_o => branch_load_pc,
+            branch_o => branch_branch
         );
+
+-- csr 
+gen_csr: if G_ZICSR = TRUE generate
+    u_csr : entity work.csr
+        generic map (
+            G_ECALL => C_ECALL,
+            G_EBREAK => C_EBREAK,
+            G_INTERRUPTS => C_INTERRUPTS
+        )
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            execute_en_i => execute_en,
+            execute_valid_i => execute_valid,
+            execute_opcode_i => execute_opcode,
+            execute_immediate_i => execute_imm,
+            execute_funct3_i => execute_funct3,
+            execute_current_pc_i => execute_pc,
+            execute_rs1_dat_i => execute_rs1_dat,
+            execute_zimm_i => execute_rs1_adr,
+            memory_en_i => memory_en,
+            memory_valid_i => memory_valid,
+            memory_funct3_i => memory_funct3,
+            memory_target_pc_i => memory_alu_result_b,
+            memory_branch_i => branch_branch,
+            read_data_o => csr_read_dat,
+            target_pc_o => csr_exception_target_pc,
+            load_pc_o => csr_exception_load_pc,
+            external_interrupt_i => external_irq_i,
+            timer_interrupt_i => timer_irq_i
+        );
+end generate gen_csr;
 
 -- regfile
     regfile_rs1_en <= execute_en;

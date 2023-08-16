@@ -11,8 +11,11 @@ entity sim_soc is
         G_INIT_FILE : string := "none";
         G_OUTPUT_FILE : string;
         G_CPU_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_CPU_EXECUTE_BYPASS : boolean := FALSE;
+        G_CPU_MEMORY_BYPASS : boolean := FALSE;
         G_CPU_WRITEBACK_BYPASS : boolean := FALSE;
-        G_FULL_BARREL_SHIFTER : boolean := FALSE
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_ZICSR : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -27,12 +30,14 @@ architecture rtl of sim_soc is
     signal instr_cmd, dat_cmd : xtr_cmd_t;
     signal instr_rsp, dat_rsp : xtr_rsp_t;
     signal xtr_cmd_lyr_1 : v_xtr_cmd_t(0 to 1);
-    signal xtr_rsp_lyr_1 : v_xtr_rsp_t(0 to 1);
+    signal xtr_rsp_lyr_1 : v_xtr_rsp_t(0 to 1) := (others => (vld => '0', rdy => '1', dat => (others => '0')));
     signal xtr_cmd_lyr_2 : v_xtr_cmd_t(0 to 3);
-    signal xtr_rsp_lyr_2 : v_xtr_rsp_t(0 to 3);
+    signal xtr_rsp_lyr_2 : v_xtr_rsp_t(0 to 3) := (others => (vld => '0', rdy => '1', dat => (others => '0')));
     signal timer_irq, external_irq : std_logic;
     signal rst_rq : std_logic;
-    signal memory_test_delay_cnt : unsigned(2 downto 0);
+    type memory_command_st_t is (st_idle, st_delay_cmd, st_delay_read);
+    signal memory_current_st : memory_command_st_t;
+    signal memory_test_delay_cnt : unsigned(2 downto 0) := (others => '0');
     signal memory_test_reg : std_logic_vector(31 downto 0);
 begin
     -- Hold reset for at least 4 clock cycles
@@ -51,8 +56,11 @@ begin
     u_xtr_cpu : entity work.xtr_cpu
         generic map (
             G_BOOT_ADDRESS => G_CPU_BOOT_ADDRESS,
+            G_EXECUTE_BYPASS => G_CPU_EXECUTE_BYPASS,
+            G_MEMORY_BYPASS => G_CPU_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS,
-            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_ZICSR => G_ZICSR
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
@@ -121,29 +129,53 @@ begin
     xtr_rsp_lyr_2(2).rdy <= '1';
     xtr_rsp_lyr_2(2).dat <= x"DEADBEEF";
 
+    -- Memory delay test logic
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            memory_current_st <= st_idle;
+        elsif rising_edge(clk_i) then
+            case memory_current_st is
+                when st_idle =>
+                    if xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' then
+                        memory_current_st <= st_delay_read;
+                    elsif xtr_cmd_lyr_2(3).vld = '1' then
+                        memory_current_st <= st_delay_cmd;
+                    end if;
+                when st_delay_cmd | st_delay_read =>
+                    if memory_test_delay_cnt(memory_test_delay_cnt'left) = '1' then
+                        memory_current_st <= st_idle;
+                    end if;
+                when others =>
+            end case;
+        end if;
+    end process;
     -- Memory delay test
     -- 8XX3 0000
     -- FXX3 FFFF
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if xtr_cmd_lyr_2(3).vld = '1' and memory_test_delay_cnt(memory_test_delay_cnt'left) = '0' then
+            if memory_current_st /= st_idle and memory_test_delay_cnt(memory_test_delay_cnt'left) = '0' then
                 memory_test_delay_cnt <= memory_test_delay_cnt + 1;
             else
                 memory_test_delay_cnt <= (others => '0');
             end if;
+            if xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '1' and xtr_rsp_lyr_2(3).rdy = '1' then
+                for i in 0 to 3 loop
+                    if xtr_cmd_lyr_2(3).sel(i) = '1' then
+                        memory_test_reg(i*8 + 7 downto i*8) <= xtr_cmd_lyr_2(3).dat(i*8 + 7 downto i*8);
+                    end if;
+                end loop;
+            end if;
+            if memory_current_st = st_delay_read then
+                xtr_rsp_lyr_2(3).vld <= memory_test_delay_cnt(memory_test_delay_cnt'left);
+            else
+                xtr_rsp_lyr_2(3).vld <= memory_test_delay_cnt(memory_test_delay_cnt'left) and not xtr_cmd_lyr_2(3).we;
+            end if;
         end if;
-        if xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '1' and xtr_rsp_lyr_2(3).rdy = '1' then
-            for i in 0 to 3 loop
-                if xtr_cmd_lyr_2(3).sel(0) = '1' then
-                    memory_test_reg(i*8 + 7 downto i*8) <= xtr_cmd_lyr_2(3).dat(i*8 + 7 downto i*8);
-                end if;
-            end loop;
-        end if;
-        xtr_rsp_lyr_2(3).dat <= memory_test_reg;
-        xtr_rsp_lyr_2(3).vld <= xtr_cmd_lyr_2(3).vld and not xtr_cmd_lyr_2(3).we;
     end process;
-    xtr_rsp_lyr_2(3).rdy <= memory_test_delay_cnt(memory_test_delay_cnt'left);
-
-
+    xtr_rsp_lyr_2(3).dat <= memory_test_reg;
+    xtr_rsp_lyr_2(3).rdy <= '1' when xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' and memory_current_st = st_idle else memory_test_delay_cnt(memory_test_delay_cnt'left);
+    
 end architecture rtl;

@@ -11,11 +11,12 @@ EXECUTE_BYPASS ?= FALSE
 MEMORY_BYPASS ?= FALSE
 WRITEBACK_BYPASS ?= FALSE
 FULL_BARREL_SHIFTER ?= FALSE
+ZICSR ?= TRUE
 
 all: compile
 
 create_project:
-	rm -r work
+	@rm -rf work
 	@mkdir work
 	$(VSIM) -c $(VSIM_FLAGS) -do "project new work proj;  exit -f"
 
@@ -57,7 +58,8 @@ open_project:
 	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf;"
 
 start_sim:
-	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(MKFILE_DIR)/$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER); \
+	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(MKFILE_DIR)/$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) \
+		-gG_ZICSR=$(ZICSR); \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
@@ -66,6 +68,7 @@ start_sim:
 		add wave -divider "writeback" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_writeback/*; \
 		add wave -divider "ctl" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_control_unit/*; \
 		add wave -divider "branch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_branch_unit/*; \
+		add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_csr/*; \
 		set NumericStdNoWarnings 1; config wave -signalnamewidth 1"
 
 clean:

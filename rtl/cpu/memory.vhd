@@ -18,6 +18,7 @@ entity memory is
         alu_result_a_i : in std_logic_vector(31 downto 0);
         alu_result_b_i : in std_logic_vector(31 downto 0);
         shifter_result_i : in std_logic_vector(31 downto 0);
+        csr_read_data_i : in std_logic_vector(31 downto 0);
         valid_o : out std_logic;
         opcode_o : out opcode_t;
         rd_adr_o : out std_logic_vector(4 downto 0);
@@ -75,6 +76,7 @@ begin
     opcode_o <= opcode;
     funct3_o <= funct3;
     rd_dat_o <=
+        csr_read_data_i when (opcode.sys) = '1' else
         shifter_result_i when (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01" else 
         alu_result_a;
     valid_o <= valid;

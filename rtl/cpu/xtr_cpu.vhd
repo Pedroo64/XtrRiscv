@@ -10,7 +10,8 @@ entity xtr_cpu is
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
-        G_FULL_BARREL_SHIFTER : boolean := FALSE
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_ZICSR : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
@@ -40,7 +41,8 @@ begin
             G_EXECUTE_BYPASS => G_EXECUTE_BYPASS,
             G_MEMORY_BYPASS => G_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
-            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_ZICSR => G_ZICSR
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,

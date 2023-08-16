@@ -20,7 +20,10 @@ entity branch_unit is
         memory_opcode_i : in opcode_t;
         memory_funct3_i : in std_logic_vector(2 downto 0);
         memory_target_pc_i : in std_logic_vector(31 downto 0);
+        exception_target_pc_i : in std_logic_vector(31 downto 0);
+        exception_load_pc_i : in std_logic;
         target_pc_o : out std_logic_vector(31 downto 0);
+        branch_o : out std_logic;
         load_pc_o : out std_logic
     );
 end entity branch_unit;
@@ -77,9 +80,10 @@ begin
         end if;
     end process;
 
-    load_pc_o <= (branch and enable and valid) or not booted_i;
+    load_pc_o <= ((branch or exception_load_pc_i) and enable and valid) or not booted_i;
     target_pc_o <=
         G_BOOT_ADDRESS when booted_i = '0' else
+        exception_target_pc_i when exception_load_pc_i = '1' else
         memory_target_pc_i;
-
+    branch_o <= branch;
 end architecture rtl;
