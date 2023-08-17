@@ -13,6 +13,7 @@ entity execute is
         clk_i : in std_logic;
         flush_i : in std_logic;
         enable_i : in std_logic;
+        multicycle_flush_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
         opcode_i : in opcode_t;
@@ -62,7 +63,7 @@ architecture rtl of execute is
     signal alu_arith_r : std_logic_vector(32 downto 0);
     signal alu_logic_r : std_logic_vector(31 downto 0);
 -- SHIFTER
-    signal shifter_start, shifter_ready : std_logic;
+    signal shifter_start, shifter_ready, shifter_srst : std_logic;
     signal shifter_shmt : std_logic_vector(4 downto 0);
     signal shifter_type : std_logic_vector(1 downto 0);
     signal shifter_data_in, shifter_data_out : std_logic_vector(31 downto 0);
@@ -174,7 +175,7 @@ begin
     port map (
         arst_i => arst_i,
         clk_i => clk_i,
-        srst_i => '0',
+        srst_i => shifter_srst,
         shift_i => shifter_shmt,
         type_i => shifter_type,
         data_i => shifter_data_in,
@@ -183,7 +184,7 @@ begin
         done_o => open,
         ready_o => shifter_ready
     );
-
+    shifter_srst <= multicycle_flush_i;
     shifter_shmt <= alu_b(4 downto 0);
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;

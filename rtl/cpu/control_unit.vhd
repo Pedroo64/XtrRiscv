@@ -38,6 +38,7 @@ entity control_unit is
         decode_enable_o : out std_logic;
         execute_flush_o : out std_logic;
         execute_enable_o : out std_logic;
+        execute_multicycle_flush_o : out std_logic;
         memory_flush_o : out std_logic;
         memory_enable_o : out std_logic;
         memory_cmd_en_o : out std_logic;
@@ -93,6 +94,8 @@ begin
     execute_flush_o <= srst_i or execute_flush;
     memory_flush_o <= srst_i or memory_flush;
     writeback_flush_o <= srst_i or writeback_flush;
+
+    execute_multicycle_flush_o <= srst_i or load_pc_i;
 
     fetch_enable_o <= not fetch_stall;
     decode_enable_o <= not decode_stall;

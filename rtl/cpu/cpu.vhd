@@ -55,7 +55,7 @@ architecture rtl of cpu is
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
 -- execute
-    signal execute_en, execute_flush, execute_valid, execute_ready : std_logic;
+    signal execute_en, execute_flush, execute_valid, execute_ready, execute_multicycle_flush : std_logic;
     signal execute_opcode : opcode_t;
     signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
     signal execute_rd_we : std_logic;
@@ -162,6 +162,7 @@ begin
             clk_i => clk_i,
             flush_i => execute_flush,
             enable_i => execute_en,
+            multicycle_flush_i => execute_multicycle_flush,
             valid_i => decode_valid,
             instr_i => decode_instr,
             opcode_i => decode_opcode,
@@ -282,6 +283,7 @@ begin
             decode_enable_o => decode_en,
             execute_flush_o => execute_flush,
             execute_enable_o => execute_en,
+            execute_multicycle_flush_o => execute_multicycle_flush,
             memory_flush_o => memory_flush,
             memory_enable_o => memory_en,
             memory_cmd_en_o => memory_cmd_en,
