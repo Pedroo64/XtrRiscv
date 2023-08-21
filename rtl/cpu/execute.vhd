@@ -103,7 +103,7 @@ begin
     valid_o <= valid;
     opcode_o <= opcode;
     rd_adr_o <= rd_adr;
-    rd_we_o <= rd_we;
+    rd_we_o <= rd_we and valid;
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;
     immediate_o <= immediate;

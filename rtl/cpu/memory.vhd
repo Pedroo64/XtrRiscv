@@ -34,15 +34,16 @@ entity memory is
         cmd_we_o : out std_logic;
         cmd_siz_o : out std_logic_vector(1 downto 0);
         cmd_rdy_i : in std_logic;
-        ready_o : out std_logic
+        ready_o : out std_logic;
+        forward_rd_dat_o : out std_logic_vector(31 downto 0)
     );
 end entity memory;
 
 architecture rtl of memory is
-    signal valid, cmd_valid : std_logic;
+    signal valid, cmd_valid, rd_we : std_logic;
     signal opcode : opcode_t;
     signal funct3 : std_logic_vector(2 downto 0);
-    signal alu_result_a, alu_result_b : std_logic_vector(31 downto 0);
+    signal alu_result_a, alu_result_b, rd_dat : std_logic_vector(31 downto 0);
 begin
 
     process (clk_i, arst_i)
@@ -65,7 +66,7 @@ begin
         if rising_edge(clk_i) then
             if enable_i = '1' then
                 rd_adr_o <= rd_adr_i;
-                rd_we_o <= rd_we_i;
+                rd_we <= rd_we_i;
                 opcode <= opcode_i;
                 funct3 <= funct3_i;
                 alu_result_a <= alu_result_a_i;
@@ -76,11 +77,13 @@ begin
 
     opcode_o <= opcode;
     funct3_o <= funct3;
-    rd_dat_o <=
+    rd_dat <=
         csr_read_data_i when (opcode.sys) = '1' else
         shifter_result_i when (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01" else 
         alu_result_a;
+    rd_dat_o <= rd_dat;
     valid_o <= valid;
+    rd_we_o <= rd_we and valid;
 
     cmd_adr_o <= alu_result_a;
     cmd_dat_o <= 
@@ -104,4 +107,5 @@ begin
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;
 
+    forward_rd_dat_o <= rd_dat;
 end architecture rtl;

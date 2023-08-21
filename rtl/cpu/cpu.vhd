@@ -62,6 +62,7 @@ architecture rtl of cpu is
     signal execute_pc, execute_rs1_dat, execute_rs2_dat, execute_alu_result_a, execute_alu_result_b, execute_imm : std_logic_vector(31 downto 0);
     signal execute_funct3 : std_logic_vector(2 downto 0);
     signal execute_multicycle : std_logic;
+    signal execute_forward_rd_dat : std_logic_vector(31 downto 0);
 -- execute-shifter
     signal execute_shifter_result : std_logic_vector(31 downto 0);
 -- memory
@@ -71,7 +72,7 @@ architecture rtl of cpu is
     signal memory_rd_dat : std_logic_vector(31 downto 0);
     signal memory_rd_we : std_logic;
     signal memory_funct3 : std_logic_vector(2 downto 0);
-    signal memory_alu_result_a, memory_alu_result_b : std_logic_vector(31 downto 0);
+    signal memory_alu_result_a, memory_alu_result_b, memory_forward_rd_dat : std_logic_vector(31 downto 0);
 -- writeback
     signal writeback_en, writeback_flush, writeback_valid, writeback_ready : std_logic;
     signal writeback_rd_adr : std_logic_vector(4 downto 0);
@@ -192,8 +193,8 @@ begin
             multicycle_o => execute_multicycle,
             ready_o => execute_ready
         );
-    execute_rs1_dat <= regfile_rs1_dat;
-    execute_rs2_dat <= regfile_rs2_dat;
+--    execute_rs1_dat <= regfile_rs1_dat;
+--    execute_rs2_dat <= regfile_rs2_dat;
 -- memory
     u_memory : entity work.memory
         port map (
@@ -225,7 +226,8 @@ begin
             cmd_we_o => data_cmd_we_o,
             cmd_siz_o => data_cmd_siz_o,
             cmd_rdy_i => data_cmd_rdy_i,
-            ready_o => memory_ready
+            ready_o => memory_ready,
+            forward_rd_dat_o => execute_forward_rd_dat
         );
 -- writeback
     u_writeback : entity work.writeback
@@ -246,7 +248,8 @@ begin
             rd_adr_o => writeback_rd_adr,
             rd_dat_o => writeback_rd_dat,
             rd_we_o => writeback_rd_we,
-            ready_o => writeback_ready
+            ready_o => writeback_ready,
+            forward_rd_dat_o => memory_forward_rd_dat
         );
 -- control unit
     u_control_unit : entity work.control_unit
@@ -288,7 +291,22 @@ begin
             memory_enable_o => memory_en,
             memory_cmd_en_o => memory_cmd_en,
             writeback_flush_o => writeback_flush,
-            writeback_enable_o => writeback_en
+            writeback_enable_o => writeback_en,
+            execute_opcode_i => execute_opcode,
+            memory_opcode_i => memory_opcode,
+            execute_rs1_adr_i => execute_rs1_adr,
+            execute_rs2_adr_i => execute_rs2_adr,
+            regfile_rs1_dat_i => regfile_rs1_dat,
+            regfile_rs2_dat_i => regfile_rs2_dat,
+            execute_rd_adr_forward_i => memory_rd_adr,
+            execute_rd_dat_forward_i => execute_forward_rd_dat,
+            execute_rd_we_forward_i => memory_rd_we,
+            memory_rd_adr_forward_i => writeback_rd_adr,
+            memory_rd_dat_forward_i => memory_forward_rd_dat,
+            memory_rd_we_forward_i => writeback_rd_we,
+            writeback_rd_dat_i => writeback_rd_dat,
+            execute_rs1_dat_o => execute_rs1_dat,
+            execute_rs2_dat_o => execute_rs2_dat
         );
 
 -- branch unit
@@ -353,7 +371,7 @@ end generate gen_csr;
     regfile_rs2_en <= execute_en;
     regfile_rs2_adr <= decode_rs2_adr;
     regfile_rd_adr <= writeback_rd_adr;
-    regfile_rd_we <= writeback_rd_we;
+    regfile_rd_we <= writeback_rd_we and writeback_en;
     regfile_rd_dat <= writeback_rd_dat;
     u_regfile : entity work.regfile
         port map (

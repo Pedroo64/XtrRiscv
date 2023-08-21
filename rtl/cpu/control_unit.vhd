@@ -43,7 +43,22 @@ entity control_unit is
         memory_enable_o : out std_logic;
         memory_cmd_en_o : out std_logic;
         writeback_flush_o : out std_logic;
-        writeback_enable_o : out std_logic
+        writeback_enable_o : out std_logic;
+        execute_opcode_i : in opcode_t;
+        memory_opcode_i : in opcode_t;
+        execute_rs1_adr_i : in std_logic_vector(4 downto 0);
+        execute_rs2_adr_i : in std_logic_vector(4 downto 0);
+        regfile_rs1_dat_i : in std_logic_vector(31 downto 0);
+        regfile_rs2_dat_i : in std_logic_vector(31 downto 0);
+        execute_rd_adr_forward_i : in std_logic_vector(4 downto 0);
+        execute_rd_dat_forward_i : in std_logic_vector(31 downto 0);
+        execute_rd_we_forward_i : in std_logic;
+        memory_rd_adr_forward_i : in std_logic_vector(4 downto 0);
+        memory_rd_dat_forward_i : in std_logic_vector(31 downto 0);
+        memory_rd_we_forward_i : in std_logic;
+        writeback_rd_dat_i : in std_logic_vector(31 downto 0);
+        execute_rs1_dat_o : out std_logic_vector(31 downto 0);
+        execute_rs2_dat_o : out std_logic_vector(31 downto 0)
     );
 end entity control_unit;
 
@@ -56,6 +71,13 @@ architecture rtl of control_unit is
     signal rs1_hazard, rs2_hazard : std_logic;
     signal fetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
     signal fetch_flush, decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
+-- Datapath forward
+    signal writeback_rd_adr_forward : std_logic_vector(4 downto 0);
+    signal writeback_rd_dat_forward : std_logic_vector(31 downto 0);
+    signal writeback_rd_we_forward : std_logic := '0';
+    signal execute_use_rs1, execute_use_rs2 : std_logic := '0';
+    signal rs1_execute_forward, rs1_memory_forward, rs1_writeback_forward : std_logic := '0';
+    signal rs2_execute_forward, rs2_memory_forward, rs2_writeback_forward : std_logic := '0';
 begin
 -- hazard check
     decode_use_rs1 <= decode_opcode_i.reg_reg or decode_opcode_i.load or decode_opcode_i.reg_imm or decode_opcode_i.jalr or decode_opcode_i.store or decode_opcode_i.branch or decode_opcode_i.sys;
@@ -64,14 +86,30 @@ begin
     decode_rs1_zero <= '1' when unsigned(decode_rs1_adr_i) = 0 else '0';
     decode_rs2_zero <= '1' when unsigned(decode_rs2_adr_i) = 0 else '0';
 
-    decode_execute_rs1_hazard <= (execute_rd_we_i and execute_valid_i) when decode_rs1_adr_i = execute_rd_adr_i else '0';
-    decode_execute_rs2_hazard <= (execute_rd_we_i and execute_valid_i) when decode_rs2_adr_i = execute_rd_adr_i else '0';
+    decode_execute_rs1_hazard <= 
+        (execute_valid_i) when decode_rs1_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        (execute_rd_we_i) when decode_rs1_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
+        '0';
+    decode_execute_rs2_hazard <= 
+        (execute_valid_i) when decode_rs2_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        (execute_rd_we_i) when decode_rs2_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
+        '0';
 
-    decode_memory_rs1_hazard <= (memory_rd_we_i and memory_valid_i) when decode_rs1_adr_i = memory_rd_adr_i else '0';
-    decode_memory_rs2_hazard <= (memory_rd_we_i and memory_valid_i) when decode_rs2_adr_i = memory_rd_adr_i else '0';
+    decode_memory_rs1_hazard <= 
+        (memory_valid_i) when decode_rs1_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
+        (memory_rd_we_i) when decode_rs1_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
+        '0';
+    decode_memory_rs2_hazard <= 
+        (memory_valid_i) when decode_rs2_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
+        (memory_rd_we_i) when decode_rs2_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
+        '0';
 
-    decode_writeback_rs1_hazard <= (writeback_rd_we_i and writeback_valid_i) when decode_rs1_adr_i = writeback_rd_adr_i else '0';
-    decode_writeback_rs2_hazard <= (writeback_rd_we_i and writeback_valid_i) when decode_rs2_adr_i = writeback_rd_adr_i else '0';
+    decode_writeback_rs1_hazard <= 
+        (writeback_rd_we_i) when decode_rs1_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
+        '0';
+    decode_writeback_rs2_hazard <= 
+        (writeback_rd_we_i) when decode_rs2_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
+        '0';
 
     rs1_hazard <= decode_use_rs1 when decode_rs1_zero = '0' and (decode_execute_rs1_hazard or decode_memory_rs1_hazard or decode_writeback_rs1_hazard) = '1' else '0';
     rs2_hazard <= decode_use_rs2 when decode_rs2_zero = '0' and (decode_execute_rs2_hazard or decode_memory_rs2_hazard or decode_writeback_rs2_hazard) = '1' else '0';
@@ -104,4 +142,47 @@ begin
     writeback_enable_o <= not writeback_stall;
 
     memory_cmd_en_o <= writeback_ready_i;
+
+-- Datapath forward
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if execute_stall = '0' then
+                execute_use_rs1 <= decode_use_rs1 and not decode_rs1_zero;
+                execute_use_rs2 <= decode_use_rs2 and not decode_rs2_zero;
+            end if;
+        end if;
+    end process;
+
+    rs1_execute_forward <= execute_rd_we_forward_i when execute_rs1_adr_i = execute_rd_adr_forward_i and execute_use_rs1 = '1' and G_EXECUTE_BYPASS = TRUE else '0';
+    rs2_execute_forward <= execute_rd_we_forward_i when execute_rs2_adr_i = execute_rd_adr_forward_i and execute_use_rs2 = '1' and G_EXECUTE_BYPASS = TRUE else '0';
+    
+    rs1_memory_forward <= memory_rd_we_forward_i when execute_rs1_adr_i = memory_rd_adr_forward_i and execute_use_rs1 = '1' and G_MEMORY_BYPASS = TRUE else '0';
+    rs2_memory_forward <= memory_rd_we_forward_i when execute_rs2_adr_i = memory_rd_adr_forward_i and execute_use_rs2 = '1' and G_MEMORY_BYPASS = TRUE else '0';
+    
+    rs1_writeback_forward <= writeback_rd_we_forward when execute_rs1_adr_i = writeback_rd_adr_forward and execute_use_rs1 = '1' and G_WRITEBACK_BYPASS = TRUE else '0';
+    rs2_writeback_forward <= writeback_rd_we_forward when execute_rs2_adr_i = writeback_rd_adr_forward and execute_use_rs2 = '1' and G_WRITEBACK_BYPASS = TRUE else '0';
+
+    execute_rs1_dat_o <= 
+        execute_rd_dat_forward_i when rs1_execute_forward = '1' else
+        memory_rd_dat_forward_i when rs1_memory_forward = '1' else
+        writeback_rd_dat_forward when rs1_writeback_forward = '1' else
+        regfile_rs1_dat_i;
+
+    execute_rs2_dat_o <= 
+        execute_rd_dat_forward_i when rs2_execute_forward = '1' else
+        memory_rd_dat_forward_i when rs2_memory_forward = '1' else
+        writeback_rd_dat_forward when rs2_writeback_forward = '1' else
+        regfile_rs2_dat_i;
+
+gen_writeback_bypass: if G_WRITEBACK_BYPASS = TRUE generate
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            writeback_rd_adr_forward <= writeback_rd_adr_i;
+            writeback_rd_dat_forward <= writeback_rd_dat_i;
+            writeback_rd_we_forward <= writeback_rd_we_i;
+        end if;
+    end process;
+end generate gen_writeback_bypass;
 end architecture rtl;

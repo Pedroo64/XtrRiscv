@@ -20,7 +20,8 @@ entity writeback is
         rd_adr_o : out std_logic_vector(4 downto 0);
         rd_dat_o : out std_logic_vector(31 downto 0);
         rd_we_o : out std_logic;
-        ready_o : out std_logic
+        ready_o : out std_logic;
+        forward_rd_dat_o : out std_logic_vector(31 downto 0)
     );
 end entity writeback;
 
@@ -88,8 +89,7 @@ begin
     rd_dat_o <= 
         mem_read_dat when mem_read = '1' else
         rd_dat;
-    rd_we_o <= enable_i and valid and rd_we;
---    ready_o <= not (valid and not memory_read_i);
+    rd_we_o <= valid and rd_we;
     process (valid, mem_read, rsp_vld_i)
     begin
         if valid = '1' and mem_read = '1' then
@@ -98,4 +98,5 @@ begin
             ready_o <= '1';
         end if;
     end process;
+    forward_rd_dat_o <= rd_dat;
 end architecture rtl;
