@@ -31,8 +31,8 @@ architecture rtl of sim_soc is
     signal instr_rsp, dat_rsp : xtr_rsp_t;
     signal xtr_cmd_lyr_1 : v_xtr_cmd_t(0 to 1);
     signal xtr_rsp_lyr_1 : v_xtr_rsp_t(0 to 1) := (others => (vld => '0', rdy => '1', dat => (others => '0')));
-    signal xtr_cmd_lyr_2 : v_xtr_cmd_t(0 to 3);
-    signal xtr_rsp_lyr_2 : v_xtr_rsp_t(0 to 3) := (others => (vld => '0', rdy => '1', dat => (others => '0')));
+    signal xtr_cmd_lyr_2 : v_xtr_cmd_t(0 to 7);
+    signal xtr_rsp_lyr_2 : v_xtr_rsp_t(0 to 7) := (others => (vld => '0', rdy => '1', dat => (others => '0')));
     signal timer_irq, external_irq : std_logic;
     signal rst_rq : std_logic;
     type memory_command_st_t is (st_idle, st_delay_cmd, st_delay_read);
@@ -66,13 +66,13 @@ begin
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
-            external_irq_i => external_irq_i, timer_irq_i => '0');
+            external_irq_i => external_irq_i, timer_irq_i => timer_irq);
 
-    u_xtr_abr_lyr1 : entity work.xtr_abr
+    u_xtr_split_lyr1 : entity work.xtr_split
         generic map (
-            C_MMSB => 31, C_MLSB => 32, C_SLAVES => 2)
+            G_BIT_PIVOT => 31, G_SLAVES => 2)
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => '0',
+            arst_i => arst_i, clk_i => clk_i,
             xtr_cmd_i => dat_cmd, xtr_rsp_o => dat_rsp,
             v_xtr_cmd_o => xtr_cmd_lyr_1, v_xtr_rsp_i => xtr_rsp_lyr_1);
 
@@ -85,12 +85,12 @@ begin
             dat_cmd_i => xtr_cmd_lyr_1(0), dat_rsp_o => xtr_rsp_lyr_1(0));
 
     -- 8XX0 0000
-    -- FXX3 FFFF
-    u_xtr_abr_lyr2 : entity work.xtr_abr
+    -- FXX7 FFFF
+    u_xtr_split_lyr2 : entity work.xtr_split
         generic map (
-            C_MMSB => 17, C_MLSB => 18, C_SLAVES => 4)
+            G_BIT_PIVOT => 18, G_SLAVES => 8)
         port map (
-            arst_i => arst_i, clk_i => clk_i, srst_i => '0',
+            arst_i => arst_i, clk_i => clk_i,
             xtr_cmd_i => xtr_cmd_lyr_1(1), xtr_rsp_o => xtr_rsp_lyr_1(1),
             v_xtr_cmd_o => xtr_cmd_lyr_2, v_xtr_rsp_i => xtr_rsp_lyr_2);
 
@@ -180,4 +180,17 @@ begin
     xtr_rsp_lyr_2(3).dat <= memory_test_reg when xtr_rsp_lyr_2(3).vld = '1' else (others => 'X');
     xtr_rsp_lyr_2(3).rdy <= '1' when xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' and memory_current_st = st_idle else memory_test_delay_cnt(memory_test_delay_cnt'left);
     
+    -- MTIME
+    -- 8XX7 0000
+    -- FXX7 FFFF
+    u_xtr_mtime : entity work.xtr_mtime
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => sys_rst,
+            xtr_cmd_i => xtr_cmd_lyr_2(7),
+            xtr_rsp_o => xtr_rsp_lyr_2(7),
+            irq_o => timer_irq
+        );
+
 end architecture rtl;

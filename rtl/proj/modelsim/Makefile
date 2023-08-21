@@ -40,11 +40,12 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/cpu.vhd; \
 		project addfile $(SRCS_PATH)/utils/utils.vhd; \
 		project addfile $(SRCS_PATH)/utils/xtr_def.vhd; \
-		project addfile $(SRCS_PATH)/utils/xtr_abr.vhd; \
+		project addfile $(SRCS_PATH)/utils/xtr_split.vhd; \
 		project addfile $(SRCS_PATH)/utils/data_handshake.vhd; \
 		project addfile $(SRCS_PATH)/cpu/xtr_cpu.vhd; \
 		project addfile $(SRCS_PATH)/soc/ram/bram.vhd; \
 		project addfile $(SRCS_PATH)/soc/ram/xtr_ram.vhd; \
+		project addfile $(SRCS_PATH)/soc/timer/xtr_mtime.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/src/sim_stdout.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/src/sim_file.vhd; \
 		project addfile $(SRCS_PATH)/testbenches/src/sim_soc.vhd; \
