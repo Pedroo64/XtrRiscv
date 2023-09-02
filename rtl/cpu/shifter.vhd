@@ -21,47 +21,47 @@ entity shifter is
 end entity shifter;
 
 architecture rtl of shifter is
-    signal data : std_logic_vector(31 downto 0);
-    signal shift_type : std_logic_vector(1 downto 0);
-    signal shift_cnt : unsigned(4 downto 0);
 begin
     gen_light_shifter: if G_FULL_BARREL_SHIFTER = FALSE generate
-        process (clk_i, arst_i)
-        begin
-            if arst_i = '1' then
-                shift_cnt <= (others => '0');
-            elsif rising_edge(clk_i) then
-                if srst_i = '1' then
-                    shift_cnt <= (others => '0');
-                else
-                    if start_i = '1' then
-                        shift_cnt <= unsigned(shift_i);
-                    elsif shift_cnt /= 0 then
-                        shift_cnt <= shift_cnt - 1;
-                    end if;
-                end if;
-            end if;
-        end process;
-    
+        signal nxt_cnt, cnt : unsigned(4 downto 0);
+        signal nxt_data, data : std_logic_vector(31 downto 0);
+        signal ready : std_logic;
+        signal shift_type : std_logic_vector(1 downto 0);
+    begin
+        nxt_cnt <= 
+            unsigned(shift_i) when start_i = '1' else
+            cnt - 1;
+        nxt_data <= 
+            data_i when start_i = '1' else
+            (shift_type(0) and data(31)) & data(31 downto 1) when shift_type(1) = '1' else
+            data(30 downto 0) & '0';
+
         process (clk_i)
         begin
             if rising_edge(clk_i) then
                 if start_i = '1' then
-                    data <= data_i;
                     shift_type <= type_i;
-                elsif shift_cnt /= 0 then
-                    if shift_type(1) = '1' then
-                        data <= (shift_type(0) and data(31)) & data(31 downto 1);
-                    else
-                        data <= data(30 downto 0) & '0';
-                    end if;
+                end if;
+                if ready = '0' then
+                    data <= nxt_data;
                 end if;
             end if;
         end process;
-    
-        ready_o <= '1' when shift_cnt = 0 else '0';
-        data_o <= data;
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                cnt <= to_unsigned(1, cnt'length);
+            elsif rising_edge(clk_i) then
+                if ready = '0' then
+                    cnt <= nxt_cnt;
+                end if;
+            end if;
+        end process;
+        ready <= '1' when nxt_cnt = 0 else '0';
         done_o <= '1';
+        ready_o <= ready;
+        data_o <= nxt_data;
     end generate gen_light_shifter;
 
     gen_full_shifter: if G_FULL_BARREL_SHIFTER = TRUE generate
@@ -81,17 +81,9 @@ begin
         left3 <=  left2(29 downto 0) & (0 to 1  => '0') when shift_i(1) = '1' else left2;
         left4 <=  left3(30 downto 0) & (0 to 0  => '0') when shift_i(0) = '1' else left3;
 
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-				if type_i(1) = '0' then
-					data_o <= left4;
-				else
-					data_o <= right4;
-				end if;
-            end if;
-        end process;
-        done_o <= '1';
+        data_o <= right4 when type_i(1) = '1' else left4;
+
+        done_o <= start_i;
         ready_o <= '1';
     end generate gen_full_shifter;
 

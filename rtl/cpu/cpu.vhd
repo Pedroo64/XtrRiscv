@@ -11,7 +11,7 @@ entity cpu is
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
-        G_ZICSR : boolean := FALSE
+        G_ZICSR : boolean := TRUE
     );
     port (
         arst_i : in std_logic;
@@ -193,8 +193,6 @@ begin
             multicycle_o => execute_multicycle,
             ready_o => execute_ready
         );
---    execute_rs1_dat <= regfile_rs1_dat;
---    execute_rs2_dat <= regfile_rs2_dat;
 -- memory
     u_memory : entity work.memory
         port map (
@@ -209,7 +207,6 @@ begin
             rd_we_i => execute_rd_we,
             alu_result_a_i => execute_alu_result_a,
             alu_result_b_i => execute_alu_result_b,
-            shifter_result_i => execute_shifter_result,
             csr_read_data_i => csr_read_dat,
             valid_o => memory_valid,
             opcode_o => memory_opcode,
@@ -298,12 +295,8 @@ begin
             execute_rs2_adr_i => execute_rs2_adr,
             regfile_rs1_dat_i => regfile_rs1_dat,
             regfile_rs2_dat_i => regfile_rs2_dat,
-            execute_rd_adr_forward_i => memory_rd_adr,
-            execute_rd_dat_forward_i => execute_forward_rd_dat,
-            execute_rd_we_forward_i => memory_rd_we,
-            memory_rd_adr_forward_i => writeback_rd_adr,
-            memory_rd_dat_forward_i => memory_forward_rd_dat,
-            memory_rd_we_forward_i => writeback_rd_we,
+            execute_rd_dat_i => execute_alu_result_a,
+            memory_rd_dat_i => memory_rd_dat,
             writeback_rd_dat_i => writeback_rd_dat,
             execute_rs1_dat_o => execute_rs1_dat,
             execute_rs2_dat_o => execute_rs2_dat

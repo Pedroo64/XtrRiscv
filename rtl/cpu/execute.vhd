@@ -46,7 +46,7 @@ entity execute is
 end entity execute;
 
 architecture rtl of execute is
-    signal valid : std_logic;
+    signal valid, valid_multicycle : std_logic;
     signal rs1_adr, rs2_adr, rd_adr : std_logic_vector(4 downto 0);
     signal rd_we : std_logic;
     signal immediate : std_logic_vector(31 downto 0);
@@ -90,6 +90,7 @@ begin
     begin
         if arst_i = '1' then
             valid <= '0';
+            valid_multicycle <= '0';
         elsif rising_edge(clk_i) then
             if enable_i = '1' then
                 if flush_i = '1' then
@@ -97,7 +98,16 @@ begin
                 else
                     valid <= valid_i;
                 end if;
-            end if;       
+            end if;
+            if enable_i = '1' then
+                if flush_i = '1' or shifter_ready = '0' then
+                    valid_multicycle <= '0';
+                else
+                    valid_multicycle <= valid_i;
+                end if;
+            elsif shifter_ready = '0' then
+                valid_multicycle <= '0';
+            end if;
         end if;
     end process;
     valid_o <= valid;
@@ -150,16 +160,19 @@ begin
     alu_signed <= not funct3(0); -- SLT
     alu_logic <= funct3(1 downto 0);
 
-    process (opcode, pc_incr, funct3, alu_logic_r, alu_arith_r, rs2_dat_i)
+    process (opcode, pc_incr, funct3, alu_logic_r, alu_arith_r, rs2_dat_i, shifter_data_out)
     begin
         if (opcode.jal or opcode.jalr or opcode.branch) = '1' then
             alu_result_a <= pc_incr;
             alu_result_b <= alu_arith_r(31 downto 0);
         else
-            if (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(2)) = '1' then
-                alu_result_a <= alu_logic_r;
-            elsif (opcode.reg_reg or opcode.reg_imm) = '1' and (funct3(1)) = '1' then
-                alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+            if (opcode.reg_imm or opcode.reg_reg) = '1' then
+                case funct3 is
+                    when RV32I_FN3_SL | RV32I_FN3_SR => alu_result_a <= shifter_data_out;
+                    when RV32I_FN3_SLT | RV32I_FN3_SLTU => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+                    when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => alu_result_a <= alu_logic_r;
+                    when others => alu_result_a <= alu_arith_r(31 downto 0);
+                end case;
             else
                 alu_result_a <= alu_arith_r(31 downto 0);
             end if;
@@ -189,7 +202,7 @@ begin
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;
     shifter_start <= 
-        valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) else
+        valid_multicycle when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) else
         '0';
     shifter_result_o <= shifter_data_out;
 end architecture rtl;
