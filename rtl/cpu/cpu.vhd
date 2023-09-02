@@ -49,6 +49,7 @@ architecture rtl of cpu is
 -- decode
     signal decode_en, decode_flush, decode_valid : std_logic;
     signal decode_opcode : opcode_t;
+    signal decode_opcode_type : opcode_type_t;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
     signal decode_rd_we : std_logic;
     signal decode_imm, decode_instr : std_logic_vector(31 downto 0);
@@ -144,6 +145,7 @@ begin
             instr_i => prefetch_data,
             valid_o => decode_valid,
             opcode_o => decode_opcode,
+            opcode_type_o => decode_opcode_type,
             rs1_adr_o => decode_rs1_adr,
             rs2_adr_o => decode_rs2_adr,
             rd_adr_o => decode_rd_adr,
@@ -262,6 +264,7 @@ begin
             load_pc_i => branch_load_pc,
             decode_valid_i => decode_valid,
             decode_opcode_i => decode_opcode,
+            decode_opcode_type_i => decode_opcode_type,
             decode_rs1_adr_i => decode_rs1_adr,
             decode_rs2_adr_i => decode_rs2_adr,
             execute_valid_i => execute_valid,

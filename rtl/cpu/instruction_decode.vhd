@@ -14,6 +14,7 @@ entity instruction_decode is
         instr_i : in std_logic_vector(31 downto 0);
         valid_o : out std_logic;
         opcode_o : out opcode_t;
+        opcode_type_o : out opcode_type_t;
         rs1_adr_o : out std_logic_vector(4 downto 0);
         rs2_adr_o : out std_logic_vector(4 downto 0);
         rd_adr_o : out std_logic_vector(4 downto 0);
@@ -28,6 +29,7 @@ end entity instruction_decode;
 architecture rtl of instruction_decode is
     signal instr_dat : std_logic_vector(31 downto 0);
     signal opcode : opcode_t;
+    signal opcode_type : opcode_type_t;
 begin
     process (clk_i)
     begin
@@ -37,18 +39,58 @@ begin
             end if;
         end if;
     end process;
-    opcode.lui     <= '1' when instr_dat(6 downto 0) = RV32I_OP_LUI else '0';
-    opcode.auipc   <= '1' when instr_dat(6 downto 0) = RV32I_OP_AUIPC else '0';
-    opcode.jal     <= '1' when instr_dat(6 downto 0) = RV32I_OP_JAL else '0';
-    opcode.jalr    <= '1' when instr_dat(6 downto 0) = RV32I_OP_JALR else '0';
-    opcode.branch  <= '1' when instr_dat(6 downto 0) = RV32I_OP_BRANCH else '0';
-    opcode.load    <= '1' when instr_dat(6 downto 0) = RV32I_OP_LOAD else '0';
-    opcode.store   <= '1' when instr_dat(6 downto 0) = RV32I_OP_STORE else '0';
-    opcode.reg_imm <= '1' when instr_dat(6 downto 0) = RV32I_OP_REG_IMM else '0';
-    opcode.reg_reg <= '1' when instr_dat(6 downto 0) = RV32I_OP_REG_REG else '0';
-    opcode.fence   <= '1' when instr_dat(6 downto 0) = RV32I_OP_FENCE else '0';
-    opcode.sys     <= '1' when instr_dat(6 downto 0) = RV32I_OP_SYS else '0';
+
     opcode.illegal <= '0';
+-- opcode decode
+    process (instr_dat)
+    begin
+        opcode.lui <= '0';
+        opcode.auipc <= '0';
+        opcode.jal <= '0';
+        opcode.jalr <= '0';
+        opcode.branch <= '0';
+        opcode.load <= '0';
+        opcode.store <= '0';
+        opcode.reg_imm <= '0';
+        opcode.reg_reg <= '0';
+        opcode.fence <= '0';
+        opcode.sys <= '0';
+        case instr_dat(6 downto 0) is
+            when RV32I_OP_LUI => opcode.lui <= '1';
+            when RV32I_OP_AUIPC => opcode.auipc <= '1';
+            when RV32I_OP_JAL => opcode.jal <= '1';
+            when RV32I_OP_JALR => opcode.jalr <= '1';
+            when RV32I_OP_BRANCH => opcode.branch <= '1';
+            when RV32I_OP_LOAD => opcode.load <= '1';
+            when RV32I_OP_STORE => opcode.store <= '1';
+            when RV32I_OP_REG_IMM => opcode.reg_imm <= '1';
+            when RV32I_OP_REG_REG => opcode.reg_reg <= '1';
+            when RV32I_OP_FENCE => opcode.fence <= '1';
+            when RV32I_OP_SYS => opcode.sys <= '1';
+            when others => 
+        end case;
+    end process;
+
+-- opcode type decode
+    process (instr_dat)
+    begin
+        opcode_type.r_type <= '0';
+        opcode_type.i_type <= '0';
+        opcode_type.s_type <= '0';
+        opcode_type.b_type <= '0';
+        opcode_type.u_type <= '0';
+        opcode_type.j_type <= '0';
+        case instr_dat(6 downto 0) is
+            when RV32I_OP_REG_REG => opcode_type.r_type <= '1';
+            when RV32I_OP_JALR | RV32I_OP_LOAD | RV32I_OP_REG_IMM | RV32I_OP_SYS => opcode_type.i_type <= '1';
+            when RV32I_OP_STORE => opcode_type.s_type <= '1';
+            when RV32I_OP_BRANCH => opcode_type.b_type <= '1';
+            when RV32I_OP_LUI | RV32I_OP_AUIPC => opcode_type.u_type <= '1';
+            when RV32I_OP_JAL => opcode_type.j_type <= '1';
+            when others =>
+        end case;
+    end process;
+
     opcode_o <= opcode;
 
     rs1_adr_o <= (others => '0') when opcode.lui = '1' else instr_dat(19 downto 15);
@@ -57,7 +99,8 @@ begin
     
     funct3_o <= instr_dat(14 downto 12);
     funct7_o <= instr_dat(31 downto 25);
-    rd_we_o <= opcode.reg_reg or opcode.load or opcode.reg_imm or opcode.sys or opcode.jalr or opcode.lui or opcode.auipc or opcode.jal;
+    rd_we_o <= opcode_type.r_type or opcode_type.i_type or opcode_type.u_type or opcode_type.j_type;
+    opcode_type_o <= opcode_type;
     
     process (instr_dat)
     begin

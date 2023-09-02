@@ -19,6 +19,15 @@ package rv32i_pkg is
         illegal : std_logic;
     end record opcode_t;
 
+    type opcode_type_t is record
+        r_type : std_logic;
+        i_type : std_logic;
+        s_type : std_logic;
+        b_type : std_logic;
+        u_type : std_logic;
+        j_type : std_logic;
+    end record;
+
     -- RV32I Base Instruction Set Opcodes
 constant RV32I_OP_LUI       :   std_logic_vector(6 downto 0) := "0110111";
 constant RV32I_OP_AUIPC     :   std_logic_vector(6 downto 0) := "0010111";

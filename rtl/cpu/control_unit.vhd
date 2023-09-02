@@ -17,6 +17,7 @@ entity control_unit is
         load_pc_i : in std_logic;
         decode_valid_i : in std_logic;
         decode_opcode_i : in opcode_t;
+        decode_opcode_type_i : in opcode_type_t;
         decode_rs1_adr_i : in std_logic_vector(4 downto 0);
         decode_rs2_adr_i : in std_logic_vector(4 downto 0);
         execute_valid_i : in std_logic;
@@ -77,8 +78,8 @@ architecture rtl of control_unit is
     signal execute_rs1_dat_forward, execute_rs2_dat_forward : std_logic_vector(31 downto 0);
 begin
 -- hazard check
-    decode_use_rs1 <= decode_opcode_i.reg_reg or decode_opcode_i.load or decode_opcode_i.reg_imm or decode_opcode_i.jalr or decode_opcode_i.store or decode_opcode_i.branch or decode_opcode_i.sys;
-    decode_use_rs2 <= decode_opcode_i.reg_reg or decode_opcode_i.store or decode_opcode_i.branch;
+    decode_use_rs1 <= decode_opcode_type_i.r_type or decode_opcode_type_i.i_type or decode_opcode_type_i.s_type or decode_opcode_type_i.b_type;
+    decode_use_rs2 <= decode_opcode_type_i.r_type or decode_opcode_type_i.s_type or decode_opcode_type_i.b_type;
 
     decode_rs1_zero <= '1' when unsigned(decode_rs1_adr_i) = 0 else '0';
     decode_rs2_zero <= '1' when unsigned(decode_rs2_adr_i) = 0 else '0';

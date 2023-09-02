@@ -83,7 +83,7 @@ begin
     load_pc_o <= ((branch or exception_load_pc_i) and enable and valid) or not booted_i;
     target_pc_o <=
         G_BOOT_ADDRESS when booted_i = '0' else
-        exception_target_pc_i when exception_load_pc_i = '1' else
-        memory_target_pc_i;
+        exception_target_pc_i(31 downto 2) & "00" when exception_load_pc_i = '1' else
+        memory_target_pc_i(31 downto 2) & "00";
     branch_o <= branch;
 end architecture rtl;
