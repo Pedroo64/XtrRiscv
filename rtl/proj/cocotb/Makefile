@@ -6,6 +6,7 @@ MEMORY_BYPASS ?= false
 WRITEBACK_BYPASS ?= false
 FULL_BARREL_SHIFTER ?= false
 ZICSR ?= true
+EXTENSION_M ?= false
 ROOT_DIR =$(PWD)/../..
 
 # defaults
@@ -16,6 +17,9 @@ VHDL_SOURCES += $(ROOT_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/rv32i_pkg.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/csr_def.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/mul.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/div.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/muldiv.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/shifter.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_fetch.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_decode.vhd
@@ -55,6 +59,7 @@ SIM_ARGS += -gG_MEMORY_BYPASS=$(MEMORY_BYPASS)
 SIM_ARGS += -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS)
 SIM_ARGS += -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER)
 SIM_ARGS += -gG_ZICSR=$(ZICSR)
+SIM_ARGS += -gG_EXTENSION_M=$(EXTENSION_M)
 SIM_ARGS += --ieee-asserts=disable
 # SIM_ARGS += --vcd=waveform.vcd
 EXTRA_ARGS += -fsynopsys

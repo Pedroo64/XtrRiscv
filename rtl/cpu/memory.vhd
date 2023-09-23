@@ -13,6 +13,7 @@ entity memory is
         valid_i : in std_logic;
         opcode_i : in opcode_t;
         funct3_i : in std_logic_vector(2 downto 0);
+        funct7_i : in std_logic_vector(6 downto 0);
         rd_adr_i : in std_logic_vector(4 downto 0);
         rd_we_i : in std_logic;
         alu_result_a_i : in std_logic_vector(31 downto 0);
@@ -24,6 +25,7 @@ entity memory is
         rd_we_o : out std_logic;
         rd_dat_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
+        funct7_o : out std_logic_vector(6 downto 0);
         alu_result_a_o : out std_logic_vector(31 downto 0);
         alu_result_b_o : out std_logic_vector(31 downto 0);
         cmd_en_i : in std_logic;
@@ -33,8 +35,7 @@ entity memory is
         cmd_we_o : out std_logic;
         cmd_siz_o : out std_logic_vector(1 downto 0);
         cmd_rdy_i : in std_logic;
-        ready_o : out std_logic;
-        forward_rd_dat_o : out std_logic_vector(31 downto 0)
+        ready_o : out std_logic
     );
 end entity memory;
 
@@ -42,6 +43,7 @@ architecture rtl of memory is
     signal valid, cmd_valid, rd_we : std_logic;
     signal opcode : opcode_t;
     signal funct3 : std_logic_vector(2 downto 0);
+    signal funct7 : std_logic_vector(6 downto 0);
     signal alu_result_a, alu_result_b, rd_dat : std_logic_vector(31 downto 0);
 begin
 
@@ -68,6 +70,7 @@ begin
                 rd_we <= rd_we_i;
                 opcode <= opcode_i;
                 funct3 <= funct3_i;
+                funct7 <= funct7_i;
                 alu_result_a <= alu_result_a_i;
                 alu_result_b <= alu_result_b_i;
             end if;
@@ -76,6 +79,7 @@ begin
 
     opcode_o <= opcode;
     funct3_o <= funct3;
+    funct7_o <= funct7;
     rd_dat <=
         csr_read_data_i when (opcode.sys) = '1' else
         alu_result_a;
@@ -105,5 +109,4 @@ begin
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;
 
-    forward_rd_dat_o <= rd_dat;
 end architecture rtl;

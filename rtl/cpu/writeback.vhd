@@ -16,12 +16,15 @@ entity writeback is
         rd_we_i : in std_logic;
         rsp_dat_i : in std_logic_vector(31 downto 0);
         rsp_vld_i : in std_logic;
+        muldiv_i : in std_logic;
+        muldiv_result_i : in std_logic_vector(31 downto 0);
+        muldiv_ready_i : in std_logic;
         valid_o : out std_logic;
         rd_adr_o : out std_logic_vector(4 downto 0);
         rd_dat_o : out std_logic_vector(31 downto 0);
         rd_we_o : out std_logic;
         ready_o : out std_logic;
-        forward_rd_dat_o : out std_logic_vector(31 downto 0)
+        muldiv_o : out std_logic
     );
 end entity writeback;
 
@@ -37,6 +40,8 @@ architecture rtl of writeback is
     signal mem_read_dat8 : std_logic_vector(7 downto 0);
     signal mem_read_dat16 : std_logic_vector(15 downto 0);
     signal mem_read_dat : std_logic_vector(31 downto 0);
+-- muldiv
+    signal muldiv : std_logic;
 begin
     process (clk_i, arst_i)
     begin
@@ -61,6 +66,7 @@ begin
                 rd_we <= rd_we_i;
                 funct3 <= funct3_i;
                 mem_read <= memory_read_i;
+                muldiv <= muldiv_i;
             end if;
         end if;
     end process;
@@ -87,16 +93,19 @@ begin
     valid_o <= valid;
     rd_adr_o <= rd_adr;
     rd_dat_o <= 
+        muldiv_result_i when muldiv = '1' else
         mem_read_dat when mem_read = '1' else
         rd_dat;
     rd_we_o <= valid and rd_we;
-    process (valid, mem_read, rsp_vld_i)
+    process (valid, mem_read, rsp_vld_i, muldiv, muldiv_ready_i)
     begin
         if valid = '1' and mem_read = '1' then
             ready_o <= rsp_vld_i;
+        elsif valid = '1' and muldiv = '1' then
+            ready_o <= muldiv_ready_i;
         else
             ready_o <= '1';
         end if;
     end process;
-    forward_rd_dat_o <= rd_dat;
+    muldiv_o <= muldiv;
 end architecture rtl;

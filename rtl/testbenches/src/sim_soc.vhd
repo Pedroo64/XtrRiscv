@@ -15,7 +15,8 @@ entity sim_soc is
         G_CPU_MEMORY_BYPASS : boolean := FALSE;
         G_CPU_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
-        G_ZICSR : boolean := FALSE
+        G_ZICSR : boolean := FALSE;
+        G_EXTENSION_M : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -37,8 +38,10 @@ architecture rtl of sim_soc is
     signal rst_rq : std_logic;
     type memory_command_st_t is (st_idle, st_delay_cmd, st_delay_read);
     signal memory_current_st : memory_command_st_t;
-    signal memory_test_delay_cnt : unsigned(2 downto 0) := (others => '0');
+    signal memory_test_delay_cnt : unsigned(5 downto 0) := (others => '0');
     signal memory_test_reg : std_logic_vector(31 downto 0) := (others => '0');
+-- external irq
+    signal irq_cnt : unsigned(12 downto 0);
 begin
     -- Hold reset for at least 4 clock cycles
     process (clk_i)
@@ -60,13 +63,14 @@ begin
             G_MEMORY_BYPASS => G_CPU_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS,
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
-            G_ZICSR => G_ZICSR
+            G_ZICSR => G_ZICSR,
+            G_EXTENSION_M => G_EXTENSION_M
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
-            external_irq_i => external_irq_i, timer_irq_i => timer_irq);
+            external_irq_i => external_irq, timer_irq_i => timer_irq);
 
     u_xtr_split_lyr1 : entity work.xtr_split
         generic map (
@@ -180,6 +184,31 @@ begin
     xtr_rsp_lyr_2(3).dat <= memory_test_reg when xtr_rsp_lyr_2(3).vld = '1' else (others => 'X');
     xtr_rsp_lyr_2(3).rdy <= '1' when xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' and memory_current_st = st_idle else memory_test_delay_cnt(memory_test_delay_cnt'left);
     
+    -- External IRQ
+    -- 8XX6 0000
+    -- 8XX6 FFFF
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            irq_cnt <= (others => '0');
+        elsif rising_edge(clk_i) then
+            if xtr_cmd_lyr_2(6).vld = '1' then
+                irq_cnt <= (others => '0');
+            elsif irq_cnt(irq_cnt'left) = '0' then
+                irq_cnt <= irq_cnt + 1;
+            end if;
+        end if;
+    end process;
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            xtr_rsp_lyr_2(6).vld <= xtr_cmd_lyr_2(6).vld and not xtr_cmd_lyr_2(6).we;
+        end if;
+    end process;
+    xtr_rsp_lyr_2(6).rdy <= '1';
+    xtr_rsp_lyr_2(6).dat <= x"DEADBEEF";
+    external_irq <= irq_cnt(irq_cnt'left);
+
     -- MTIME
     -- 8XX7 0000
     -- FXX7 FFFF

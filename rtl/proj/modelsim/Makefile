@@ -12,6 +12,7 @@ MEMORY_BYPASS ?= FALSE
 WRITEBACK_BYPASS ?= FALSE
 FULL_BARREL_SHIFTER ?= FALSE
 ZICSR ?= TRUE
+EXTENSION_M ?= TRUE
 
 all: compile
 
@@ -26,6 +27,9 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
 		project addfile $(SRCS_PATH)/cpu/shifter.vhd; \
+		project addfile $(SRCS_PATH)/cpu/m_extension/mul.vhd; \
+		project addfile $(SRCS_PATH)/cpu/m_extension/div.vhd; \
+		project addfile $(SRCS_PATH)/cpu/m_extension/muldiv.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_decode.vhd; \
@@ -60,7 +64,7 @@ open_project:
 
 start_sim:
 	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(MKFILE_DIR)/$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) \
-		-gG_ZICSR=$(ZICSR); \
+		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M); \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \

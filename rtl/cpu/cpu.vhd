@@ -11,7 +11,8 @@ entity cpu is
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
-        G_ZICSR : boolean := TRUE
+        G_EXTENSION_M : boolean := FALSE;
+        G_ZICSR : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -56,16 +57,21 @@ architecture rtl of cpu is
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
 -- execute
-    signal execute_en, execute_flush, execute_valid, execute_ready, execute_multicycle_flush : std_logic;
+    signal execute_en, execute_flush, execute_valid, execute_multicycle_flush : std_logic;
     signal execute_opcode : opcode_t;
     signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
     signal execute_rd_we : std_logic;
     signal execute_pc, execute_rs1_dat, execute_rs2_dat, execute_alu_result_a, execute_alu_result_b, execute_imm : std_logic_vector(31 downto 0);
     signal execute_funct3 : std_logic_vector(2 downto 0);
+    signal execute_funct7 : std_logic_vector(6 downto 0);
     signal execute_multicycle : std_logic;
-    signal execute_forward_rd_dat : std_logic_vector(31 downto 0);
 -- execute-shifter
     signal execute_shifter_result : std_logic_vector(31 downto 0);
+    signal execute_shifter_start, execute_shifter_ready : std_logic;
+-- muldiv
+    signal memory_muldiv, writeback_muldiv : std_logic;
+    signal execute_muldiv_result : std_logic_vector(31 downto 0);
+    signal execute_muldiv_start, execute_muldiv_ready : std_logic;
 -- memory
     signal memory_en, memory_flush, memory_valid, memory_ready, memory_cmd_en : std_logic;
     signal memory_opcode : opcode_t;
@@ -73,7 +79,8 @@ architecture rtl of cpu is
     signal memory_rd_dat : std_logic_vector(31 downto 0);
     signal memory_rd_we : std_logic;
     signal memory_funct3 : std_logic_vector(2 downto 0);
-    signal memory_alu_result_a, memory_alu_result_b, memory_forward_rd_dat : std_logic_vector(31 downto 0);
+    signal memory_funct7 : std_logic_vector(6 downto 0);
+    signal memory_alu_result_a, memory_alu_result_b : std_logic_vector(31 downto 0);
 -- writeback
     signal writeback_en, writeback_flush, writeback_valid, writeback_ready : std_logic;
     signal writeback_rd_adr : std_logic_vector(4 downto 0);
@@ -158,7 +165,8 @@ begin
 -- execute
     u_execute : entity work.execute
         generic map (
-            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_MULDIV => G_EXTENSION_M
         )
         port map (
             arst_i => arst_i,
@@ -188,12 +196,17 @@ begin
             alu_result_a_o => execute_alu_result_a,
             alu_result_b_o => execute_alu_result_b,
             funct3_o => execute_funct3,
-            shifter_result_o => execute_shifter_result,
+            funct7_o => execute_funct7,
             target_pc_i => branch_target_pc,
             load_pc_i => branch_load_pc,
             current_pc_o => execute_pc,
             multicycle_o => execute_multicycle,
-            ready_o => execute_ready
+            shifter_start_o => execute_shifter_start,
+            shifter_result_o => execute_shifter_result,
+            shifter_ready_o => execute_shifter_ready,
+            muldiv_start_o => execute_muldiv_start,
+            muldiv_result_o => execute_muldiv_result,
+            muldiv_ready_o => execute_muldiv_ready
         );
 -- memory
     u_memory : entity work.memory
@@ -205,6 +218,7 @@ begin
             valid_i => execute_valid,
             opcode_i => execute_opcode,
             funct3_i => execute_funct3,
+            funct7_i => execute_funct7,
             rd_adr_i => execute_rd_adr,
             rd_we_i => execute_rd_we,
             alu_result_a_i => execute_alu_result_a,
@@ -216,6 +230,7 @@ begin
             rd_we_o => memory_rd_we,
             rd_dat_o => memory_rd_dat,
             funct3_o => memory_funct3,
+            funct7_o => memory_funct7,
             alu_result_a_o => memory_alu_result_a,
             alu_result_b_o => memory_alu_result_b,
             cmd_en_i => memory_cmd_en,
@@ -225,10 +240,11 @@ begin
             cmd_we_o => data_cmd_we_o,
             cmd_siz_o => data_cmd_siz_o,
             cmd_rdy_i => data_cmd_rdy_i,
-            ready_o => memory_ready,
-            forward_rd_dat_o => execute_forward_rd_dat
+            ready_o => memory_ready
         );
 -- writeback
+    memory_muldiv <= memory_opcode.reg_reg and memory_funct7(0) when G_EXTENSION_M = TRUE else '0';
+
     u_writeback : entity work.writeback
         port map (
             arst_i => arst_i,
@@ -243,19 +259,23 @@ begin
             rd_we_i => memory_rd_we,
             rsp_dat_i => data_rsp_dat_i,
             rsp_vld_i => data_rsp_vld_i,
+            muldiv_i => memory_muldiv,
+            muldiv_result_i => execute_muldiv_result,
+            muldiv_ready_i => execute_muldiv_ready,
             valid_o => writeback_valid,
             rd_adr_o => writeback_rd_adr,
             rd_dat_o => writeback_rd_dat,
             rd_we_o => writeback_rd_we,
             ready_o => writeback_ready,
-            forward_rd_dat_o => memory_forward_rd_dat
+            muldiv_o => writeback_muldiv
         );
 -- control unit
     u_control_unit : entity work.control_unit
         generic map (
             G_EXECUTE_BYPASS => G_EXECUTE_BYPASS,
             G_MEMORY_BYPASS => G_MEMORY_BYPASS,
-            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS
+            G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
+            G_EXTENSION_M => G_EXTENSION_M
         )
         port map (
             arst_i => arst_i,
@@ -271,7 +291,10 @@ begin
             execute_rd_adr_i => execute_rd_adr,
             execute_rd_we_i => execute_rd_we,
             execute_multicycle_i => execute_multicycle,
-            execute_ready_i => execute_ready,
+            execute_shifter_start_i => execute_shifter_start,
+            execute_shifter_ready_i => execute_shifter_ready,
+            execute_muldiv_start_i => execute_muldiv_start,
+            execute_muldiv_ready_i => execute_muldiv_ready,
             memory_valid_i => memory_valid,
             memory_rd_adr_i => memory_rd_adr,
             memory_rd_we_i => memory_rd_we,
@@ -280,6 +303,7 @@ begin
             writeback_rd_adr_i => writeback_rd_adr,
             writeback_rd_we_i => writeback_rd_we,
             writeback_ready_i => writeback_ready,
+            writeback_muldiv_i => writeback_muldiv,
             fetch_flush_o => fetch_flush,
             fetch_enable_o => fetch_en,
             decode_flush_o => decode_flush,

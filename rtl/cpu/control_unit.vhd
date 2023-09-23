@@ -8,7 +8,8 @@ entity control_unit is
     generic (
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
-        G_WRITEBACK_BYPASS : boolean := FALSE
+        G_WRITEBACK_BYPASS : boolean := FALSE;
+        G_EXTENSION_M : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -23,7 +24,10 @@ entity control_unit is
         execute_valid_i : in std_logic;
         execute_rd_adr_i : in std_logic_vector(4 downto 0);
         execute_rd_we_i : in std_logic;
-        execute_ready_i : in std_logic;
+        execute_shifter_start_i : in std_logic;
+        execute_shifter_ready_i : in std_logic;
+        execute_muldiv_start_i : in std_logic;
+        execute_muldiv_ready_i : in std_logic;
         execute_multicycle_i : in std_logic;
         memory_valid_i : in std_logic;
         memory_rd_adr_i : in std_logic_vector(4 downto 0);
@@ -32,6 +36,7 @@ entity control_unit is
         writeback_valid_i : in std_logic;
         writeback_rd_adr_i : in std_logic_vector(4 downto 0);
         writeback_rd_we_i : in std_logic;
+        writeback_muldiv_i : in std_logic;
         writeback_ready_i : in std_logic;
         fetch_flush_o : out std_logic;
         fetch_enable_o : out std_logic;
@@ -69,6 +74,8 @@ architecture rtl of control_unit is
     signal fetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
     signal fetch_flush, decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
     signal decode_execute_opcode_sys_hazard : std_logic;
+    signal multicycle_start : std_logic;
+    signal nxt_muldiv_busy, muldiv_busy : std_logic := '0';
 -- Datapath forward
     signal decode_execute_rs1_forward, decode_execute_rs2_forward : std_logic;
     signal decode_memory_rs1_forward, decode_memory_rs2_forward : std_logic;
@@ -114,16 +121,18 @@ begin
 
     decode_execute_opcode_sys_hazard <= execute_valid_i and execute_opcode_i.sys;
 
+    multicycle_start <= execute_muldiv_start_i;
+
 -- pipeline ctl
     fetch_stall <= decode_stall and not load_pc_i;
-    decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard) or decode_execute_opcode_sys_hazard)) and not load_pc_i;
-    execute_stall <= memory_stall or not execute_ready_i;
+    decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard or execute_muldiv_start_i) or decode_execute_opcode_sys_hazard)) and not load_pc_i;
+    execute_stall <= memory_stall or not execute_shifter_ready_i or muldiv_busy;
     memory_stall <= not (memory_ready_i) or writeback_stall;
     writeback_stall <= not writeback_ready_i;
 
     fetch_flush <= load_pc_i;
     decode_flush <= load_pc_i;
-    execute_flush <= ((rs1_hazard or rs2_hazard or decode_execute_opcode_sys_hazard)) or load_pc_i;
+    execute_flush <= ((rs1_hazard or rs2_hazard or decode_execute_opcode_sys_hazard or execute_muldiv_start_i)) or load_pc_i;
     memory_flush <= load_pc_i;
     writeback_flush <= memory_stall and writeback_ready_i;
 
@@ -190,5 +199,21 @@ begin
 
     execute_rs1_dat_o <= execute_rs1_dat_forward when execute_rs1_forward = '1' else regfile_rs1_dat_i;
     execute_rs2_dat_o <= execute_rs2_dat_forward when execute_rs2_forward = '1' else regfile_rs2_dat_i;
+
+-- muldiv
+gen_muldiv_ctl: if G_EXTENSION_M = TRUE generate
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            muldiv_busy <= '0';
+        elsif rising_edge(clk_i) then
+            muldiv_busy <= nxt_muldiv_busy;
+        end if;
+    end process;
+    nxt_muldiv_busy <= 
+        '1' when muldiv_busy = '0' and execute_muldiv_start_i = '1' and load_pc_i = '0' else
+        '0' when muldiv_busy = '1' and (writeback_valid_i and writeback_muldiv_i and execute_muldiv_ready_i) = '1' else
+        muldiv_busy;
+end generate gen_muldiv_ctl;
 
 end architecture rtl;

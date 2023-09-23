@@ -6,7 +6,8 @@ use work.rv32i_pkg.all;
 
 entity execute is
     generic (
-        G_FULL_BARREL_SHIFTER : boolean := FALSE
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_MULDIV : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -36,12 +37,17 @@ entity execute is
         alu_result_a_o : out std_logic_vector(31 downto 0);
         alu_result_b_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
+        funct7_o : out std_logic_vector(6 downto 0);
+        shifter_start_o : out std_logic;
         shifter_result_o : out std_logic_vector(31 downto 0);
+        shifter_ready_o : out std_logic;
+        muldiv_start_o : out std_logic;
+        muldiv_result_o : out std_logic_vector(31 downto 0);
+        muldiv_ready_o : out std_logic;
         target_pc_i : in std_logic_vector(31 downto 0);
         load_pc_i : in std_logic;
         current_pc_o : out std_logic_vector(31 downto 0);
-        multicycle_o : out std_logic;
-        ready_o : out std_logic
+        multicycle_o : out std_logic
     );
 end entity execute;
 
@@ -67,6 +73,9 @@ architecture rtl of execute is
     signal shifter_shmt : std_logic_vector(4 downto 0);
     signal shifter_type : std_logic_vector(1 downto 0);
     signal shifter_data_in, shifter_data_out : std_logic_vector(31 downto 0);
+-- MULDIV
+    signal muldiv_valid, muldiv_start, muldiv_ready, muldiv_srst : std_logic;
+    signal muldiv_result : std_logic_vector(31 downto 0);
 -- DEBUG
     signal instr : std_logic_vector(31 downto 0);
 begin
@@ -110,6 +119,24 @@ begin
             end if;
         end if;
     end process;
+
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            muldiv_valid <= '0';
+        elsif rising_edge(clk_i) then
+            if enable_i = '1' then
+                if flush_i = '1' then
+                    muldiv_valid <= '0';
+                else
+                    muldiv_valid <= valid_i;
+                end if;
+            elsif muldiv_valid = '1' and muldiv_ready = '1' then
+                muldiv_valid <= '0';
+            end if;
+        end if;
+    end process;
+
     valid_o <= valid;
     opcode_o <= opcode;
     rd_adr_o <= rd_adr;
@@ -118,10 +145,10 @@ begin
     alu_result_b_o <= alu_result_b;
     immediate_o <= immediate;
     funct3_o <= funct3;
+    funct7_o <= funct7;
     rs1_adr_o <= rs1_adr;
     rs2_adr_o <= rs2_adr;
     current_pc_o <= pc;
-    ready_o <= shifter_ready;
     multicycle_o <= valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';
 -- PC
     process (clk_i)
@@ -202,7 +229,30 @@ begin
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;
     shifter_start <= 
-        valid_multicycle when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) else
+        valid_multicycle when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and funct7(0) = '0' else -- TODO: NEED TO REMOVE WHEN MULDIV IS FALSE
         '0';
     shifter_result_o <= shifter_data_out;
+    shifter_ready_o <= shifter_ready;
+    shifter_start_o <= shifter_start;
+
+-- MUL-DIV
+gen_muldiv: if G_MULDIV = TRUE generate
+    u_muldiv : entity work.muldiv
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => muldiv_srst,
+            a_i => rs1_dat_i,
+            b_i => rs2_dat_i,
+            funct3_i => funct3,
+            start_i => muldiv_start,
+            result_o => muldiv_result,
+            ready_o => muldiv_ready
+        );
+    muldiv_srst <= multicycle_flush_i;
+    muldiv_start <= muldiv_valid when (opcode.reg_reg and funct7(0)) = '1' else '0';
+    muldiv_ready_o <= muldiv_ready;
+    muldiv_result_o <= muldiv_result;
+    muldiv_start_o <= muldiv_start;
+end generate gen_muldiv;
 end architecture rtl;
