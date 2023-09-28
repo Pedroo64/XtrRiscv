@@ -38,13 +38,14 @@ end entity csr;
 architecture rtl of csr is
     constant C_XRET : boolean := G_ECALL or G_EBREAK or G_INTERRUPTS;
 -- execute stage
-    signal execute_ecall, execute_ebreak, execute_mret : std_logic;
+    signal execute_ecall, execute_ebreak, execute_mret, execute_branch : std_logic;
 -- memory stage
-    signal memory_ecall, memory_ebreak, memory_mret : std_logic;
+    signal memory_ecall, memory_ebreak, memory_mret, memory_branch : std_logic;
     signal memory_pc : std_logic_vector(31 downto 0);
 -- csr
     signal async_exception_en, async_exception : std_logic;
     signal external_interrupt_en, timer_interrupt_en : std_logic;
+    signal external_interrupt, timer_interrupt : std_logic;
     signal exception_pc : std_logic_vector(31 downto 0);
     signal exception_taken, exception_exit : std_logic;
     signal we : std_logic;
@@ -64,6 +65,7 @@ architecture rtl of csr is
     signal mtval : std_logic_vector(31 downto 0) := (others => '0');
 begin
 -- Exception handling
+    execute_branch <= execute_opcode_i.jal or execute_opcode_i.jalr or execute_opcode_i.branch;
     execute_ecall <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "00" and G_ECALL = TRUE else '0';
     execute_ebreak <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "01" and G_EBREAK = TRUE else '0';
     execute_mret <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "10" and C_XRET = TRUE else '0';
@@ -76,6 +78,7 @@ begin
                 memory_ebreak <= execute_ebreak;
                 memory_mret <= execute_mret;
                 memory_pc <= execute_current_pc_i;
+                memory_branch <= execute_branch and execute_valid_i;
             end if;
         end if;
     end process;
@@ -85,8 +88,12 @@ begin
         if rising_edge(clk_i) then
             if C_XRET = TRUE then
                 async_exception <= ((external_interrupt_i and external_interrupt_en) or (timer_interrupt_i and timer_interrupt_en));
+                external_interrupt <= external_interrupt_i and external_interrupt_en;
+                timer_interrupt <= timer_interrupt_i and timer_interrupt_en;
             else
                 async_exception <= '0';
+                external_interrupt <= '0';
+                timer_interrupt <= '0';
             end if;
         end if;
     end process;
@@ -100,30 +107,26 @@ begin
     mret <= memory_mret;
     xret <= mret;
 
-    exception_taken <= ((ecall or ebreak) and memory_valid_i) or (async_exception and async_exception_en);
+    exception_taken <= (((ecall or ebreak) and memory_valid_i) or (async_exception and async_exception_en)) and not memory_branch and execute_en_i;
     exception_exit <= mret and memory_valid_i;
 
-    process (ecall, ebreak, memory_pc, async_exception_en, memory_branch_i, memory_target_pc_i, execute_current_pc_i)
+    process (ecall, ebreak, memory_pc, async_exception_en, execute_current_pc_i)
     begin
         if (ecall or ebreak) = '1' then
             exception_pc <= memory_pc;
         elsif async_exception_en = '1' then
-            if memory_branch_i = '1' then
-                exception_pc <= memory_target_pc_i;
-            else
-                exception_pc <= execute_current_pc_i;
-            end if;
+            exception_pc <= execute_current_pc_i;
         else
             exception_pc <= (others => '-');
         end if;
     end process;
 
     target_pc_o <= 
-        mtvec when (ecall or ebreak or async_exception) = '1' else
+        mtvec when (ecall or ebreak or (async_exception and async_exception_en)) = '1' else
         mepc when xret = '1' else
         (others => '-');
 
-    load_pc_o <= ecall or ebreak or xret or (async_exception and async_exception_en);
+    load_pc_o <= ((ecall or ebreak or xret) and memory_valid_i) or (async_exception and async_exception_en and not memory_branch);
 
     read_data_o <= read_data;
 
@@ -199,10 +202,10 @@ begin
                     mcause <= CSR_MCAUSE_MACHINE_ECALL;
                 elsif ebreak = '1' then
                     mcause <= CSR_MCAUSE_BREAKPOINT;
---                elsif cause_external_irq_i = '1' then
---                    mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
---                elsif cause_timer_irq_i = '1' then
---                    mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
+                elsif external_interrupt = '1' then
+                    mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
+                elsif timer_interrupt = '1' then
+                    mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
                 end if;
             elsif csr_write_addr = CSR_MCAUSE and we = '1' then
                 mcause <= csr_write_data;
