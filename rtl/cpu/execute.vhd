@@ -251,8 +251,8 @@ gen_muldiv: if G_MULDIV = TRUE generate
         );
     muldiv_srst <= multicycle_flush_i;
     muldiv_start <= muldiv_valid when (opcode.reg_reg and funct7(0)) = '1' else '0';
-    muldiv_ready_o <= muldiv_ready;
     muldiv_result_o <= muldiv_result;
-    muldiv_start_o <= muldiv_start;
 end generate gen_muldiv;
+    muldiv_ready_o <= muldiv_ready when G_MULDIV = TRUE else '0';
+    muldiv_start_o <= muldiv_start when G_MULDIV = TRUE else '0';
 end architecture rtl;
