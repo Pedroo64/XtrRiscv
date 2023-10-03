@@ -9,7 +9,8 @@ entity control_unit is
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
-        G_EXTENSION_M : boolean := FALSE
+        G_EXTENSION_M : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -44,6 +45,7 @@ entity control_unit is
         decode_enable_o : out std_logic;
         execute_flush_o : out std_logic;
         execute_enable_o : out std_logic;
+        execute_multicycle_enable_o : out std_logic;
         execute_multicycle_flush_o : out std_logic;
         memory_flush_o : out std_logic;
         memory_enable_o : out std_logic;
@@ -75,6 +77,7 @@ architecture rtl of control_unit is
     signal fetch_flush, decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
     signal decode_execute_opcode_sys_hazard : std_logic;
     signal multicycle_start : std_logic;
+    signal shifter_busy : std_logic;
     signal nxt_muldiv_busy, muldiv_busy : std_logic := '0';
 -- Datapath forward
     signal decode_execute_rs1_forward, decode_execute_rs2_forward : std_logic;
@@ -121,18 +124,20 @@ begin
 
     decode_execute_opcode_sys_hazard <= execute_valid_i and execute_opcode_i.sys;
 
-    multicycle_start <= execute_muldiv_start_i;
+    multicycle_start <= execute_muldiv_start_i or execute_shifter_start_i;
+
+    shifter_busy <= not execute_shifter_ready_i when G_SHIFTER_EARLY_INJECTION = TRUE else '0';
 
 -- pipeline ctl
     fetch_stall <= decode_stall and not load_pc_i;
-    decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard or execute_muldiv_start_i) or decode_execute_opcode_sys_hazard)) and not load_pc_i;
-    execute_stall <= memory_stall or not execute_shifter_ready_i or muldiv_busy;
+    decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard or multicycle_start) or decode_execute_opcode_sys_hazard)) and not load_pc_i;
+    execute_stall <= memory_stall or muldiv_busy or shifter_busy;
     memory_stall <= not (memory_ready_i) or writeback_stall;
     writeback_stall <= not writeback_ready_i;
 
     fetch_flush <= load_pc_i;
     decode_flush <= load_pc_i;
-    execute_flush <= ((rs1_hazard or rs2_hazard or decode_execute_opcode_sys_hazard or execute_muldiv_start_i)) or load_pc_i;
+    execute_flush <= ((rs1_hazard or rs2_hazard or decode_execute_opcode_sys_hazard or multicycle_start)) or load_pc_i;
     memory_flush <= load_pc_i;
     writeback_flush <= memory_stall and writeback_ready_i;
 
@@ -151,6 +156,8 @@ begin
     writeback_enable_o <= not writeback_stall;
 
     memory_cmd_en_o <= writeback_ready_i;
+
+    execute_multicycle_enable_o <= not memory_stall;
 
 -- Datapath forward
     decode_execute_rs1_forward <= 

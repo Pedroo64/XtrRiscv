@@ -7,6 +7,7 @@ use work.rv32i_pkg.all;
 entity execute is
     generic (
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_MULDIV : boolean := FALSE
     );
     port (
@@ -14,6 +15,7 @@ entity execute is
         clk_i : in std_logic;
         flush_i : in std_logic;
         enable_i : in std_logic;
+        multicycle_enable_i : in std_logic;
         multicycle_flush_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
@@ -52,7 +54,8 @@ entity execute is
 end entity execute;
 
 architecture rtl of execute is
-    signal valid, valid_multicycle : std_logic;
+    constant C_ENABLE_SHIFTER_DATA_PATH : boolean := G_SHIFTER_EARLY_INJECTION;
+    signal valid : std_logic;
     signal rs1_adr, rs2_adr, rd_adr : std_logic_vector(4 downto 0);
     signal rd_we : std_logic;
     signal immediate : std_logic_vector(31 downto 0);
@@ -99,7 +102,6 @@ begin
     begin
         if arst_i = '1' then
             valid <= '0';
-            valid_multicycle <= '0';
         elsif rising_edge(clk_i) then
             if enable_i = '1' then
                 if flush_i = '1' then
@@ -107,32 +109,6 @@ begin
                 else
                     valid <= valid_i;
                 end if;
-            end if;
-            if enable_i = '1' then
-                if flush_i = '1' or shifter_ready = '0' then
-                    valid_multicycle <= '0';
-                else
-                    valid_multicycle <= valid_i;
-                end if;
-            elsif shifter_ready = '0' then
-                valid_multicycle <= '0';
-            end if;
-        end if;
-    end process;
-
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            muldiv_valid <= '0';
-        elsif rising_edge(clk_i) then
-            if enable_i = '1' then
-                if flush_i = '1' then
-                    muldiv_valid <= '0';
-                else
-                    muldiv_valid <= valid_i;
-                end if;
-            elsif muldiv_valid = '1' and muldiv_ready = '1' then
-                muldiv_valid <= '0';
             end if;
         end if;
     end process;
@@ -193,15 +169,25 @@ begin
             alu_result_a <= pc_incr;
             alu_result_b <= alu_arith_r(31 downto 0);
         else
-            if (opcode.reg_imm or opcode.reg_reg) = '1' then
-                case funct3 is
-                    when RV32I_FN3_SL | RV32I_FN3_SR => alu_result_a <= shifter_data_out;
-                    when RV32I_FN3_SLT | RV32I_FN3_SLTU => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
-                    when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => alu_result_a <= alu_logic_r;
-                    when others => alu_result_a <= alu_arith_r(31 downto 0);
-                end case;
+            if G_SHIFTER_EARLY_INJECTION = TRUE then
+                if (opcode.reg_imm or opcode.reg_reg) = '1' then
+                    case funct3 is
+                        when RV32I_FN3_SL | RV32I_FN3_SR => alu_result_a <= shifter_data_out;
+                        when RV32I_FN3_SLT | RV32I_FN3_SLTU => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+                        when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => alu_result_a <= alu_logic_r;
+                        when others => alu_result_a <= alu_arith_r(31 downto 0);
+                    end case;
+                else
+                    alu_result_a <= alu_arith_r(31 downto 0);
+                end if;
             else
-                alu_result_a <= alu_arith_r(31 downto 0);
+                if (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(2)) = '1' then
+                    alu_result_a <= alu_logic_r;
+                elsif (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(1)) = '1' then
+                    alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+                else
+                    alu_result_a <= alu_arith_r(31 downto 0);
+                end if;
             end if;
             alu_result_b <= rs2_dat_i;
         end if;
@@ -209,34 +195,51 @@ begin
 
 -- SHIFTER
     u_shifter : entity work.shifter
-    generic map (
-        G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER
-    )
-    port map (
-        arst_i => arst_i,
-        clk_i => clk_i,
-        srst_i => shifter_srst,
-        shift_i => shifter_shmt,
-        type_i => shifter_type,
-        data_i => shifter_data_in,
-        start_i => shifter_start,
-        data_o => shifter_data_out,
-        done_o => open,
-        ready_o => shifter_ready
-    );
+        generic map (
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION
+        )
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => shifter_srst,
+            shift_i => shifter_shmt,
+            type_i => shifter_type,
+            data_i => shifter_data_in,
+            start_i => shifter_start,
+            data_o => shifter_data_out,
+            done_o => open,
+            ready_o => shifter_ready
+        );
     shifter_srst <= multicycle_flush_i;
     shifter_shmt <= alu_b(4 downto 0);
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;
     shifter_start <= 
-        valid_multicycle when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and funct7(0) = '0' else -- TODO: NEED TO REMOVE WHEN MULDIV IS FALSE
+        valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and (funct7(0) = '0' or G_MULDIV = FALSE) and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
         '0';
     shifter_result_o <= shifter_data_out;
     shifter_ready_o <= shifter_ready;
-    shifter_start_o <= shifter_start;
+    shifter_start_o <= shifter_start when G_SHIFTER_EARLY_INJECTION = FALSE else '0';
 
 -- MUL-DIV
 gen_muldiv: if G_MULDIV = TRUE generate
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            muldiv_valid <= '0';
+        elsif rising_edge(clk_i) then
+            if enable_i = '1' then
+                if flush_i = '1' then
+                    muldiv_valid <= '0';
+                else
+                    muldiv_valid <= valid_i;
+                end if;
+            elsif muldiv_valid = '1' and muldiv_ready = '1' then
+                muldiv_valid <= '0';
+            end if;
+        end if;
+    end process;
     u_muldiv : entity work.muldiv
         port map (
             arst_i => arst_i,

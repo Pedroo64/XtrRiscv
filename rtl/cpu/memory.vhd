@@ -5,6 +5,10 @@ use IEEE.numeric_std.all;
 use work.rv32i_pkg.all;
 
 entity memory is
+    generic (
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
@@ -18,6 +22,8 @@ entity memory is
         rd_we_i : in std_logic;
         alu_result_a_i : in std_logic_vector(31 downto 0);
         alu_result_b_i : in std_logic_vector(31 downto 0);
+        shifter_result_i : in std_logic_vector(31 downto 0);
+        shifter_ready_i : in std_logic;
         csr_read_data_i : in std_logic_vector(31 downto 0);
         valid_o : out std_logic;
         opcode_o : out opcode_t;
@@ -80,9 +86,16 @@ begin
     opcode_o <= opcode;
     funct3_o <= funct3;
     funct7_o <= funct7;
-    rd_dat <=
-        csr_read_data_i when (opcode.sys) = '1' else
-        alu_result_a;
+    process (opcode, funct3, csr_read_data_i, shifter_result_i, alu_result_a)
+    begin
+        if opcode.sys = '1' then
+            rd_dat <= csr_read_data_i;
+        elsif G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01" then
+            rd_dat <= shifter_result_i;
+        else
+            rd_dat <= alu_result_a;
+        end if;
+    end process;
     rd_dat_o <= rd_dat;
     valid_o <= valid;
     rd_we_o <= rd_we and valid;
@@ -97,10 +110,12 @@ begin
     cmd_we_o <= opcode.store;
     cmd_siz_o <= funct3(1 downto 0);
 
-    process (opcode, valid, cmd_rdy_i)
+    process (opcode, valid, cmd_rdy_i, funct3, shifter_ready_i)
     begin
         if ((opcode.store or opcode.load) and valid) = '1' then
             ready_o <= cmd_rdy_i;
+        elsif (G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01") and valid = '1' then
+            ready_o <= shifter_ready_i;
         else
             ready_o <= '1';
         end if;

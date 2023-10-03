@@ -31,8 +31,9 @@ begin
         generic map (
             G_FREQ_IN => G_FREQ, G_RAM_SIZE => G_RAM_SIZE, G_INIT_FILE => G_INIT_FILE,
             G_UART => 1, G_BOOT_TRAP => TRUE,
-            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_EXECUTE_BYPASS => TRUE, G_CPU_MEMORY_BYPASS => TRUE, G_CPU_WRITEBACK_BYPASS => TRUE, G_FULL_BARREL_SHIFTER => TRUE,
-            G_ZICSR => TRUE, G_EXTENSION_M => TRUE)
+            G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_EXECUTE_BYPASS => FALSE, G_CPU_MEMORY_BYPASS => FALSE, G_CPU_WRITEBACK_BYPASS => FALSE,
+            G_FULL_BARREL_SHIFTER => FALSE, G_CPU_SHIFTER_EARLY_INJECTION => FALSE,
+            G_ZICSR => FALSE, G_EXTENSION_M => FALSE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 

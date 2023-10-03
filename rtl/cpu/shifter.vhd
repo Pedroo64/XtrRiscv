@@ -4,7 +4,8 @@ use IEEE.numeric_std.all;
 
 entity shifter is
     generic (
-        G_FULL_BARREL_SHIFTER : boolean := FALSE
+        G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -21,71 +22,188 @@ entity shifter is
 end entity shifter;
 
 architecture rtl of shifter is
+    constant C_VERIF : boolean := FALSE;
+    signal load_data : std_logic;
+    signal nxt_data, data : std_logic_vector(31 downto 0);
+    signal nxt_done, done : std_logic;
 begin
     gen_light_shifter: if G_FULL_BARREL_SHIFTER = FALSE generate
+        type shift_st_t is (st_idle, st_shift);
+        signal current_st, next_st : shift_st_t;
+        signal load_cnt : std_logic;
         signal nxt_cnt, cnt : unsigned(4 downto 0);
-        signal nxt_data, data : std_logic_vector(31 downto 0);
-        signal ready : std_logic;
         signal shift_type : std_logic_vector(1 downto 0);
     begin
-        nxt_cnt <= 
-            unsigned(shift_i) when start_i = '1' else
-            cnt - 1;
-        nxt_data <= 
-            data_i when start_i = '1' else
-            (shift_type(0) and data(31)) & data(31 downto 1) when shift_type(1) = '1' else
-            data(30 downto 0) & '0';
-
-        process (clk_i)
+        process (current_st, start_i, nxt_cnt)
         begin
-            if rising_edge(clk_i) then
-                if start_i = '1' then
-                    shift_type <= type_i;
-                end if;
-                if ready = '0' then
-                    data <= nxt_data;
-                end if;
-            end if;
+            case current_st is
+                when st_idle =>
+                    if start_i = '1' and nxt_cnt /= 0 then
+                        next_st <= st_shift;
+                    else
+                        next_st <= st_idle;
+                    end if;
+                when st_shift =>
+                    if nxt_cnt = 0 then
+                        next_st <= st_idle;
+                    else
+                        next_st <= st_shift;
+                    end if;
+                when others =>
+                    next_st <= st_idle;
+            end case;
         end process;
 
         process (clk_i, arst_i)
         begin
             if arst_i = '1' then
-                cnt <= to_unsigned(1, cnt'length);
+                current_st <= st_idle;
             elsif rising_edge(clk_i) then
-                if ready = '0' then
-                    cnt <= nxt_cnt;
+                if srst_i = '1' then
+                    current_st <= st_idle;
+                else
+                    current_st <= next_st;
                 end if;
             end if;
         end process;
-        ready <= '1' when nxt_cnt = 0 else '0';
-        done_o <= '1';
-        ready_o <= ready;
-        data_o <= nxt_data;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if load_cnt = '1' then
+                    cnt <= nxt_cnt;
+                end if;
+                if load_data = '1' then
+                    data <= nxt_data;
+                end if;
+                if current_st = st_idle then
+                    shift_type <= type_i;
+                end if;
+            end if;
+        end process;
+
+        process (current_st, data_i, data, shift_type, shift_i, start_i, cnt)
+        begin
+            case current_st is
+                when st_idle =>
+                    nxt_data <= data_i;
+                    nxt_cnt <= unsigned(shift_i);
+                    load_data <= start_i;
+                    load_cnt <= start_i;
+                when st_shift =>
+                    nxt_cnt <= cnt - 1;
+                    if shift_type(1) = '1' then
+                        nxt_data <= (shift_type(0) and data(31)) & data(31 downto 1);
+                    else
+                        nxt_data <= data(30 downto 0) & '0';
+                    end if;
+                    load_data <= '1';
+                    load_cnt <= '1';
+                when others =>
+                    nxt_data <= (others => 'X');
+                    nxt_cnt <= (others => 'X');
+                    load_data <= '0';
+                    load_cnt <= '0';
+            end case;
+        end process;
+
+        nxt_done <= '1' when (next_st = st_idle and current_st = st_shift) or (current_st = st_idle and nxt_cnt = 0 and start_i = '1') else '0';
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                done <= nxt_done;
+            end if;
+        end process;
+
+        ready_o <= 
+            '0' when G_SHIFTER_EARLY_INJECTION = TRUE and next_st = st_shift else
+            '0' when G_SHIFTER_EARLY_INJECTION = FALSE and current_st = st_shift else
+            '1';
+
     end generate gen_light_shifter;
 
     gen_full_shifter: if G_FULL_BARREL_SHIFTER = TRUE generate
-        signal right0, right1, right2, right3, right4 : std_logic_vector(31 downto 0);
-        signal left0, left1, left2, left3, left4 : std_logic_vector(31 downto 0);
+        function reverse_bit_order (slv_i : in std_logic_vector) return std_logic_vector is
+            variable reversed : std_logic_vector(slv_i'length - 1 downto 0);
+        begin
+            for i in 0 to slv_i'length - 1 loop
+                reversed(i) := slv_i(slv_i'length - 1 - i);
+            end loop;
+            return reversed;
+        end function;
+        type array_t is array (natural range <>) of std_logic_vector(31 downto 0);
+        signal shift_data : array_t(0 to 5);
     begin
-
-        right0 <= (16 to 31 => type_i(0) and data_i(31)) & data_i(31 downto 16) when shift_i(4) = '1' else data_i;
-        right1 <= (24 to 31 => type_i(0) and data_i(31)) & right0(31 downto  8) when shift_i(3) = '1' else right0;
-        right2 <= (28 to 31 => type_i(0) and data_i(31)) & right1(31 downto  4) when shift_i(2) = '1' else right1;
-        right3 <= (30 to 31 => type_i(0) and data_i(31)) & right2(31 downto  2) when shift_i(1) = '1' else right2;
-        right4 <= (31 to 31 => type_i(0) and data_i(31)) & right3(31 downto  1) when shift_i(0) = '1' else right3;
-
-        left0 <= data_i(15 downto 0) & (0 to 15 => '0') when shift_i(4) = '1' else data_i;
-        left1 <=  left0(23 downto 0) & (0 to 7  => '0') when shift_i(3) = '1' else left0;
-        left2 <=  left1(27 downto 0) & (0 to 3  => '0') when shift_i(2) = '1' else left1;
-        left3 <=  left2(29 downto 0) & (0 to 1  => '0') when shift_i(1) = '1' else left2;
-        left4 <=  left3(30 downto 0) & (0 to 0  => '0') when shift_i(0) = '1' else left3;
-
-        data_o <= right4 when type_i(1) = '1' else left4;
-
-        done_o <= start_i;
+        process (type_i, data_i, shift_data, shift_i)
+        begin
+            if type_i(1) = '1' then
+                shift_data(5) <= data_i;
+            else
+                shift_data(5) <= reverse_bit_order(data_i);
+            end if;
+            for i in shift_i'range loop
+                if shift_i(i) = '1' then
+                    shift_data(i) <= (data_i'left downto data_i'length - 2**i => (type_i(0) and data_i(data_i'left))) & shift_data(i + 1)(data_i'left downto 2**i);
+                else
+                    shift_data(i) <= shift_data(i + 1);
+                end if;
+            end loop;
+        end process;
+        process (type_i, shift_data)
+        begin
+            if type_i(1) = '1' then
+                nxt_data <= shift_data(0);
+            else
+                nxt_data <= reverse_bit_order(shift_data(0));
+            end if;
+        end process;
+        gen_no_early_injection: if G_SHIFTER_EARLY_INJECTION = FALSE generate
+            process (clk_i)
+            begin
+                if rising_edge(clk_i) then
+                    data <= nxt_data;
+                    done <= nxt_done;
+                end if;
+            end process;
+        end generate gen_no_early_injection;
+        nxt_done <= start_i;
         ready_o <= '1';
     end generate gen_full_shifter;
 
+    done_o <= 
+        nxt_done when G_SHIFTER_EARLY_INJECTION = TRUE else
+        done;
 
+    data_o <= 
+        nxt_data when G_SHIFTER_EARLY_INJECTION = TRUE else
+        data;
+
+    gen_verif: if C_VERIF = TRUE generate
+        signal next_expected_res, expected_res : std_logic_vector(31 downto 0);
+    begin
+        process (type_i, data_i, start_i, expected_res)
+        begin
+            if start_i = '1' then
+                case type_i is
+                    when "00" | "01" => next_expected_res <= std_logic_vector(shift_left(unsigned(data_i), to_integer(unsigned(shift_i))));
+                    when "10" => next_expected_res <= std_logic_vector(shift_right(unsigned(data_i), to_integer(unsigned(shift_i))));
+                    when "11" => next_expected_res <= std_logic_vector(shift_right(signed(data_i), to_integer(unsigned(shift_i))));
+                    when others => next_expected_res <= (others => 'X');
+                end case;
+            else
+                next_expected_res <= expected_res;
+            end if;
+            if G_SHIFTER_EARLY_INJECTION = TRUE and nxt_done = '1' then
+                assert next_expected_res = nxt_data severity FAILURE;
+            elsif G_SHIFTER_EARLY_INJECTION = FALSE and done = '1' then
+                assert expected_res = data severity FAILURE;
+            end if;
+        end process;
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                expected_res <= next_expected_res;
+            end if;
+        end process;
+    end generate gen_verif;
 end architecture rtl;

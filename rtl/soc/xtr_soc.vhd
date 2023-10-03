@@ -16,6 +16,7 @@ entity xtr_soc is
         G_CPU_MEMORY_BYPASS : boolean := FALSE;
         G_CPU_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_CPU_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_ZICSR : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE
     );
@@ -61,6 +62,7 @@ begin
             G_MEMORY_BYPASS => G_CPU_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS,
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_SHIFTER_EARLY_INJECTION => G_CPU_SHIFTER_EARLY_INJECTION,
             G_ZICSR => G_ZICSR,
             G_EXTENSION_M => G_EXTENSION_M
         )

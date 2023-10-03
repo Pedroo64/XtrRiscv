@@ -11,6 +11,7 @@ EXECUTE_BYPASS ?= FALSE
 MEMORY_BYPASS ?= FALSE
 WRITEBACK_BYPASS ?= FALSE
 FULL_BARREL_SHIFTER ?= FALSE
+SHIFTER_EARLY_INJECTION ?= FALSE
 ZICSR ?= TRUE
 EXTENSION_M ?= TRUE
 
@@ -63,7 +64,10 @@ open_project:
 	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf;"
 
 start_sim:
-	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc -gG_INIT_FILE="$(MKFILE_DIR)/$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" -gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) \
+	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc \
+		-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
+		-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
+		-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
 		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M); \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \

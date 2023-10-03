@@ -11,8 +11,10 @@ entity cpu is
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
-        G_ZICSR : boolean := FALSE
+        G_ZICSR : boolean := FALSE;
+        G_IGNORE_CONSTANTS : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -37,6 +39,7 @@ entity cpu is
 end entity cpu;
 
 architecture rtl of cpu is
+    constant C_SHIFTER_EARLY_INJECTION : boolean := (G_EXECUTE_BYPASS and G_SHIFTER_EARLY_INJECTION and not G_IGNORE_CONSTANTS) or (G_SHIFTER_EARLY_INJECTION and G_IGNORE_CONSTANTS);
     constant C_ECALL : boolean := G_ZICSR;
     constant C_EBREAK : boolean := G_ZICSR;
     constant C_INTERRUPTS : boolean := G_ZICSR;
@@ -57,7 +60,7 @@ architecture rtl of cpu is
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
 -- execute
-    signal execute_en, execute_flush, execute_valid, execute_multicycle_flush : std_logic;
+    signal execute_en, execute_flush, execute_valid, execute_multicycle_enable, execute_multicycle_flush : std_logic;
     signal execute_opcode : opcode_t;
     signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
     signal execute_rd_we : std_logic;
@@ -98,6 +101,8 @@ architecture rtl of cpu is
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr : std_logic_vector(4 downto 0);
     signal regfile_rs1_dat, regfile_rs2_dat, regfile_rd_dat : std_logic_vector(31 downto 0);
 begin
+    assert not(G_SHIFTER_EARLY_INJECTION and not G_EXECUTE_BYPASS and not G_IGNORE_CONSTANTS) report "G_SHIFTER_EARLY_INJECTION will be ignored since G_EXECUTE_BYPASS is FALSE" severity ERROR;
+
 -- fetch
     fetch_load_pc <= branch_load_pc;
     fetch_target_pc <= branch_target_pc;
@@ -166,6 +171,7 @@ begin
     u_execute : entity work.execute
         generic map (
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION,
             G_MULDIV => G_EXTENSION_M
         )
         port map (
@@ -173,6 +179,7 @@ begin
             clk_i => clk_i,
             flush_i => execute_flush,
             enable_i => execute_en,
+            multicycle_enable_i => execute_multicycle_enable,
             multicycle_flush_i => execute_multicycle_flush,
             valid_i => decode_valid,
             instr_i => decode_instr,
@@ -210,6 +217,10 @@ begin
         );
 -- memory
     u_memory : entity work.memory
+        generic map (
+            G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
+            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION      
+        )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
@@ -223,6 +234,8 @@ begin
             rd_we_i => execute_rd_we,
             alu_result_a_i => execute_alu_result_a,
             alu_result_b_i => execute_alu_result_b,
+            shifter_result_i => execute_shifter_result,
+            shifter_ready_i => execute_shifter_ready,
             csr_read_data_i => csr_read_dat,
             valid_o => memory_valid,
             opcode_o => memory_opcode,
@@ -275,7 +288,8 @@ begin
             G_EXECUTE_BYPASS => G_EXECUTE_BYPASS,
             G_MEMORY_BYPASS => G_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
-            G_EXTENSION_M => G_EXTENSION_M
+            G_EXTENSION_M => G_EXTENSION_M,
+            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION
         )
         port map (
             arst_i => arst_i,
@@ -310,6 +324,7 @@ begin
             decode_enable_o => decode_en,
             execute_flush_o => execute_flush,
             execute_enable_o => execute_en,
+            execute_multicycle_enable_o => execute_multicycle_enable,
             execute_multicycle_flush_o => execute_multicycle_flush,
             memory_flush_o => memory_flush,
             memory_enable_o => memory_en,
