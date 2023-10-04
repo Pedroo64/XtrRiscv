@@ -101,7 +101,7 @@ architecture rtl of cpu is
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr : std_logic_vector(4 downto 0);
     signal regfile_rs1_dat, regfile_rs2_dat, regfile_rd_dat : std_logic_vector(31 downto 0);
 begin
-    assert not(G_SHIFTER_EARLY_INJECTION and not G_EXECUTE_BYPASS and not G_IGNORE_CONSTANTS) report "G_SHIFTER_EARLY_INJECTION will be ignored since G_EXECUTE_BYPASS is FALSE" severity ERROR;
+    assert not(G_SHIFTER_EARLY_INJECTION and not G_EXECUTE_BYPASS and not G_IGNORE_CONSTANTS) report "G_SHIFTER_EARLY_INJECTION will be ignored since G_EXECUTE_BYPASS is FALSE" severity NOTE;
 
 -- fetch
     fetch_load_pc <= branch_load_pc;

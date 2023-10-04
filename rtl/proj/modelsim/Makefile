@@ -15,6 +15,16 @@ SHIFTER_EARLY_INJECTION ?= FALSE
 ZICSR ?= TRUE
 EXTENSION_M ?= TRUE
 
+ifeq ($(ZICSR), TRUE)
+CSR_WAVE = add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_csr/u_csr/*;
+endif
+
+ifeq ($(EXTENSION_M), TRUE)
+MULDIV_WAVE  = add wave -divider "muldiv" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/*;
+MULDIV_WAVE += add wave -divider "mul" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/u_mul/*;
+MULDIV_WAVE += add wave -divider "div" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/u_div/*;
+endif
+
 all: compile
 
 create_project:
@@ -67,8 +77,9 @@ start_sim:
 	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc \
 		-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
 		-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
-		-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
+		-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
 		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M); \
+		add wave -divider "cpu" -ports sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/*; \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
@@ -77,7 +88,8 @@ start_sim:
 		add wave -divider "writeback" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_writeback/*; \
 		add wave -divider "ctl" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_control_unit/*; \
 		add wave -divider "branch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_branch_unit/*; \
-		add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_csr/u_csr/*; \
+		$(CSR_WAVE) \
+		$(MULDIV_WAVE) \
 		set NumericStdNoWarnings 1; config wave -signalnamewidth 1"
 
 clean:
