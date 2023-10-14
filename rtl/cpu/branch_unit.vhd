@@ -34,6 +34,7 @@ architecture rtl of branch_unit is
     signal enable, valid, cmp_lt, cmp_eq, branch : std_logic;
     signal execute_cmp_signed, execute_cmp_lt, execute_cmp_eq : std_logic;
     signal memory_cmp_lt, memory_cmp_eq : std_logic;
+    signal branch_taken : std_logic;
 begin
     
 -- COMPARATOR
@@ -63,22 +64,8 @@ begin
     cmp_lt <= memory_cmp_lt;
     cmp_eq <= memory_cmp_eq;
 
-    process (opcode, cmp_eq, cmp_lt, funct3)
-    begin
-        if (opcode.jal or opcode.jalr) = '1' then
-            branch <= '1';
-        elsif opcode.branch = '1' then
-            case funct3 is
-                when RV32I_FN3_BEQ => branch <= cmp_eq;
-                when RV32I_FN3_BNE => branch <= not cmp_eq;
-                when RV32I_FN3_BLT | RV32I_FN3_BLTU => branch <= cmp_lt;
-                when RV32I_FN3_BGE | RV32I_FN3_BGEU => branch <= not cmp_lt;            
-                when others => branch <= '0';
-            end case;
-        else
-            branch <= '0';
-        end if;
-    end process;
+    branch_taken <= (cmp_eq xor funct3(0)) when funct3(2) = '0' else (cmp_lt xor funct3(0));
+    branch <= (opcode.jal or opcode.jalr or (opcode.branch and branch_taken));
 
     load_pc_o <= ((branch) and enable and valid) or exception_load_pc_i or not booted_i;
     target_pc_o <=
