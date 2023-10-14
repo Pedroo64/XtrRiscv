@@ -3,7 +3,11 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 package csr_def is
-    
+
+    constant CSR_FN12_ECALL  : std_logic_vector(11 downto 0) := "000000000000";
+    constant CSR_FN12_EBREAK : std_logic_vector(11 downto 0) := "000000000001";
+    constant CSR_FN12_MRET   : std_logic_vector(11 downto 0) := "000000000010";
+
     constant CSR_MVENDORID  : std_logic_vector(11 downto 0) := x"F11";
     constant CSR_MARCHID    : std_logic_vector(11 downto 0) := x"F12";
     constant CSR_MIMPID     : std_logic_vector(11 downto 0) := x"F13";
@@ -58,5 +62,15 @@ package csr_def is
     constant CSR_MCAUSE_SUPERVISOR_ECALL                : std_logic_vector(31 downto 0) := x"00000009";
     constant CSR_MCAUSE_HYPERVISOR_ECALL                : std_logic_vector(31 downto 0) := x"0000000A";
     constant CSR_MCAUSE_MACHINE_ECALL                   : std_logic_vector(31 downto 0) := x"0000000B";
+
+type csr_registers_t is record
+    mscratch : std_logic_vector(31 downto 0);
+    mstatus : std_logic_vector(31 downto 0);
+    mie : std_logic_vector(31 downto 0);
+    mtvec : std_logic_vector(31 downto 0);
+    mepc : std_logic_vector(31 downto 0);
+    mcause : std_logic_vector(31 downto 0);
+    mtval : std_logic_vector(31 downto 0);
+end record;
 
 end package csr_def;

@@ -7,9 +7,9 @@ use work.rv32i_pkg.all;
 
 entity csr is
     generic (
-        G_ECALL : boolean := FALSE;
-        G_EBREAK : boolean := FALSE;
-        G_INTERRUPTS : boolean := FALSE
+        G_ECALL : boolean := TRUE;
+        G_EBREAK : boolean := TRUE;
+        G_INTERRUPTS : boolean := TRUE
     );
     port (
         arst_i : in std_logic;
@@ -24,6 +24,8 @@ entity csr is
         execute_zimm_i : in std_logic_vector(4 downto 0);
         memory_en_i : in std_logic;
         memory_valid_i : in std_logic;
+        memory_opcode_i : in opcode_t;
+        memory_address_i : in std_logic_vector(31 downto 0);
         memory_funct3_i : in std_logic_vector(2 downto 0);
         memory_target_pc_i : in std_logic_vector(31 downto 0);
         memory_branch_i : in std_logic;
@@ -36,40 +38,47 @@ entity csr is
 end entity csr;
 
 architecture rtl of csr is
-    constant C_XRET : boolean := G_ECALL or G_EBREAK or G_INTERRUPTS;
--- execute stage
-    signal execute_ecall, execute_ebreak, execute_mret, execute_branch : std_logic;
--- memory stage
-    signal memory_ecall, memory_ebreak, memory_mret, memory_branch : std_logic;
-    signal memory_pc : std_logic_vector(31 downto 0);
--- csr
-    signal async_exception_en, async_exception : std_logic;
-    signal external_interrupt_en, timer_interrupt_en : std_logic;
-    signal external_interrupt, timer_interrupt : std_logic;
-    signal exception_pc : std_logic_vector(31 downto 0);
-    signal exception_taken, exception_exit : std_logic;
-    signal we : std_logic;
-    signal write_enable : std_logic;
-    signal write_address, read_address : std_logic_vector(11 downto 0);
-    signal write_data, read_data : std_logic_vector(31 downto 0);
-    signal csr_write_addr, csr_read_addr : std_logic_vector(11 downto 0);
-    signal csr_write_data, csr_read_data : std_logic_vector(31 downto 0);
-    signal ecall, ebreak : std_logic;
-    signal xret, mret : std_logic;
-    signal mscratch : std_logic_vector(31 downto 0) := (others => '0');
-    signal mstatus : std_logic_vector(31 downto 0) := (others => '0');
-    signal mie : std_logic_vector(31 downto 0) := (others => '0');
-    signal mtvec : std_logic_vector(31 downto 0) := (others => '0');
-    signal mepc : std_logic_vector(31 downto 0) := (others => '0');
-    signal mcause : std_logic_vector(31 downto 0) := (others => '0');
-    signal mtval : std_logic_vector(31 downto 0) := (others => '0');
+constant C_XRET : boolean := G_ECALL or G_EBREAK or G_INTERRUPTS;
+constant C_INSTRUCTION_MISALIGNED : boolean := TRUE;
+constant C_LOAD_MISALIGNED : boolean := TRUE;
+constant C_STORE_MISALIGNED : boolean := TRUE;
+-- Execute stage
+signal execute_ecall, execute_ebreak, execute_mret, execute_branch : std_logic;
+-- Memory stage
+signal memory_ecall, memory_ebreak, memory_mret, memory_branch : std_logic;
+signal memory_pc : std_logic_vector(31 downto 0);
+-- CSR logic
+signal nxt_epc : std_logic_vector(31 downto 0);
+signal instruction_address_misaligned, store_address_misaligned, load_address_misaligned, load_store_address_misaligned : std_logic;
+signal async_exception, async_exception_en : std_logic;
+signal timer_interrupt, timer_interrupt_en : std_logic; 
+signal external_interrupt, external_interrupt_en : std_logic;
+signal exception_sync, exception_async : std_logic;
+signal exception_entry, exception_exit : std_logic;
+signal ecall, ebreak, mret : std_logic;
+signal write_data, read_data : std_logic_vector(31 downto 0);
+signal csr_write_address, csr_read_address : std_logic_vector(11 downto 0);
+signal csr_write_data, csr_read_data : std_logic_vector(31 downto 0);
+signal csr_write_enable, csr_read_enable : std_logic;
+signal csr_machine_we, csr_machine_re : std_logic;
+-- CSR registers
+signal csr_mscratch_we, csr_mstatus_we, csr_mie_we, csr_mtvec_we, csr_mepc_we, csr_mcause_we, csr_mtval_we : std_logic;
+signal r_csr : csr_registers_t := (
+    mscratch => (others => '0'),
+    mstatus => (others => '0'),
+    mie => (others => '0'),
+    mtvec => (others => '0'),
+    mepc => (others => '0'),
+    mcause => (others => '0'),
+    mtval => (others => '0')
+);
 begin
--- Exception handling
+-- Execute stage
+    execute_ecall <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = CSR_FN12_ECALL(1 downto 0) else '0';
+    execute_ebreak <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = CSR_FN12_EBREAK(1 downto 0) else '0';
+    execute_mret <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = CSR_FN12_MRET(1 downto 0) else '0';
     execute_branch <= execute_opcode_i.jal or execute_opcode_i.jalr or execute_opcode_i.branch;
-    execute_ecall <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "00" and G_ECALL = TRUE else '0';
-    execute_ebreak <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "01" and G_EBREAK = TRUE else '0';
-    execute_mret <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i = RV32I_FN3_TRAP and execute_immediate_i(1 downto 0) = "10" and C_XRET = TRUE else '0';
-    
+-- Memory stage
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -78,11 +87,12 @@ begin
                 memory_ebreak <= execute_ebreak;
                 memory_mret <= execute_mret;
                 memory_pc <= execute_current_pc_i;
-                memory_branch <= execute_branch and execute_valid_i;
+                memory_branch <= execute_branch;
             end if;
         end if;
     end process;
 
+-- Exception handling
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -98,70 +108,81 @@ begin
         end if;
     end process;
 
-    async_exception_en <= mstatus(CSR_MSTATUS_MIE);
-    external_interrupt_en <= mie(CSR_MIE_MEIE);
-    timer_interrupt_en <= mie(CSR_MIE_MTIE);
+    process (exception_sync, memory_pc, exception_async, execute_current_pc_i)
+    begin
+        if exception_sync = '1' then
+            nxt_epc <= memory_pc;
+        elsif exception_async = '1' then
+            nxt_epc <= execute_current_pc_i;
+        else
+            nxt_epc <= (others => 'X');
+        end if;
+    end process;
+
+    instruction_address_misaligned <= memory_branch_i and (memory_target_pc_i(1) or memory_target_pc_i(0)) when C_INSTRUCTION_MISALIGNED = TRUE else '0';
+    load_address_misaligned <= memory_opcode_i.load and load_store_address_misaligned when C_LOAD_MISALIGNED = TRUE else '0';
+    store_address_misaligned <= memory_opcode_i.store and load_store_address_misaligned when C_STORE_MISALIGNED = TRUE else '0';
+    load_store_address_misaligned <= (memory_funct3_i(1) and (memory_address_i(1) or memory_address_i(0))) or (memory_funct3_i(0) and memory_address_i(0));
+
+    async_exception_en <= r_csr.mstatus(CSR_MSTATUS_MIE);
+    external_interrupt_en <= r_csr.mie(CSR_MIE_MEIE);
+    timer_interrupt_en <= r_csr.mie(CSR_MIE_MTIE);
 
     ecall <= memory_ecall;
     ebreak <= memory_ebreak;
     mret <= memory_mret;
-    xret <= mret;
 
-    exception_taken <= (((ecall or ebreak) and memory_valid_i) or (async_exception and async_exception_en)) and not memory_branch and execute_en_i;
-    exception_exit <= mret and memory_valid_i;
+    exception_sync <= ecall or ebreak or instruction_address_misaligned or load_address_misaligned or store_address_misaligned;
+    exception_async <= async_exception and async_exception_en;
 
-    process (ecall, ebreak, memory_pc, async_exception_en, execute_current_pc_i)
+    exception_entry <= (exception_sync and memory_valid_i) or (exception_async and not memory_branch);
+    exception_exit <= mret;
+
+    load_pc_o <= exception_entry or (exception_exit and memory_valid_i);
+
+    process (exception_sync, exception_async, exception_exit, r_csr)
     begin
-        if (ecall or ebreak) = '1' then
-            exception_pc <= memory_pc;
-        elsif async_exception_en = '1' then
-            exception_pc <= execute_current_pc_i;
+        if (exception_sync or exception_async) = '1' then
+            target_pc_o <= r_csr.mtvec;
+        elsif exception_exit = '1' then
+            target_pc_o <= r_csr.mepc;
         else
-            exception_pc <= (others => '-');
+            target_pc_o <= (others => 'X');
         end if;
     end process;
 
-    target_pc_o <= 
-        mtvec when (ecall or ebreak or (async_exception and async_exception_en)) = '1' else
-        mepc when xret = '1' else
-        (others => '-');
+-- CSR logic
+    csr_read_enable <= '1' when execute_opcode_i.sys = '1' and execute_funct3_i /= RV32I_FN3_TRAP else '0';
+    csr_read_address <= execute_immediate_i(11 downto 0);
 
-    load_pc_o <= ((ecall or ebreak or xret) and memory_valid_i) or (async_exception and async_exception_en and not memory_branch);
-
-    read_data_o <= read_data;
-
--- CSR
-    we <= write_enable and memory_valid_i;
-    csr_read_addr <= execute_immediate_i(11 downto 0);
     process (clk_i)
     begin
         if rising_edge(clk_i) then
             if memory_en_i = '1' then
-                csr_write_addr <= csr_read_addr;
                 read_data <= csr_read_data;
-                if execute_opcode_i.sys = '1' and execute_funct3_i /= RV32I_FN3_TRAP then
-                    write_enable <= '1';
-                else
-                    write_enable <= '0';
-                end if;
-                if execute_funct3_i(2) = '1' then
-                    write_data <= (31 downto 5 => '0') & execute_zimm_i;
-                else
-                    write_data <= execute_rs1_dat_i;
-                end if;
+            end if;
+            csr_write_enable <= csr_read_enable;
+            csr_write_address <= csr_read_address;
+            if execute_funct3_i(2) = '1' then
+                write_data <= (31 downto 5 => '0') & execute_zimm_i;
+            else
+                write_data <= execute_rs1_dat_i;
             end if;
         end if;
     end process;
+    read_data_o <= read_data;
 
-    with csr_read_addr select
+    csr_machine_we <= csr_write_enable and memory_valid_i; -- csr_write_enable when csr_write_address(11 downto 10) = "00" else '0';
+
+    with csr_read_address select
         csr_read_data <= 
-            mscratch        when CSR_MSCRATCH,
-            mie             when CSR_MSTATUS,
-            mstatus         when CSR_MIE,
-            mtvec           when CSR_MTVEC,
-            mepc            when CSR_MEPC,
-            mcause          when CSR_MCAUSE,
-            mtval           when CSR_MTVAL,
+            r_csr.mscratch        when CSR_MSCRATCH,
+            r_csr.mie             when CSR_MSTATUS,
+            r_csr.mstatus         when CSR_MIE,
+            r_csr.mtvec           when CSR_MTVEC,
+            r_csr.mepc            when CSR_MEPC,
+            r_csr.mcause          when CSR_MCAUSE,
+            r_csr.mtval           when CSR_MTVAL,
             (others => '0') when others;
 
     with memory_funct3_i(1 downto 0) select
@@ -170,11 +191,79 @@ begin
             write_data and (not read_data) when "11",
             write_data when others;
 
+-- CSR registers
+    process (csr_write_address)
+    begin
+        csr_mscratch_we <= '0';
+        csr_mstatus_we <= '0';
+        csr_mie_we <= '0';
+        csr_mtvec_we <= '0';
+        csr_mepc_we <= '0';
+        csr_mcause_we <= '0';
+        csr_mtval_we <= '0';
+        case csr_write_address is
+            when CSR_MSCRATCH => csr_mscratch_we <= '1';
+            when CSR_MSTATUS => csr_mstatus_we <= '1';
+            when CSR_MIE => csr_mie_we <= '1';
+            when CSR_MTVEC => csr_mtvec_we <= '1';
+            when CSR_MEPC => csr_mepc_we <= '1';
+            when CSR_MCAUSE => csr_mcause_we <= '1';
+            when CSR_MTVAL => csr_mtval_we <= '1';        
+            when others =>
+        end case;
+    end process;
+
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            r_csr.mtvec <= (others => '0');
+            r_csr.mie <= (others => '0');
+        elsif rising_edge(clk_i) then
+            if (csr_mtvec_we and csr_machine_we) = '1' then
+                r_csr.mtvec <= csr_write_data;
+            end if;
+            if (csr_mie_we and csr_machine_we) = '1' then
+                r_csr.mie <= csr_write_data;
+            end if;
+        end if;
+    end process;
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if csr_write_addr = CSR_MSCRATCH and we = '1' then
-                mscratch <= csr_write_data;
+            if exception_entry = '1' and ecall = '1' then
+                r_csr.mcause <= CSR_MCAUSE_MACHINE_ECALL;
+            elsif exception_entry = '1' and ebreak = '1' then
+                r_csr.mcause <= CSR_MCAUSE_BREAKPOINT;
+            elsif exception_entry = '1' and instruction_address_misaligned = '1' then
+                r_csr.mcause <= CSR_MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED;
+            elsif exception_entry = '1' and load_address_misaligned = '1' then
+                r_csr.mcause <= CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED;
+            elsif exception_entry = '1' and store_address_misaligned = '1' then
+                r_csr.mcause <= CSR_MCAUSE_STORE_ADDRESS_MISALIGNED;
+            elsif exception_entry = '1' and external_interrupt = '1' then
+                r_csr.mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
+            elsif exception_entry = '1' and timer_interrupt = '1' then
+                r_csr.mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
+            elsif (csr_mcause_we and csr_machine_we) = '1' then
+                r_csr.mcause <= csr_write_data;
+            end if;
+            if exception_entry = '1' then
+                r_csr.mepc <= nxt_epc;
+            elsif (csr_mepc_we and csr_machine_we) = '1' then
+                r_csr.mepc <= csr_write_data;
+            end if;
+            if exception_entry = '1' and ebreak = '1' then
+                r_csr.mtval <= nxt_epc;
+            elsif exception_entry = '1' and instruction_address_misaligned = '1' then
+                r_csr.mtval <= memory_target_pc_i;
+            elsif exception_entry = '1' and (load_address_misaligned or store_address_misaligned) = '1' then
+                r_csr.mtval <= memory_address_i;
+            elsif (csr_mtval_we and csr_machine_we) = '1' then
+                r_csr.mtval <= csr_write_data;
+            end if;
+            if (csr_mscratch_we and csr_machine_we) = '1' then
+                r_csr.mscratch <= csr_write_data;
             end if;
         end if;
     end process;
@@ -182,67 +271,22 @@ begin
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            mtvec <= (others => '0');
-            mie <= (others => '0');
+            r_csr.mstatus <= (31 downto 13 => '0') & "11" & (10 downto 0 => '0');
         elsif rising_edge(clk_i) then
-            if csr_write_addr = CSR_MTVEC and we = '1' then
-                mtvec <= csr_write_data;
-            end if;
-            if csr_write_addr = CSR_MIE and we = '1' then
-                mie <= csr_write_data;
-            end if;
-        end if;
-    end process;
-
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if exception_taken = '1' then
-                if ecall = '1' then
-                    mcause <= CSR_MCAUSE_MACHINE_ECALL;
-                elsif ebreak = '1' then
-                    mcause <= CSR_MCAUSE_BREAKPOINT;
-                elsif external_interrupt = '1' then
-                    mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
-                elsif timer_interrupt = '1' then
-                    mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
-                end if;
-            elsif csr_write_addr = CSR_MCAUSE and we = '1' then
-                mcause <= csr_write_data;
-            end if;
-            if exception_taken = '1' then
-                mepc <= exception_pc;
-            elsif csr_write_addr = CSR_MEPC and we = '1' then
-                mepc <= csr_write_data;
-            end if;
-            if exception_taken = '1' and ebreak = '1' then
-                mtval <= exception_pc;
-            elsif csr_write_addr = CSR_MTVAL and we = '1' then
-                mtval <= csr_write_data;
-            end if;
-
-        end if;
-    end process;
-
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            mstatus <= (others => '0');
-        elsif rising_edge(clk_i) then
-            if exception_taken = '1' then
-                mstatus(7) <= mstatus(3);
+            if exception_entry = '1' then
+                r_csr.mstatus(7) <= r_csr.mstatus(3);
                 -- mstatus.mie = 0
-                mstatus(3) <= '0';
+                r_csr.mstatus(3) <= '0';
                 -- mstatus.mpp = current privilege mode 
-                mstatus(12 downto 11) <= "11";
+                r_csr.mstatus(12 downto 11) <= "11";
             elsif exception_exit = '1' then
                 -- privilege set to mstatus.mpp
                 -- mstatus.mie = mstatus.mpie
-                mstatus(3) <= mstatus(7);
-                mstatus(7) <= '1';
-                mstatus(12 downto 11) <= "11";
-            elsif csr_write_addr = CSR_MSTATUS and we = '1' then
-                mstatus <= csr_write_data;
+                r_csr.mstatus(3) <= r_csr.mstatus(7);
+                r_csr.mstatus(7) <= '1';
+                r_csr.mstatus(12 downto 11) <= "11";
+            elsif (csr_mstatus_we and csr_machine_we) = '1' then
+                r_csr.mstatus <= csr_write_data;
             end if;
         end if;
     end process;
