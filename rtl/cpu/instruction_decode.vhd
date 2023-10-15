@@ -28,6 +28,7 @@ end entity instruction_decode;
 
 architecture rtl of instruction_decode is
     signal instr_dat : std_logic_vector(31 downto 0);
+    signal instr_opcode : std_logic_vector(6 downto 0);
     signal opcode : opcode_t;
     signal opcode_type : opcode_type_t;
 begin
@@ -39,10 +40,11 @@ begin
             end if;
         end if;
     end process;
+    instr_opcode <= instr_dat(6 downto 2) & "11";
 
     opcode.illegal <= '0';
 -- opcode decode
-    process (instr_dat)
+    process (instr_opcode)
     begin
         opcode.lui <= '0';
         opcode.auipc <= '0';
@@ -55,7 +57,7 @@ begin
         opcode.reg_reg <= '0';
         opcode.fence <= '0';
         opcode.sys <= '0';
-        case instr_dat(6 downto 0) is
+        case instr_opcode is
             when RV32I_OP_LUI => opcode.lui <= '1';
             when RV32I_OP_AUIPC => opcode.auipc <= '1';
             when RV32I_OP_JAL => opcode.jal <= '1';
@@ -72,7 +74,7 @@ begin
     end process;
 
 -- opcode type decode
-    process (instr_dat)
+    process (instr_opcode)
     begin
         opcode_type.r_type <= '0';
         opcode_type.i_type <= '0';
@@ -80,7 +82,7 @@ begin
         opcode_type.b_type <= '0';
         opcode_type.u_type <= '0';
         opcode_type.j_type <= '0';
-        case instr_dat(6 downto 0) is
+        case instr_opcode is
             when RV32I_OP_REG_REG => opcode_type.r_type <= '1';
             when RV32I_OP_JALR | RV32I_OP_LOAD | RV32I_OP_REG_IMM | RV32I_OP_SYS => opcode_type.i_type <= '1';
             when RV32I_OP_STORE => opcode_type.s_type <= '1';
@@ -102,9 +104,9 @@ begin
     rd_we_o <= opcode_type.r_type or opcode_type.i_type or opcode_type.u_type or opcode_type.j_type;
     opcode_type_o <= opcode_type;
     
-    process (instr_dat)
+    process (instr_opcode, instr_dat)
     begin
-        case instr_dat(6 downto 0) is
+        case instr_opcode is
             when RV32I_OP_LUI | RV32I_OP_AUIPC => 
                 immediate_o <= instr_dat(31 downto 12) & (0 to 11 => '0');
             when RV32I_OP_JAL => 
