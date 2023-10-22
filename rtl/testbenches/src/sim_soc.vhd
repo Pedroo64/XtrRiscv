@@ -11,6 +11,7 @@ entity sim_soc is
         G_INIT_FILE : string := "none";
         G_OUTPUT_FILE : string;
         G_CPU_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_CPU_PREFETCH_SIZE : integer := 16;
         G_CPU_EXECUTE_BYPASS : boolean := FALSE;
         G_CPU_MEMORY_BYPASS : boolean := FALSE;
         G_CPU_WRITEBACK_BYPASS : boolean := FALSE;
@@ -60,6 +61,7 @@ begin
     u_xtr_cpu : entity work.xtr_cpu
         generic map (
             G_BOOT_ADDRESS => G_CPU_BOOT_ADDRESS,
+            G_PREFETCH_SIZE => G_CPU_PREFETCH_SIZE,
             G_EXECUTE_BYPASS => G_CPU_EXECUTE_BYPASS,
             G_MEMORY_BYPASS => G_CPU_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_CPU_WRITEBACK_BYPASS,

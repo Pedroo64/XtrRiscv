@@ -15,6 +15,8 @@ SHIFTER_EARLY_INJECTION ?= FALSE
 ZICSR ?= TRUE
 EXTENSION_M ?= TRUE
 
+PROJECT_FILE ?= $(MKFILE_DIR)/work/proj.mpf
+
 ifeq ($(ZICSR), TRUE)
 CSR_WAVE = add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_csr/u_csr/*;
 endif
@@ -34,6 +36,7 @@ create_project:
 
 add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open work/proj.mpf; \
+		project addfile $(SRCS_PATH)/cpu/utils/cpu_fifo.vhd; \
 		project addfile $(SRCS_PATH)/cpu/comparator.vhd; \
 		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
 		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
@@ -43,6 +46,7 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/m_extension/muldiv.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
+		project addfile $(SRCS_PATH)/cpu/prefetch.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_decode.vhd; \
 		project addfile $(SRCS_PATH)/cpu/execute.vhd; \
 		project addfile $(SRCS_PATH)/cpu/memory.vhd; \
@@ -81,6 +85,7 @@ start_sim:
 		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M); \
 		add wave -divider "cpu" -ports sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/*; \
 		add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
+		add wave -divider "prefetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_prefetch/*; \
 		add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 		add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
 		add wave -divider "execute" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/*; \
@@ -91,6 +96,20 @@ start_sim:
 		$(CSR_WAVE) \
 		$(MULDIV_WAVE) \
 		set NumericStdNoWarnings 1; config wave -signalnamewidth 1"
+
+run_sim:
+	$(VSIM) -c $(VSIM_FLAGS) -do "project open $(PROJECT_FILE); vsim -voptargs=+acc work.tb_xtr_soc \
+		-gG_INIT_FILE=$(INIT_FILE) -gG_OUTPUT_FILE=$(OUTPUT_FILE) \
+		-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
+		-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
+		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M); \
+		set NumericStdNoWarnings 1; run -all; exit -f'"
+run_sim1:
+	$(VSIM) -c -do "project open $(PROJECT_FILE); vsim -voptargs=+acc work.tb_xtr_soc 'set NumericStdNoWarnings 1; run -all; exit -f' \
+		-gG_INIT_FILE=$(INIT_FILE) -gG_OUTPUT_FILE=$(OUTPUT_FILE) \
+		-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
+		-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
+		-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M)"
 
 clean:
 	@rm -r work

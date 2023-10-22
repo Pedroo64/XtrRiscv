@@ -17,6 +17,7 @@ entity control_unit is
         clk_i : in std_logic;
         srst_i : in std_logic;
         load_pc_i : in std_logic;
+        prefetch_full_i : in std_logic;
         decode_valid_i : in std_logic;
         decode_opcode_i : in opcode_t;
         decode_opcode_type_i : in opcode_type_t;
@@ -41,6 +42,8 @@ entity control_unit is
         writeback_ready_i : in std_logic;
         fetch_flush_o : out std_logic;
         fetch_enable_o : out std_logic;
+        prefetch_flush_o : out std_logic;
+        prefetch_enable_o : out std_logic;
         decode_flush_o : out std_logic;
         decode_enable_o : out std_logic;
         execute_flush_o : out std_logic;
@@ -73,8 +76,8 @@ architecture rtl of control_unit is
     signal decode_memory_rs1_hazard, decode_memory_rs2_hazard : std_logic;
     signal decode_writeback_rs1_hazard, decode_writeback_rs2_hazard : std_logic;
     signal rs1_hazard, rs2_hazard : std_logic;
-    signal fetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
-    signal fetch_flush, decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
+    signal fetch_stall, prefetch_stall, decode_stall, execute_stall, memory_stall, writeback_stall : std_logic;
+    signal fetch_flush, prefetch_flush, decode_flush, execute_flush, memory_flush, writeback_flush : std_logic;
     signal decode_execute_opcode_sys_hazard : std_logic;
     signal multicycle_start : std_logic;
     signal shifter_busy : std_logic;
@@ -129,19 +132,22 @@ begin
     shifter_busy <= not execute_shifter_ready_i when G_SHIFTER_EARLY_INJECTION = TRUE else '0';
 
 -- pipeline ctl
-    fetch_stall <= decode_stall and not load_pc_i;
+    fetch_stall <= prefetch_full_i and not load_pc_i;
+    prefetch_stall <= decode_stall;
     decode_stall <= (execute_stall or ((rs1_hazard or rs2_hazard or multicycle_start) or decode_execute_opcode_sys_hazard)) and not load_pc_i;
     execute_stall <= memory_stall or muldiv_busy or shifter_busy;
     memory_stall <= not (memory_ready_i) or writeback_stall;
     writeback_stall <= not writeback_ready_i;
 
     fetch_flush <= load_pc_i;
+    prefetch_flush <= load_pc_i;
     decode_flush <= load_pc_i;
     execute_flush <= ((rs1_hazard or rs2_hazard or decode_execute_opcode_sys_hazard or multicycle_start)) or load_pc_i;
     memory_flush <= load_pc_i;
     writeback_flush <= memory_stall and writeback_ready_i;
 
     fetch_flush_o <= srst_i or fetch_flush;
+    prefetch_flush_o <= srst_i or prefetch_flush;
     decode_flush_o <= srst_i or decode_flush;
     execute_flush_o <= srst_i or execute_flush;
     memory_flush_o <= srst_i or memory_flush;
@@ -150,6 +156,7 @@ begin
     execute_multicycle_flush_o <= srst_i or load_pc_i;
 
     fetch_enable_o <= not fetch_stall;
+    prefetch_enable_o <= not prefetch_stall;
     decode_enable_o <= not decode_stall;
     execute_enable_o <= not execute_stall;
     memory_enable_o <= not memory_stall;

@@ -8,12 +8,13 @@ FULL_BARREL_SHIFTER ?= false
 SHIFTER_EARLY_INJECTION ?= false
 ZICSR ?= true
 EXTENSION_M ?= false
-ROOT_DIR =$(PWD)/../..
+ROOT_DIR ?= $(PWD)/../..
 
 # defaults
 SIM ?= ghdl
 TOPLEVEL_LANG ?= vhdl
 
+VHDL_SOURCES += $(ROOT_DIR)/cpu/utils/cpu_fifo.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/rv32i_pkg.vhd
@@ -23,6 +24,7 @@ VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/div.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/muldiv.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/shifter.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_fetch.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/prefetch.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/instruction_decode.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/execute.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/memory.vhd

@@ -2,7 +2,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity instruction_fecth is
+entity instruction_fetch is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0')
     );
@@ -19,14 +19,15 @@ entity instruction_fecth is
         cmd_rdy_i : in std_logic;
         rsp_dat_i : in std_logic_vector(31 downto 0);
         rsp_vld_i : in std_logic;
-        valid_o : out std_logic;
-        instr_o : out std_logic_vector(31 downto 0);
+        command_valid_o : out std_logic;
+        instr_valid_o : out std_logic;
+        instr_data_o : out std_logic_vector(31 downto 0);
         booted_o : out std_logic
     );
-end entity instruction_fecth;
+end entity instruction_fetch;
 
-architecture rtl of instruction_fecth is
-    signal booted, valid : std_logic;
+architecture rtl of instruction_fetch is
+    signal booted, valid, cmd_valid : std_logic;
     signal pc, next_pc : std_logic_vector(31 downto 0);
 begin
     process (clk_i, arst_i)
@@ -65,10 +66,13 @@ begin
         target_pc_i when load_pc_i = '1' else
         std_logic_vector(unsigned(pc) + 4);
 
+    cmd_valid <= booted and enable_i;
+
     cmd_adr_o <= pc;
-    cmd_vld_o <= booted and enable_i;
-    valid_o <= valid;
-    instr_o <= rsp_dat_i;
+    cmd_vld_o <= cmd_valid;
+    command_valid_o <= cmd_valid;
+    instr_valid_o <= valid and rsp_vld_i;
+    instr_data_o <= rsp_dat_i;
     booted_o <= booted;
 
 end architecture rtl;

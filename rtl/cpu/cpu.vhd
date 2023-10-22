@@ -7,6 +7,7 @@ use work.rv32i_pkg.all;
 entity cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
+        G_PREFETCH_SIZE : integer := 16;
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
@@ -45,10 +46,10 @@ architecture rtl of cpu is
     constant C_INTERRUPTS : boolean := G_ZICSR;
     signal ctl_booted : std_logic;
 -- fetch
-    signal fetch_en, fetch_flush, fetch_valid, fetch_load_pc : std_logic;
-    signal fetch_target_pc, fetch_instr : std_logic_vector(31 downto 0);
+    signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_command_valid : std_logic;
+    signal fetch_target_pc, fetch_instr_data : std_logic_vector(31 downto 0);
 -- prefetch
-    signal prefetch_en, prefetch_flush, prefetch_valid : std_logic;
+    signal prefetch_en, prefetch_flush, prefetch_valid, prefetch_cmd_valid, prefetch_full : std_logic;
     signal prefetch_data : std_logic_vector(31 downto 0);
 -- decode
     signal decode_en, decode_flush, decode_valid : std_logic;
@@ -106,7 +107,7 @@ begin
 -- fetch
     fetch_load_pc <= branch_load_pc;
     fetch_target_pc <= branch_target_pc;
-    u_fetch : entity work.instruction_fecth
+    u_fetch : entity work.instruction_fetch
         generic map (
             G_BOOT_ADDRESS => G_BOOT_ADDRESS
         )
@@ -123,28 +124,29 @@ begin
             cmd_rdy_i => instr_cmd_rdy_i,
             rsp_dat_i => instr_rsp_dat_i,
             rsp_vld_i => instr_rsp_vld_i,
-            valid_o => fetch_valid,
-            instr_o => fetch_instr,
+            command_valid_o => fetch_command_valid,
+            instr_valid_o => fetch_instr_valid,
+            instr_data_o => fetch_instr_data,
             booted_o => ctl_booted
         );
+
 -- prefetch
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            prefetch_valid <= '0';
-        elsif rising_edge(clk_i) then
-            if prefetch_en = '1' then
-                if prefetch_flush = '1' then
-                    prefetch_valid <= '0';
-                else
-                    prefetch_valid <= fetch_en;
-                end if;
-            end if;
-        end if;
-    end process;
-    prefetch_flush <= decode_flush;
-    prefetch_en <= decode_en;
-    prefetch_data <= fetch_instr;
+    u_prefetch : entity work.prefetch
+        generic map (
+            G_PREFETCH_DEPTH => G_PREFETCH_SIZE
+        )
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            enable_i => prefetch_en,
+            flush_i => prefetch_flush,
+            valid_i => fetch_command_valid,
+            instr_valid_i => fetch_instr_valid,
+            instr_data_i => fetch_instr_data,
+            valid_o => prefetch_valid,
+            data_o => prefetch_data,
+            full_o => prefetch_full
+        );
 
 -- decode
     u_decode : entity work.instruction_decode
@@ -219,7 +221,7 @@ begin
     u_memory : entity work.memory
         generic map (
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
-            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION      
+            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION
         )
         port map (
             arst_i => arst_i,
@@ -296,6 +298,7 @@ begin
             clk_i => clk_i,
             srst_i => srst_i,
             load_pc_i => branch_load_pc,
+            prefetch_full_i => prefetch_full,
             decode_valid_i => decode_valid,
             decode_opcode_i => decode_opcode,
             decode_opcode_type_i => decode_opcode_type,
@@ -320,6 +323,8 @@ begin
             writeback_muldiv_i => writeback_muldiv,
             fetch_flush_o => fetch_flush,
             fetch_enable_o => fetch_en,
+            prefetch_flush_o => prefetch_flush,
+            prefetch_enable_o => prefetch_en,
             decode_flush_o => decode_flush,
             decode_enable_o => decode_en,
             execute_flush_o => execute_flush,
@@ -368,7 +373,7 @@ begin
             branch_o => branch_branch
         );
 
--- csr 
+-- csr
 gen_csr: if G_ZICSR = TRUE generate
     u_csr : entity work.csr
         generic map (
