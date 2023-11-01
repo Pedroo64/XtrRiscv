@@ -19,6 +19,7 @@ entity execute is
         multicycle_flush_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
+        compressed_i : in std_logic;
         opcode_i : in opcode_t;
         rs1_adr_i : in std_logic_vector(4 downto 0);
         rs2_adr_i : in std_logic_vector(4 downto 0);
@@ -55,7 +56,7 @@ end entity execute;
 
 architecture rtl of execute is
     constant C_ENABLE_SHIFTER_DATA_PATH : boolean := G_SHIFTER_EARLY_INJECTION;
-    signal valid : std_logic;
+    signal valid, compressed : std_logic;
     signal rs1_adr, rs2_adr, rd_adr : std_logic_vector(4 downto 0);
     signal rd_we : std_logic;
     signal immediate : std_logic_vector(31 downto 0);
@@ -94,6 +95,7 @@ begin
                 funct3 <= funct3_i;
                 funct7 <= funct7_i;
                 opcode <= opcode_i;
+                compressed <= compressed_i;
                 instr <= instr_i;
             end if;
         end if;
@@ -139,7 +141,7 @@ begin
             end if;
         end if;
     end process;
-    pc_incr <= std_logic_vector(unsigned(pc) + 4);
+    pc_incr <= std_logic_vector(unsigned(pc) + 2) when compressed = '1' else std_logic_vector(unsigned(pc) + 4);
 -- ALU
     u_alu : entity work.alu
         port map (

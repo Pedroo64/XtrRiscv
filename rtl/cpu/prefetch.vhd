@@ -15,9 +15,13 @@ entity prefetch is
         valid_i : in std_logic;
         instr_valid_i : in std_logic;
         instr_data_i : in std_logic_vector(31 downto 0);
+        load_pc_i : in std_logic;
+        pc_align_i : in std_logic;
         valid_o : out std_logic;
         data_o : out std_logic_vector(31 downto 0);
-        full_o : out std_logic
+        full_o : out std_logic;
+        ready_o : out std_logic;
+        instr_compressed_o : out std_logic
     );
 end entity prefetch;
 
@@ -28,6 +32,10 @@ architecture rtl of prefetch is
     signal fifo_wdat, fifo_rdat : std_logic_vector(31 downto 0);
     signal nxt_wcnt, wcnt, nxt_rcnt, rcnt : unsigned(integer(ceil(log2(real(G_PREFETCH_DEPTH)))) downto 0);
     signal load_wcnt, load_rcnt : std_logic;
+    signal prefetch_valid, prefetch_full : std_logic;
+-- Dispatch
+    signal word_unalign : std_logic;
+    signal pc_align, instr_compressed : std_logic;
 begin
 
     fifo_wdat <= instr_data_i;
@@ -51,16 +59,20 @@ begin
     end generate gen_prefetch_buffer;
 
     fifo_flush <= (others => flush_i);
-    fifo_we <= (others => instr_valid_i);
-    fifo_re <= not fifo_ef and (fifo_re'range => enable_i);
+    fifo_we(0) <= instr_valid_i and not word_unalign;
+    fifo_we(1) <= instr_valid_i;
 
-    data_o <= fifo_rdat;
-    valid_o <= fifo_re(0);
+    prefetch_valid <= '1' when unsigned(fifo_re) /= 0 else '0';
 
-    full_o <= '1' when enable_i = '0' and (wcnt(wcnt'left) xor rcnt(rcnt'left)) = '1' and wcnt(wcnt'left - 1  downto 0) = rcnt(rcnt'left - 1 downto 0) else '0';
+    data_o <= fifo_rdat(15 downto 0) & fifo_rdat(31 downto 16) when pc_align = '1' else fifo_rdat;
+    valid_o <= prefetch_valid;
 
-    load_wcnt <= valid_i;
-    load_rcnt <= fifo_re(0);
+    prefetch_full <= '1' when fifo_re(1) = '0' and (wcnt(wcnt'left) xor rcnt(rcnt'left)) = '1' and wcnt(wcnt'left - 1  downto 0) = rcnt(rcnt'left - 1 downto 0) else '0';
+    full_o <= prefetch_full;
+    ready_o <= not prefetch_full;
+
+    load_wcnt <= valid_i or flush_i;
+    load_rcnt <= fifo_re(1) or flush_i;
 
     process (flush_i, wcnt, rcnt)
     begin
@@ -84,5 +96,39 @@ begin
             end if;
         end if;
     end process;
+
+-- DISPATCH
+    instr_compressed <= '1' when (pc_align = '1' and fifo_rdat(17 downto 16) /= "11") or (pc_align = '0' and fifo_rdat(1 downto 0) /= "11") else '0';
+    fifo_re(0) <= 
+        '1' when enable_i = '1' and fifo_ef(0) = '0' and pc_align = '0' and fifo_rdat(1 downto 0) /= "11" else
+        '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
+        '0';
+    
+    fifo_re(1) <= 
+        '1' when enable_i = '1' and fifo_ef(1) = '0' and pc_align = '1' and fifo_rdat(17 downto 16) /= "11" else
+        '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
+        '0';
+    
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if load_pc_i = '1' then
+                pc_align <= pc_align_i;
+            elsif prefetch_valid = '1' and instr_compressed = '1' then
+                pc_align <= not pc_align;
+            end if;
+        end if;
+    end process;
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if load_pc_i = '1' then
+                word_unalign <= pc_align_i;
+            elsif instr_valid_i = '1' then
+                word_unalign <= '0';
+            end if;
+        end if;
+    end process;
+    instr_compressed_o <= instr_compressed;
 
 end architecture rtl;

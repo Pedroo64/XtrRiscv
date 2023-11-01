@@ -12,6 +12,7 @@ entity instruction_decode is
         enable_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
+        compressed_i : in std_logic;
         valid_o : out std_logic;
         opcode_o : out opcode_t;
         opcode_type_o : out opcode_type_t;
@@ -22,24 +23,36 @@ entity instruction_decode is
         immediate_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
         funct7_o : out std_logic_vector(6 downto 0);
+        compressed_o : out std_logic;
         instr_o : out std_logic_vector(31 downto 0)
     );
 end entity instruction_decode;
 
 architecture rtl of instruction_decode is
-    signal instr_dat : std_logic_vector(31 downto 0);
+    signal fetched_instr, decompressed_instr, instr_dat : std_logic_vector(31 downto 0);
     signal instr_opcode : std_logic_vector(6 downto 0);
+    signal compressed : std_logic;
     signal opcode : opcode_t;
     signal opcode_type : opcode_type_t;
 begin
+    -- decompressor
+    u_decompressor : entity work.decompressor
+        port map (
+            instr_i => instr_i(15 downto 0),
+            instr_o => decompressed_instr
+        );
+    fetched_instr <= decompressed_instr when compressed_i = '1' else instr_i;
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
             if enable_i = '1' then
-                instr_dat <= instr_i;
+                instr_dat <= fetched_instr;
+                compressed <= compressed_i;
             end if;
         end if;
     end process;
+
     instr_opcode <= instr_dat(6 downto 2) & "11";
 
     opcode.illegal <= '0';
@@ -103,6 +116,7 @@ begin
     funct7_o <= instr_dat(31 downto 25);
     rd_we_o <= opcode_type.r_type or opcode_type.i_type or opcode_type.u_type or opcode_type.j_type;
     opcode_type_o <= opcode_type;
+    compressed_o <= compressed;
     
     process (instr_opcode, instr_dat)
     begin

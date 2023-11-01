@@ -50,9 +50,10 @@ architecture rtl of cpu is
     signal fetch_target_pc, fetch_instr_data : std_logic_vector(31 downto 0);
 -- prefetch
     signal prefetch_en, prefetch_flush, prefetch_valid, prefetch_cmd_valid, prefetch_full : std_logic;
+    signal prefetch_instr_compressed : std_logic;
     signal prefetch_data : std_logic_vector(31 downto 0);
 -- decode
-    signal decode_en, decode_flush, decode_valid : std_logic;
+    signal decode_en, decode_flush, decode_valid, decode_instr_compressed : std_logic;
     signal decode_opcode : opcode_t;
     signal decode_opcode_type : opcode_type_t;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
@@ -141,11 +142,15 @@ begin
             enable_i => prefetch_en,
             flush_i => prefetch_flush,
             valid_i => fetch_command_valid,
+            load_pc_i => fetch_load_pc,
+            pc_align_i => fetch_target_pc(1),
             instr_valid_i => fetch_instr_valid,
             instr_data_i => fetch_instr_data,
             valid_o => prefetch_valid,
             data_o => prefetch_data,
-            full_o => prefetch_full
+            full_o => prefetch_full,
+            ready_o => open,
+            instr_compressed_o => prefetch_instr_compressed
         );
 
 -- decode
@@ -157,6 +162,7 @@ begin
             enable_i => decode_en,
             valid_i => prefetch_valid,
             instr_i => prefetch_data,
+            compressed_i => prefetch_instr_compressed,
             valid_o => decode_valid,
             opcode_o => decode_opcode,
             opcode_type_o => decode_opcode_type,
@@ -167,6 +173,7 @@ begin
             immediate_o => decode_imm,
             funct3_o => decode_funct3,
             funct7_o => decode_funct7,
+            compressed_o => decode_instr_compressed,
             instr_o => decode_instr
         );
 -- execute
@@ -185,6 +192,7 @@ begin
             multicycle_flush_i => execute_multicycle_flush,
             valid_i => decode_valid,
             instr_i => decode_instr,
+            compressed_i => decode_instr_compressed,
             opcode_i => decode_opcode,
             rs1_adr_i => decode_rs1_adr,
             rs2_adr_i => decode_rs2_adr,
