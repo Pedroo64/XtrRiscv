@@ -5,6 +5,9 @@ use IEEE.numeric_std.all;
 use work.rv32i_pkg.all;
 
 entity instruction_decode is
+    generic (
+        G_EXTENSION_C : boolean := FALSE
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
@@ -35,12 +38,14 @@ architecture rtl of instruction_decode is
     signal opcode : opcode_t;
     signal opcode_type : opcode_type_t;
 begin
-    -- decompressor
-    u_decompressor : entity work.decompressor
-        port map (
-            instr_i => instr_i(15 downto 0),
-            instr_o => decompressed_instr
-        );
+    gen_compress: if G_EXTENSION_C = TRUE generate
+        -- decompressor
+        u_decompressor : entity work.decompressor
+            port map (
+                instr_i => instr_i(15 downto 0),
+                instr_o => decompressed_instr
+            );
+    end generate gen_compress;
     fetched_instr <= decompressed_instr when compressed_i = '1' else instr_i;
 
     process (clk_i)

@@ -14,6 +14,7 @@ entity cpu is
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
+        G_EXTENSION_C : boolean := FALSE;
         G_ZICSR : boolean := FALSE;
         G_IGNORE_CONSTANTS : boolean := FALSE
     );
@@ -134,7 +135,8 @@ begin
 -- prefetch
     u_prefetch : entity work.prefetch
         generic map (
-            G_PREFETCH_DEPTH => G_PREFETCH_SIZE
+            G_PREFETCH_DEPTH => G_PREFETCH_SIZE,
+            G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
             arst_i => arst_i,
@@ -155,6 +157,9 @@ begin
 
 -- decode
     u_decode : entity work.instruction_decode
+        generic map (
+            G_EXTENSION_C => G_EXTENSION_C
+        )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
@@ -387,7 +392,8 @@ gen_csr: if G_ZICSR = TRUE generate
         generic map (
             G_ECALL => C_ECALL,
             G_EBREAK => C_EBREAK,
-            G_INTERRUPTS => C_INTERRUPTS
+            G_INTERRUPTS => C_INTERRUPTS,
+            G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
             arst_i => arst_i,

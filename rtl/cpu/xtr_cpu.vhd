@@ -14,7 +14,8 @@ entity xtr_cpu is
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_ZICSR : boolean := FALSE;
-        G_EXTENSION_M : boolean := FALSE
+        G_EXTENSION_M : boolean := FALSE;
+        G_EXTENSION_C : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
@@ -48,7 +49,8 @@ begin
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
             G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
             G_ZICSR => G_ZICSR,
-            G_EXTENSION_M => G_EXTENSION_M
+            G_EXTENSION_M => G_EXTENSION_M, 
+            G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,

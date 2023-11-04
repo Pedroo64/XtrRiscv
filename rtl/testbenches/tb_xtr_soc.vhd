@@ -12,6 +12,7 @@ entity tb_xtr_soc is
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
+        G_EXTENSION_C : boolean := FALSE;
         G_ZICSR : boolean := FALSE
     );
 end entity tb_xtr_soc;
@@ -59,7 +60,7 @@ begin
             G_FREQ_IN => 50e6, G_RAM_SIZE => 2*1024*1024, G_INIT_FILE => G_INIT_FILE, G_OUTPUT_FILE => G_OUTPUT_FILE, 
             G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_EXECUTE_BYPASS => G_EXECUTE_BYPASS, G_CPU_MEMORY_BYPASS => G_MEMORY_BYPASS, G_CPU_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER, G_CPU_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
-            G_ZICSR => G_ZICSR, G_EXTENSION_M => G_EXTENSION_M)
+            G_ZICSR => G_ZICSR, G_EXTENSION_M => G_EXTENSION_M, G_EXTENSION_C => G_EXTENSION_C)
         port map (
             arst_i => arst, clk_i => clk, external_irq_i => interrupt);
 end architecture rtl;

@@ -8,6 +8,7 @@ FULL_BARREL_SHIFTER ?= false
 SHIFTER_EARLY_INJECTION ?= false
 ZICSR ?= true
 EXTENSION_M ?= false
+EXTENSION_C ?= false
 ROOT_DIR ?= $(PWD)/../..
 
 # defaults
@@ -19,6 +20,7 @@ VHDL_SOURCES += $(ROOT_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/rv32i_pkg.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/csr_def.vhd
+VHDL_SOURCES += $(ROOT_DIR)/cpu/c_extension/decompressor.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/mul.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/div.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/m_extension/muldiv.vhd
@@ -64,6 +66,7 @@ SIM_ARGS += -gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER)
 SIM_ARGS += -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION)
 SIM_ARGS += -gG_ZICSR=$(ZICSR)
 SIM_ARGS += -gG_EXTENSION_M=$(EXTENSION_M)
+SIM_ARGS += -gG_EXTENSION_C=$(EXTENSION_C)
 SIM_ARGS += --ieee-asserts=disable
 # SIM_ARGS += --vcd=waveform.vcd
 EXTRA_ARGS += -fsynopsys

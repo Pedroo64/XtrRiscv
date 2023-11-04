@@ -9,7 +9,8 @@ entity csr is
     generic (
         G_ECALL : boolean := TRUE;
         G_EBREAK : boolean := TRUE;
-        G_INTERRUPTS : boolean := TRUE
+        G_INTERRUPTS : boolean := TRUE;
+        G_EXTENSION_C : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -38,7 +39,6 @@ entity csr is
 end entity csr;
 
 architecture rtl of csr is
-constant G_C_EXTENSION : boolean := TRUE;
 constant C_XRET : boolean := G_ECALL or G_EBREAK or G_INTERRUPTS;
 constant C_INSTRUCTION_MISALIGNED : boolean := TRUE;
 constant C_LOAD_MISALIGNED : boolean := TRUE;
@@ -121,8 +121,8 @@ begin
     end process;
 
     instruction_address_misaligned <= 
-        memory_branch_i and (memory_target_pc_i(1) or memory_target_pc_i(0)) when C_INSTRUCTION_MISALIGNED = TRUE and G_C_EXTENSION = FALSE else 
-        memory_branch_i and memory_target_pc_i(0) when C_INSTRUCTION_MISALIGNED = TRUE and G_C_EXTENSION = TRUE else 
+        memory_branch_i and (memory_target_pc_i(1) or memory_target_pc_i(0)) when C_INSTRUCTION_MISALIGNED = TRUE and G_EXTENSION_C = FALSE else 
+        memory_branch_i and memory_target_pc_i(0) when C_INSTRUCTION_MISALIGNED = TRUE and G_EXTENSION_C = TRUE else 
         '0';
     load_address_misaligned <= memory_opcode_i.load and load_store_address_misaligned when C_LOAD_MISALIGNED = TRUE else '0';
     store_address_misaligned <= memory_opcode_i.store and load_store_address_misaligned when C_STORE_MISALIGNED = TRUE else '0';

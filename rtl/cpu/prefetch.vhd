@@ -5,7 +5,8 @@ use IEEE.math_real.all;
 
 entity prefetch is
     generic (
-        G_PREFETCH_DEPTH : integer := 4
+        G_PREFETCH_DEPTH : integer := 4;
+        G_EXTENSION_C : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -98,37 +99,45 @@ begin
     end process;
 
 -- DISPATCH
-    instr_compressed <= '1' when (pc_align = '1' and fifo_rdat(17 downto 16) /= "11") or (pc_align = '0' and fifo_rdat(1 downto 0) /= "11") else '0';
-    fifo_re(0) <= 
-        '1' when enable_i = '1' and fifo_ef(0) = '0' and pc_align = '0' and fifo_rdat(1 downto 0) /= "11" else
-        '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
-        '0';
-    
-    fifo_re(1) <= 
-        '1' when enable_i = '1' and fifo_ef(1) = '0' and pc_align = '1' and fifo_rdat(17 downto 16) /= "11" else
-        '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
-        '0';
-    
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if load_pc_i = '1' then
-                pc_align <= pc_align_i;
-            elsif prefetch_valid = '1' and instr_compressed = '1' then
-                pc_align <= not pc_align;
+    gen_dispatch_without_compress: if G_EXTENSION_C = FALSE generate
+        instr_compressed <= '0';
+        pc_align <= '0';
+        word_unalign <= '0';
+        fifo_re(0) <= enable_i and not fifo_ef(0);
+        fifo_re(1) <= enable_i and not fifo_ef(1);
+    end generate gen_dispatch_without_compress;
+    gen_dispatch_with_compress: if G_EXTENSION_C = TRUE generate
+        instr_compressed <= '1' when (pc_align = '1' and fifo_rdat(17 downto 16) /= "11") or (pc_align = '0' and fifo_rdat(1 downto 0) /= "11") else '0';
+        fifo_re(0) <= 
+            '1' when enable_i = '1' and fifo_ef(0) = '0' and pc_align = '0' and fifo_rdat(1 downto 0) /= "11" else
+            '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
+            '0';
+        fifo_re(1) <= 
+            '1' when enable_i = '1' and fifo_ef(1) = '0' and pc_align = '1' and fifo_rdat(17 downto 16) /= "11" else
+            '1' when enable_i = '1' and fifo_ef = "00" and instr_compressed = '0' else
+            '0';
+        
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if load_pc_i = '1' then
+                    pc_align <= pc_align_i;
+                elsif prefetch_valid = '1' and instr_compressed = '1' then
+                    pc_align <= not pc_align;
+                end if;
             end if;
-        end if;
-    end process;
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if load_pc_i = '1' then
-                word_unalign <= pc_align_i;
-            elsif instr_valid_i = '1' then
-                word_unalign <= '0';
+        end process;
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if load_pc_i = '1' then
+                    word_unalign <= pc_align_i;
+                elsif instr_valid_i = '1' then
+                    word_unalign <= '0';
+                end if;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate gen_dispatch_with_compress;
     instr_compressed_o <= instr_compressed;
 
 end architecture rtl;
