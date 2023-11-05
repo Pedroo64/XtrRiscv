@@ -31,7 +31,7 @@ endif
 WAVE_ARGS=\
 	add wave -divider "cpu" -ports sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/*; \
 	add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
-	add wave -divider "prefetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_prefetch/*; \
+	add wave -divider "prefetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/u_prefetch/*; \
 	add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 	add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
 	add wave -divider "execute" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/*; \
