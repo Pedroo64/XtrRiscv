@@ -34,7 +34,7 @@ end entity instruction_decode;
 architecture rtl of instruction_decode is
     signal fetched_instr, decompressed_instr, instr_dat : std_logic_vector(31 downto 0);
     signal instr_opcode : std_logic_vector(6 downto 0);
-    signal compressed : std_logic;
+    signal rd_we, compressed : std_logic;
     signal opcode : opcode_t;
     signal opcode_type : opcode_type_t;
 begin
@@ -62,7 +62,7 @@ begin
 
     opcode.illegal <= '0';
 -- opcode decode
-    process (instr_opcode)
+    process (instr_opcode, instr_dat)
     begin
         opcode.lui <= '0';
         opcode.auipc <= '0';
@@ -75,38 +75,64 @@ begin
         opcode.reg_reg <= '0';
         opcode.fence <= '0';
         opcode.sys <= '0';
-        case instr_opcode is
-            when RV32I_OP_LUI => opcode.lui <= '1';
-            when RV32I_OP_AUIPC => opcode.auipc <= '1';
-            when RV32I_OP_JAL => opcode.jal <= '1';
-            when RV32I_OP_JALR => opcode.jalr <= '1';
-            when RV32I_OP_BRANCH => opcode.branch <= '1';
-            when RV32I_OP_LOAD => opcode.load <= '1';
-            when RV32I_OP_STORE => opcode.store <= '1';
-            when RV32I_OP_REG_IMM => opcode.reg_imm <= '1';
-            when RV32I_OP_REG_REG => opcode.reg_reg <= '1';
-            when RV32I_OP_FENCE => opcode.fence <= '1';
-            when RV32I_OP_SYS => opcode.sys <= '1';
-            when others => 
-        end case;
-    end process;
-
--- opcode type decode
-    process (instr_opcode)
-    begin
         opcode_type.r_type <= '0';
         opcode_type.i_type <= '0';
         opcode_type.s_type <= '0';
         opcode_type.b_type <= '0';
         opcode_type.u_type <= '0';
         opcode_type.j_type <= '0';
+        immediate_o <= (others => '-');
+        rd_we <= '0';
         case instr_opcode is
-            when RV32I_OP_REG_REG => opcode_type.r_type <= '1';
-            when RV32I_OP_JALR | RV32I_OP_LOAD | RV32I_OP_REG_IMM | RV32I_OP_SYS => opcode_type.i_type <= '1';
-            when RV32I_OP_STORE => opcode_type.s_type <= '1';
-            when RV32I_OP_BRANCH => opcode_type.b_type <= '1';
-            when RV32I_OP_LUI | RV32I_OP_AUIPC => opcode_type.u_type <= '1';
-            when RV32I_OP_JAL => opcode_type.j_type <= '1';
+            when RV32I_OP_LUI =>
+                opcode.lui <= '1';
+                opcode_type.u_type <= '1';
+                immediate_o <= instr_dat(31 downto 12) & (11 downto 0 => '0');
+                rd_we <= '1';
+            when RV32I_OP_AUIPC =>
+                opcode_type.u_type <= '1';
+                opcode.auipc <= '1'; 
+                immediate_o <= instr_dat(31 downto 12) & (11 downto 0 => '0');
+                rd_we <= '1';
+            when RV32I_OP_JAL =>
+                opcode.jal <= '1';
+                opcode_type.j_type <= '1';
+                immediate_o <= (31 downto 20 => instr_dat(31)) & instr_dat(19 downto 12) & instr_dat(20) & instr_dat(30 downto 21) & '0';
+                rd_we <= '1';
+            when RV32I_OP_JALR =>
+                opcode.jalr <= '1';
+                opcode_type.i_type <= '1';
+                immediate_o <= (31 downto 11 => instr_dat(31)) & instr_dat(30 downto 20);
+                rd_we <= '1';
+            when RV32I_OP_BRANCH =>
+                opcode.branch <= '1';
+                opcode_type.b_type <= '1';
+                immediate_o <= (31 downto 12 => instr_dat(31)) & instr_dat(7) & instr_dat(30 downto 25) & instr_dat(11 downto 8) & '0';
+            when RV32I_OP_LOAD =>
+                opcode.load <= '1';
+                opcode_type.i_type <= '1';
+                immediate_o <= (31 downto 11 => instr_dat(31)) & instr_dat(30 downto 20);
+                rd_we <= '1';
+            when RV32I_OP_STORE =>
+                opcode.store <= '1';
+                opcode_type.s_type <= '1';
+                immediate_o <= (31 downto 11 => instr_dat(31)) & instr_dat(30 downto 25) & instr_dat(11 downto 7);
+            when RV32I_OP_REG_IMM =>
+                opcode.reg_imm <= '1';
+                opcode_type.i_type <= '1';
+                immediate_o <= (31 downto 11 => instr_dat(31)) & instr_dat(30 downto 20);
+                rd_we <= '1';
+            when RV32I_OP_REG_REG =>
+                opcode.reg_reg <= '1';
+                opcode_type.r_type <= '1';
+                rd_we <= '1';
+            when RV32I_OP_FENCE =>
+                opcode.fence <= '1';
+            when RV32I_OP_SYS =>
+                opcode.sys <= '1';
+                opcode_type.i_type <= '1';
+                immediate_o <= (31 downto 11 => instr_dat(31)) & instr_dat(30 downto 20);
+                rd_we <= '1';
             when others =>
         end case;
     end process;
@@ -116,30 +142,12 @@ begin
     rs1_adr_o <= (others => '0') when opcode.lui = '1' else instr_dat(19 downto 15);
     rs2_adr_o <= instr_dat(24 downto 20);
     rd_adr_o <= instr_dat(11 downto 7);
-    
+
     funct3_o <= instr_dat(14 downto 12);
     funct7_o <= instr_dat(31 downto 25);
-    rd_we_o <= opcode_type.r_type or opcode_type.i_type or opcode_type.u_type or opcode_type.j_type;
+    rd_we_o <= rd_we;
     opcode_type_o <= opcode_type;
     compressed_o <= compressed;
-    
-    process (instr_opcode, instr_dat)
-    begin
-        case instr_opcode is
-            when RV32I_OP_LUI | RV32I_OP_AUIPC => 
-                immediate_o <= instr_dat(31 downto 12) & (0 to 11 => '0');
-            when RV32I_OP_JAL => 
-                immediate_o <= (20 to 31 => instr_dat(31)) & instr_dat(19 downto 12) & instr_dat(20) & instr_dat(30 downto 25) & instr_dat(24 downto 21) & '0';
-            when RV32I_OP_JALR | RV32I_OP_LOAD | RV32I_OP_REG_IMM | RV32I_OP_SYS => 
-                immediate_o <= (11 to 31 => instr_dat(31)) & instr_dat(30 downto 25) & instr_dat(24 downto 21) & instr_dat(20);
-            when RV32I_OP_BRANCH => 
-                immediate_o <= (12 to 31 => instr_dat(31)) & instr_dat(7) & instr_dat(30 downto 25) & instr_dat(11 downto 8) & '0';
-            when RV32I_OP_STORE =>
-                immediate_o <= (11 to 31 => instr_dat(31)) & instr_dat(30 downto 25) & instr_dat(11 downto 8) & instr_dat(7);
-            when others => 
-                immediate_o <= (others => '-');
-        end case;
-    end process;
 
     process (clk_i, arst_i)
     begin

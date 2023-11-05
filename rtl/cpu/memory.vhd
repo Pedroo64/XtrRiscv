@@ -51,6 +51,7 @@ architecture rtl of memory is
     signal funct3 : std_logic_vector(2 downto 0);
     signal funct7 : std_logic_vector(6 downto 0);
     signal alu_result_a, alu_result_b, rd_dat : std_logic_vector(31 downto 0);
+    signal busy : std_logic;
 begin
 
     process (clk_i, arst_i)
@@ -112,14 +113,16 @@ begin
 
     process (opcode, valid, cmd_rdy_i, funct3, shifter_ready_i)
     begin
-        if ((opcode.store or opcode.load) and valid) = '1' then
-            ready_o <= cmd_rdy_i;
-        elsif (G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01") and valid = '1' then
-            ready_o <= shifter_ready_i;
+        if (opcode.store or opcode.load) = '1' then
+            busy <= not cmd_rdy_i;
+        elsif (G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01") then
+            busy <= not shifter_ready_i;
         else
-            ready_o <= '1';
+            busy <= '0';
         end if;
     end process;
+
+    ready_o <= not (busy and valid);
 
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;

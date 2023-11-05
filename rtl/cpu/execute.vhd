@@ -127,7 +127,7 @@ begin
     rs1_adr_o <= rs1_adr;
     rs2_adr_o <= rs2_adr;
     current_pc_o <= pc;
-    multicycle_o <= valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';
+    multicycle_o <= '1' when valid = '1' and (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';
 -- PC
     process (clk_i)
     begin
@@ -218,7 +218,7 @@ begin
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;
     shifter_start <= 
-        valid when (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and (funct7(0) = '0' or G_MULDIV = FALSE) and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
+        '1' when valid = '1' and (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and (funct7(0) = '0' or G_MULDIV = FALSE) and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
         '0';
     shifter_result_o <= shifter_data_out;
     shifter_ready_o <= shifter_ready;
@@ -255,7 +255,7 @@ gen_muldiv: if G_MULDIV = TRUE generate
             ready_o => muldiv_ready
         );
     muldiv_srst <= multicycle_flush_i;
-    muldiv_start <= muldiv_valid when (opcode.reg_reg and funct7(0)) = '1' else '0';
+    muldiv_start <= '1' when muldiv_valid = '1' and (opcode.reg_reg and funct7(0)) = '1' else '0';
     muldiv_result_o <= muldiv_result;
 end generate gen_muldiv;
     muldiv_ready_o <= muldiv_ready when G_MULDIV = TRUE else '0';

@@ -95,32 +95,32 @@ begin
     decode_rs2_zero <= '1' when unsigned(decode_rs2_adr_i) = 0 else '0';
 
     decode_execute_rs1_hazard <= 
-        (execute_valid_i) when decode_rs1_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
-        (execute_rd_we_i) when decode_rs1_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
+        '1' when execute_valid_i = '1' and decode_rs1_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        '1' when execute_rd_we_i = '1' and decode_rs1_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
         '0';
     decode_execute_rs2_hazard <= 
-        (execute_valid_i) when decode_rs2_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
-        (execute_rd_we_i) when decode_rs2_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
+        '1' when execute_valid_i = '1' and decode_rs2_adr_i = execute_rd_adr_i and execute_opcode_i.load = '1' and G_EXECUTE_BYPASS = TRUE else 
+        '1' when execute_rd_we_i = '1' and decode_rs2_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = FALSE else 
         '0';
 
     decode_memory_rs1_hazard <= 
-        (memory_valid_i) when decode_rs1_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
-        (memory_rd_we_i) when decode_rs1_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
+        '1' when memory_valid_i = '1' and decode_rs1_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
+        '1' when memory_rd_we_i = '1' and decode_rs1_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
         '0';
     decode_memory_rs2_hazard <= 
-        (memory_valid_i) when decode_rs2_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
-        (memory_rd_we_i) when decode_rs2_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
+        '1' when memory_valid_i = '1' and decode_rs2_adr_i = memory_rd_adr_i and memory_opcode_i.load = '1' and G_MEMORY_BYPASS = TRUE else 
+        '1' when memory_rd_we_i = '1' and decode_rs2_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = FALSE else 
         '0';
 
     decode_writeback_rs1_hazard <= 
-        (writeback_rd_we_i) when decode_rs1_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
+        '1' when writeback_rd_we_i = '1' and decode_rs1_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
         '0';
     decode_writeback_rs2_hazard <= 
-        (writeback_rd_we_i) when decode_rs2_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
+        '1' when writeback_rd_we_i = '1' and decode_rs2_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = FALSE else 
         '0';
 
-    rs1_hazard <= decode_use_rs1 when decode_rs1_zero = '0' and (decode_execute_rs1_hazard or decode_memory_rs1_hazard or decode_writeback_rs1_hazard) = '1' else '0';
-    rs2_hazard <= decode_use_rs2 when decode_rs2_zero = '0' and (decode_execute_rs2_hazard or decode_memory_rs2_hazard or decode_writeback_rs2_hazard) = '1' else '0';
+    rs1_hazard <= '1' when decode_use_rs1 = '1' and decode_rs1_zero = '0' and (decode_execute_rs1_hazard or decode_memory_rs1_hazard or decode_writeback_rs1_hazard) = '1' else '0';
+    rs2_hazard <= '1' when decode_use_rs2 = '1' and decode_rs2_zero = '0' and (decode_execute_rs2_hazard or decode_memory_rs2_hazard or decode_writeback_rs2_hazard) = '1' else '0';
 
     decode_execute_opcode_sys_hazard <= execute_valid_i and execute_opcode_i.sys;
 
@@ -161,24 +161,24 @@ begin
 
 -- Datapath forward
     decode_execute_rs1_forward <= 
-        (execute_rd_we_i) when decode_rs1_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = TRUE else 
+        '1' when execute_rd_we_i = '1' and decode_rs1_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = TRUE else 
         '0';
     decode_execute_rs2_forward <= 
-        (execute_rd_we_i) when decode_rs2_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = TRUE else 
+        '1' when execute_rd_we_i = '1' and decode_rs2_adr_i = execute_rd_adr_i and G_EXECUTE_BYPASS = TRUE else 
         '0';
 
     decode_memory_rs1_forward <= 
-        (memory_rd_we_i) when decode_rs1_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = TRUE else 
+        '1' when memory_rd_we_i = '1' and decode_rs1_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = TRUE else 
         '0';
     decode_memory_rs2_forward <= 
-        (memory_rd_we_i) when decode_rs2_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = TRUE else 
+        '1' when memory_rd_we_i = '1' and decode_rs2_adr_i = memory_rd_adr_i and G_MEMORY_BYPASS = TRUE else 
         '0';
 
     decode_writeback_rs1_forward <= 
-        (writeback_rd_we_i) when decode_rs1_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = TRUE else 
+        '1' when writeback_rd_we_i = '1' and decode_rs1_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = TRUE else 
         '0';
     decode_writeback_rs2_forward <= 
-        (writeback_rd_we_i) when decode_rs2_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = TRUE else 
+        '1' when writeback_rd_we_i = '1' and decode_rs2_adr_i = writeback_rd_adr_i and G_WRITEBACK_BYPASS = TRUE else 
         '0';
 
     decode_rs1_dat_forward <= 
