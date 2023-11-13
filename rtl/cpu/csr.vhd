@@ -34,7 +34,13 @@ entity csr is
         target_pc_o : out std_logic_vector(31 downto 0);
         load_pc_o : out std_logic;
         external_interrupt_i : in std_logic;
-        timer_interrupt_i : in std_logic
+        timer_interrupt_i : in std_logic;
+        exception_entry_o : out std_logic;
+        exception_exit_o : out std_logic;
+        exception_sync_o : out std_logic;
+        exception_async_o : out std_logic;
+        mtvec_o : out std_logic_vector(31 downto 0);
+        mepc_o : out std_logic_vector(31 downto 0)
     );
 end entity csr;
 
@@ -295,5 +301,12 @@ begin
         end if;
     end process;
 
+
+    exception_async_o <= exception_async;
+    exception_sync_o <= exception_sync;
+    exception_entry_o <= exception_entry;
+    exception_exit_o <= exception_exit;
+    mtvec_o <= r_csr.mtvec;
+    mepc_o <= r_csr.mepc;
 
 end architecture rtl;

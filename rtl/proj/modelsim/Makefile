@@ -59,6 +59,7 @@ create_project:
 
 add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open work/proj.mpf; \
+		project addfile $(SRCS_PATH)/cpu/cpu_checker.vhd; \
 		project addfile $(SRCS_PATH)/cpu/utils/cpu_fifo.vhd; \
 		project addfile $(SRCS_PATH)/cpu/comparator.vhd; \
 		project addfile $(SRCS_PATH)/cpu/alu.vhd; \

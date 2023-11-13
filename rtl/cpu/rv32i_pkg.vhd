@@ -92,6 +92,14 @@ constant RV32I_FN3_BGE          :   std_logic_vector(2 downto 0) := "101";
 constant RV32I_FN3_BLTU         :   std_logic_vector(2 downto 0) := "110";
 constant RV32I_FN3_BGEU         :   std_logic_vector(2 downto 0) := "111";
 
+-- Mul/Div operations
+constant RV32M_FN3_MUL          :   std_logic_vector(2 downto 0) := "000";
+constant RV32M_FN3_MULH         :   std_logic_vector(2 downto 0) := "001";
+constant RV32M_FN3_MULHSU       :   std_logic_vector(2 downto 0) := "010";
+constant RV32M_FN3_MULHU        :   std_logic_vector(2 downto 0) := "011";
+constant RV32M_FN3_DIV          :   std_logic_vector(2 downto 0) := "100";
+constant RV32M_FN3_DIVU         :   std_logic_vector(2 downto 0) := "101";
+constant RV32M_FN3_REM          :   std_logic_vector(2 downto 0) := "110";
+constant RV32M_FN3_REMU         :   std_logic_vector(2 downto 0) := "111";
 
-    
 end package rv32i_pkg;

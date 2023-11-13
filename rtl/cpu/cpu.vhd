@@ -16,7 +16,8 @@ entity cpu is
         G_EXTENSION_M : boolean := FALSE;
         G_EXTENSION_C : boolean := FALSE;
         G_ZICSR : boolean := FALSE;
-        G_IGNORE_CONSTANTS : boolean := FALSE
+        G_IGNORE_CONSTANTS : boolean := FALSE;
+        G_VERIFICATION : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -95,10 +96,16 @@ architecture rtl of cpu is
     signal csr_exception_target_pc : std_logic_vector(31 downto 0) := (others => '-');
     signal csr_exception_load_pc : std_logic := '0';
     signal csr_read_dat : std_logic_vector(31 downto 0) := (others => '0');
+    signal csr_exception_entry, csr_exception_exit, csr_exception_async, csr_exception_sync : std_logic := '0';
+    signal csr_mtvec, csr_mepc : std_logic_vector(31 downto 0) := (others => '-');
 -- regfile
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr : std_logic_vector(4 downto 0);
     signal regfile_rs1_dat, regfile_rs2_dat, regfile_rd_dat : std_logic_vector(31 downto 0);
+-- memory interface
+    signal mem_cmd_adr, mem_cmd_dat : std_logic_vector(31 downto 0);
+    signal mem_cmd_siz : std_logic_vector(1 downto 0);
+    signal mem_cmd_vld, mem_cmd_we : std_logic;
 begin
     assert not(G_SHIFTER_EARLY_INJECTION and not G_EXECUTE_BYPASS and not G_IGNORE_CONSTANTS) report "G_SHIFTER_EARLY_INJECTION will be ignored since G_EXECUTE_BYPASS is FALSE" severity NOTE;
 
@@ -238,14 +245,19 @@ begin
             alu_result_a_o => memory_alu_result_a,
             alu_result_b_o => memory_alu_result_b,
             cmd_en_i => memory_cmd_en,
-            cmd_adr_o => data_cmd_adr_o,
-            cmd_dat_o => data_cmd_dat_o,
-            cmd_vld_o => data_cmd_vld_o,
-            cmd_we_o => data_cmd_we_o,
-            cmd_siz_o => data_cmd_siz_o,
+            cmd_adr_o => mem_cmd_adr,
+            cmd_dat_o => mem_cmd_dat,
+            cmd_vld_o => mem_cmd_vld,
+            cmd_we_o => mem_cmd_we,
+            cmd_siz_o => mem_cmd_siz,
             cmd_rdy_i => data_cmd_rdy_i,
             ready_o => memory_ready
         );
+    data_cmd_adr_o <= mem_cmd_adr;
+    data_cmd_dat_o <= mem_cmd_dat;
+    data_cmd_vld_o <= mem_cmd_vld;
+    data_cmd_we_o <= mem_cmd_we;
+    data_cmd_siz_o <= mem_cmd_siz;
 -- writeback
     memory_muldiv <= memory_opcode.reg_reg and memory_funct7(0) when G_EXTENSION_M = TRUE else '0';
 
@@ -390,7 +402,13 @@ gen_csr: if G_ZICSR = TRUE generate
             target_pc_o => csr_exception_target_pc,
             load_pc_o => csr_exception_load_pc,
             external_interrupt_i => external_irq_i,
-            timer_interrupt_i => timer_irq_i
+            timer_interrupt_i => timer_irq_i,
+            exception_entry_o => csr_exception_entry,
+            exception_exit_o => csr_exception_exit,
+            exception_sync_o => csr_exception_sync,
+            exception_async_o => csr_exception_async,
+            mtvec_o => csr_mtvec,
+            mepc_o => csr_mepc
         );
 end generate gen_csr;
 
@@ -417,5 +435,47 @@ end generate gen_csr;
             rd_we_i => regfile_rd_we,
             rd_dat_i => regfile_rd_dat
         );
+
+gen_verif: if G_VERIFICATION = TRUE generate
+    u_cpu_checker : entity work.cpu_checker
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            decode_valid_i => decode_valid,
+            decode_opcode_i => decode_instr(6 downto 0),
+            decode_funct3_i => decode_funct3,
+            decode_funct7_i => decode_funct7,
+            decode_immediate_i => decode_imm,
+            decode_rs1_dat_i => execute_rs1_dat,
+            decode_rs2_dat_i => execute_rs2_dat,
+            decode_rd_adr_i => decode_rd_adr,
+            decode_rd_we_i => decode_rd_we,
+            decode_compressed_i => decode_instr_compressed,
+            execute_enable_i => execute_en,
+            execute_flush_i => execute_flush,
+            execute_current_pc_i => execute_pc,
+            memory_enable_i => memory_en,
+            memory_flush_i => memory_flush,
+            memory_mem_cmd_adr_i => mem_cmd_adr,
+            memory_mem_cmd_dat_i => mem_cmd_dat,
+            memory_mem_cmd_vld_i => mem_cmd_vld,
+            memory_mem_cmd_we_i => mem_cmd_we,
+            writeback_enable_i => writeback_en,
+            writeback_flush_i => writeback_flush,
+            writeback_mem_rsp_dat_i => data_rsp_dat_i,
+            writeback_mem_rsp_vld_i => data_rsp_vld_i,
+            fetch_load_pc_i => fetch_load_pc,
+            fetch_target_pc_i => fetch_target_pc,
+            csr_exception_entry_i => csr_exception_entry,
+            csr_exception_exit_i => csr_exception_exit,
+            csr_exception_async_i => csr_exception_async,
+            csr_exception_sync_i => csr_exception_sync,
+            csr_mtvec_i => csr_mtvec,
+            csr_mepc_i => csr_mepc,
+            regfile_rd_we_i => regfile_rd_we,
+            regfile_rd_dat_i => regfile_rd_dat,
+            regfile_rd_adr_i => regfile_rd_adr
+        );
+end generate gen_verif;
 
 end architecture rtl;
