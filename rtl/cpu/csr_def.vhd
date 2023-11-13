@@ -6,7 +6,7 @@ package csr_def is
 
     constant CSR_FN12_ECALL  : std_logic_vector(11 downto 0) := "000000000000";
     constant CSR_FN12_EBREAK : std_logic_vector(11 downto 0) := "000000000001";
-    constant CSR_FN12_MRET   : std_logic_vector(11 downto 0) := "000000000010";
+    constant CSR_FN12_MRET   : std_logic_vector(11 downto 0) := "001100000010";
 
     constant CSR_MVENDORID  : std_logic_vector(11 downto 0) := x"F11";
     constant CSR_MARCHID    : std_logic_vector(11 downto 0) := x"F12";
