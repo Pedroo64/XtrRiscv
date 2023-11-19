@@ -15,6 +15,7 @@ ROOT_DIR ?= $(PWD)/../..
 SIM ?= ghdl
 TOPLEVEL_LANG ?= vhdl
 
+VHDL_SOURCES += $(ROOT_DIR)/utils/vhdl_utils.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/cpu_checker.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/utils/cpu_fifo.vhd
 VHDL_SOURCES += $(ROOT_DIR)/cpu/comparator.vhd

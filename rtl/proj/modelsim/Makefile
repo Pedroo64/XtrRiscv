@@ -47,7 +47,8 @@ SIM_ARGS=\
 	-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
 	-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
 	-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
-	-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M) -gG_EXTENSION_C=$(EXTENSION_C); \
+	-gG_ZICSR=$(ZICSR) -gG_EXTENSION_M=$(EXTENSION_M) -gG_EXTENSION_C=$(EXTENSION_C) \
+	-g/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/G_VERIFICATION=TRUE; \
 	set NumericStdNoWarnings 1
 
 all: compile
@@ -59,7 +60,7 @@ create_project:
 
 add_sources: create_project
 	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open work/proj.mpf; \
-		project addfile $(SRCS_PATH)/cpu/cpu_checker.vhd; \
+		project addfile $(SRCS_PATH)/utils/vhdl_utils.vhd; \
 		project addfile $(SRCS_PATH)/cpu/utils/cpu_fifo.vhd; \
 		project addfile $(SRCS_PATH)/cpu/comparator.vhd; \
 		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
@@ -70,8 +71,8 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/m_extension/div.vhd; \
 		project addfile $(SRCS_PATH)/cpu/m_extension/muldiv.vhd; \
 		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
-		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
 		project addfile $(SRCS_PATH)/cpu/prefetch.vhd; \
+		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
 		project addfile $(SRCS_PATH)/cpu/instruction_decode.vhd; \
 		project addfile $(SRCS_PATH)/cpu/execute.vhd; \
 		project addfile $(SRCS_PATH)/cpu/memory.vhd; \
@@ -81,6 +82,7 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/control_unit.vhd; \
 		project addfile $(SRCS_PATH)/cpu/interrupt_handler.vhd; \
 		project addfile $(SRCS_PATH)/cpu/branch_unit.vhd; \
+		project addfile $(SRCS_PATH)/cpu/cpu_checker.vhd; \
 		project addfile $(SRCS_PATH)/cpu/cpu.vhd; \
 		project addfile $(SRCS_PATH)/utils/utils.vhd; \
 		project addfile $(SRCS_PATH)/utils/xtr_def.vhd; \

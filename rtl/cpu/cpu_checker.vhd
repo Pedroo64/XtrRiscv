@@ -4,6 +4,7 @@ use IEEE.numeric_std.all;
 
 use work.rv32i_pkg.all;
 use work.csr_def.all;
+use work.vhdl_utils.all;
 
 entity cpu_checker is
     port (
@@ -47,14 +48,6 @@ entity cpu_checker is
 end entity cpu_checker;
 
 architecture rtl of cpu_checker is
-    procedure assert_cond (cond : in boolean; message : in string; sev_level : in severity_level := FAILURE) is
-    begin
-        assert not cond report message & " at " & time'image(now) severity sev_level;
-    end procedure;
-    procedure assert_cond (cond : in std_logic; message : in string; sev_level : in severity_level := FAILURE) is
-    begin
-        assert_cond(cond = '1', message, sev_level);
-    end procedure;
 -- pipeline
     signal execute_valid, memory_valid, writeback_valid : std_logic;
     signal execute_current_pc, memory_current_pc, writeback_current_pc : std_logic_vector(31 downto 0);
@@ -410,10 +403,10 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            assert_cond(memory_valid = '1' and (memory_opcode = RV32I_OP_LOAD or memory_opcode = RV32I_OP_STORE) and not (memory_mem_adr = memory_mem_cmd_adr_i), "Memory access : address missmatch");
-            assert_cond(memory_valid = '1' and memory_opcode = RV32I_OP_STORE and not (memory_mem_cmd_dat = memory_mem_cmd_dat_i), "Memory access : write data missmatch");
-            assert_cond(memory_valid = '1' and memory_opcode = RV32I_OP_STORE and not (memory_mem_cmd_vld_i = '1' and memory_mem_cmd_we_i = '1'), "Memory access : write operation expected");
-            assert_cond(memory_valid = '1' and memory_opcode = RV32I_OP_LOAD and not (memory_mem_cmd_vld_i = '1' and memory_mem_cmd_we_i = '0'), "Memory access : read operation expected");
+            vhdl_assert(memory_valid = '1' and (memory_opcode = RV32I_OP_LOAD or memory_opcode = RV32I_OP_STORE) and not (memory_mem_adr = memory_mem_cmd_adr_i), "Memory access : address missmatch");
+            vhdl_assert(memory_valid = '1' and memory_opcode = RV32I_OP_STORE and not (memory_mem_cmd_dat = memory_mem_cmd_dat_i), "Memory access : write data missmatch");
+            vhdl_assert(memory_valid = '1' and memory_opcode = RV32I_OP_STORE and not (memory_mem_cmd_vld_i = '1' and memory_mem_cmd_we_i = '1'), "Memory access : write operation expected");
+            vhdl_assert(memory_valid = '1' and memory_opcode = RV32I_OP_LOAD and not (memory_mem_cmd_vld_i = '1' and memory_mem_cmd_we_i = '0'), "Memory access : read operation expected");
         end if;
     end process;
 
@@ -481,9 +474,9 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            assert_cond(regfile_rd_we = '1' and not (regfile_rd_adr = regfile_rd_adr_i), "Writeback rd adr missmatch");
-            assert_cond(regfile_rd_we = '1' and regfile_rd_we_i = '1' and not (regfile_rd_dat = regfile_rd_dat_i), "Writeback rd dat missmatch");
-            assert_cond(load_pc = '1' and not (target_pc = fetch_target_pc_i), "Branching missmatch");
+            vhdl_assert(regfile_rd_we = '1' and not (regfile_rd_adr = regfile_rd_adr_i), "Writeback rd adr missmatch");
+            vhdl_assert(regfile_rd_we = '1' and regfile_rd_we_i = '1' and not (regfile_rd_dat = regfile_rd_dat_i), "Writeback rd dat missmatch");
+            vhdl_assert(load_pc = '1' and not (target_pc = fetch_target_pc_i), "Branching missmatch");
         end if;
     end process;
 
@@ -511,8 +504,8 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            assert_cond(d_sync_exception_entry = '1' and not (d_exception_pc = csr_mepc_i), "Sync exception PC not correct");
-            assert_cond(d_async_exception_entry = '1' and d_sync_exception_entry = '0' and not ((std_logic_vector(unsigned(d_exception_pc) + 4)) = csr_mepc_i), "Async exception PC not correct");
+            vhdl_assert(d_sync_exception_entry = '1' and not (d_exception_pc = csr_mepc_i), "Sync exception PC not correct");
+            vhdl_assert(d_async_exception_entry = '1' and d_sync_exception_entry = '0' and not ((std_logic_vector(unsigned(d_exception_pc) + 4)) = csr_mepc_i), "Async exception PC not correct");
         end if;
     end process;
 end architecture rtl;
