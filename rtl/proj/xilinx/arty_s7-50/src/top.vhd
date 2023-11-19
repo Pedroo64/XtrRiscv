@@ -35,7 +35,7 @@ begin
             G_CPU_BOOT_ADDRESS => x"00000000", G_CPU_PREFETCH_SIZE => 4, 
             G_CPU_EXECUTE_BYPASS => TRUE, G_CPU_MEMORY_BYPASS => TRUE, G_CPU_WRITEBACK_BYPASS => TRUE,
             G_FULL_BARREL_SHIFTER => TRUE, G_CPU_SHIFTER_EARLY_INJECTION => TRUE,
-            G_ZICSR => TRUE, G_EXTENSION_M => TRUE, G_EXTENSION_C => TRUE)
+            G_EXTENSION_ZICSR => TRUE, G_EXTENSION_M => TRUE, G_EXTENSION_C => TRUE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 

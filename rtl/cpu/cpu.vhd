@@ -16,8 +16,7 @@ entity cpu is
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
         G_EXTENSION_C : boolean := FALSE;
-        G_ZICSR : boolean := FALSE;
-        G_IGNORE_CONSTANTS : boolean := FALSE;
+        G_EXTENSION_ZICSR : boolean := FALSE;
         G_VERIFICATION : boolean := FALSE
     );
     port (
@@ -43,10 +42,9 @@ entity cpu is
 end entity cpu;
 
 architecture rtl of cpu is
-    constant C_SHIFTER_EARLY_INJECTION : boolean := (G_EXECUTE_BYPASS and G_SHIFTER_EARLY_INJECTION and not G_IGNORE_CONSTANTS) or (G_SHIFTER_EARLY_INJECTION and G_IGNORE_CONSTANTS);
-    constant C_ECALL : boolean := G_ZICSR;
-    constant C_EBREAK : boolean := G_ZICSR;
-    constant C_INTERRUPTS : boolean := G_ZICSR;
+    constant C_ECALL : boolean := G_EXTENSION_ZICSR;
+    constant C_EBREAK : boolean := G_EXTENSION_ZICSR;
+    constant C_INTERRUPTS : boolean := G_EXTENSION_ZICSR;
     signal ctl_booted : std_logic;
 -- fetch
     signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed : std_logic;
@@ -108,7 +106,6 @@ architecture rtl of cpu is
     signal mem_cmd_siz : std_logic_vector(1 downto 0);
     signal mem_cmd_vld, mem_cmd_we : std_logic;
 begin
-    assert not(G_SHIFTER_EARLY_INJECTION and not G_EXECUTE_BYPASS and not G_IGNORE_CONSTANTS) report "G_SHIFTER_EARLY_INJECTION will be ignored since G_EXECUTE_BYPASS is FALSE" severity NOTE;
 
 -- fetch
     fetch_load_pc <= branch_load_pc;
@@ -169,7 +166,7 @@ begin
     u_execute : entity work.execute
         generic map (
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
-            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION,
+            G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
             G_MULDIV => G_EXTENSION_M
         )
         port map (
@@ -218,7 +215,7 @@ begin
     u_memory : entity work.memory
         generic map (
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
-            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION
+            G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION
         )
         port map (
             arst_i => arst_i,
@@ -293,7 +290,7 @@ begin
             G_MEMORY_BYPASS => G_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,
             G_EXTENSION_M => G_EXTENSION_M,
-            G_SHIFTER_EARLY_INJECTION => C_SHIFTER_EARLY_INJECTION
+            G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION
         )
         port map (
             arst_i => arst_i,
@@ -373,7 +370,7 @@ begin
         );
 
 -- csr
-gen_csr: if G_ZICSR = TRUE generate
+gen_csr: if G_EXTENSION_ZICSR = TRUE generate
     u_csr : entity work.csr
         generic map (
             G_ECALL => C_ECALL,
