@@ -478,8 +478,8 @@ gen_verif: if G_VERIFICATION = TRUE generate
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            vhdl_assert(fetch_instr_valid = '1' and fetch_instr_compressed = '1' and not (fetch_instr_data(1 downto 0) /= "11"), "Expected compressed instruction");
-            vhdl_assert(fetch_instr_valid = '1' and fetch_instr_compressed = '0' and not (fetch_instr_data(1 downto 0) = "11"), "Expected non compressed instruction");
+            vhdl_assert(G_EXTENSION_C = TRUE and fetch_instr_valid = '1' and fetch_instr_compressed = '1' and not (fetch_instr_data(1 downto 0) /= "11"), "Expected compressed instruction");
+            vhdl_assert(G_EXTENSION_C = TRUE and fetch_instr_valid = '1' and fetch_instr_compressed = '0' and not (fetch_instr_data(1 downto 0) = "11"), "Expected non compressed instruction");
             vhdl_assert(decode_valid = '1' and not (or_reduct(decode_instr) /= 'X'), "Illegal instruction");
         end if;
     end process;
