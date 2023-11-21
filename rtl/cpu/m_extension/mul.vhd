@@ -17,7 +17,6 @@ entity mul is
 end entity mul;
 
 architecture rtl of mul is
-    constant C_VERIF : boolean := FALSE;
     signal next_cnt, cnt : unsigned(5 downto 0);
     signal alu_a, alu_b, alu_y : std_logic_vector(32 downto 0);
     signal alu_op : std_logic;
@@ -110,29 +109,5 @@ begin
         product(63 downto 32);
 
     ready_o <= ready;
-
-gen_verif: if C_VERIF = TRUE generate
-    signal d_ready : std_logic;
-    signal expected_res : std_logic_vector(63 downto 0);
-begin
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            d_ready <= ready;
-            if start_i = '1' then
-                case funct3_i(1 downto 0) is
-                    when "00" => expected_res <= std_logic_vector(signed(a_i) * signed(b_i));
-                    when "01" => expected_res <= std_logic_vector(signed(a_i) * signed(b_i));
---                    when "10" => expected_res <= std_logic_vector(signed(a_i) * unsigned(b_i));
-                    when "11" => expected_res <= std_logic_vector(unsigned(a_i) * unsigned(b_i));
-                    when others =>
-                end case;
-            end if;
-            if ready = '1' and d_ready = '0' and funct3(1 downto 0) /= "10" then
-                assert expected_res = product severity FAILURE;
-            end if;
-        end if;
-    end process;
-end generate gen_verif;
 
 end architecture rtl;

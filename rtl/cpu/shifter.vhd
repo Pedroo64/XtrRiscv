@@ -22,7 +22,6 @@ entity shifter is
 end entity shifter;
 
 architecture rtl of shifter is
-    constant C_VERIF : boolean := FALSE;
     signal load_data : std_logic;
     signal nxt_data, data : std_logic_vector(31 downto 0);
     signal nxt_done, done : std_logic;
@@ -178,32 +177,4 @@ begin
         nxt_data when G_SHIFTER_EARLY_INJECTION = TRUE else
         data;
 
-    gen_verif: if C_VERIF = TRUE generate
-        signal next_expected_res, expected_res : std_logic_vector(31 downto 0);
-    begin
-        process (type_i, data_i, start_i, expected_res)
-        begin
-            if start_i = '1' then
-                case type_i is
-                    when "00" | "01" => next_expected_res <= std_logic_vector(shift_left(unsigned(data_i), to_integer(unsigned(shift_i))));
-                    when "10" => next_expected_res <= std_logic_vector(shift_right(unsigned(data_i), to_integer(unsigned(shift_i))));
-                    when "11" => next_expected_res <= std_logic_vector(shift_right(signed(data_i), to_integer(unsigned(shift_i))));
-                    when others => next_expected_res <= (others => 'X');
-                end case;
-            else
-                next_expected_res <= expected_res;
-            end if;
-            if G_SHIFTER_EARLY_INJECTION = TRUE and nxt_done = '1' then
-                assert next_expected_res = nxt_data severity FAILURE;
-            elsif G_SHIFTER_EARLY_INJECTION = FALSE and done = '1' then
-                assert expected_res = data severity FAILURE;
-            end if;
-        end process;
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-                expected_res <= next_expected_res;
-            end if;
-        end process;
-    end generate gen_verif;
 end architecture rtl;

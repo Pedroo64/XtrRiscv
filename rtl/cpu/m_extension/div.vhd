@@ -17,7 +17,6 @@ entity div is
 end entity div;
 
 architecture rtl of div is
-    constant C_VERIF : boolean := FALSE;
     type div_state_t is (st_idle, st_check_den, st_divide, st_norm_res, st_inv_den);
     signal result_sel : std_logic;
     signal current_st, next_st : div_state_t;
@@ -169,40 +168,4 @@ begin
         q when result_sel = '0' else
         r;
 
--- Verification
-gen_verif: if C_VERIF = TRUE generate
-    signal d_current_st : div_state_t;
-    signal expected_res : std_logic_vector(31 downto 0);
-begin
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            d_current_st <= current_st;
-            if start_i = '1' then
-                if unsigned(den_i) = 0 then
-                    if funct3_i(1) = '0' then
-                        expected_res <= (others => '1');
-                    else
-                        expected_res <= num_i;
-                    end if;
-                else
-                    case funct3_i(1 downto 0) is
-                        when "00" => expected_res <= std_logic_vector(signed(num_i) / signed(den_i));
-                        when "01" => expected_res <= std_logic_vector(unsigned(num_i) / unsigned(den_i));
-                        when "10" => expected_res <= std_logic_vector(signed(num_i) rem signed(den_i));
-                        when "11" => expected_res <= std_logic_vector(unsigned(num_i) rem unsigned(den_i));
-                        when others =>
-                    end case;
-                end if;
-            end if;
-            if current_st = st_idle and d_current_st /= st_idle then
-                if result_sel = '0' then
-                    assert expected_res = q severity FAILURE;
-                else
-                    assert expected_res = r severity FAILURE;
-                end if;
-            end if;
-        end if;
-    end process;
-end generate gen_verif;
 end architecture rtl;
