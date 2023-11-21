@@ -2,6 +2,8 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
+use work.vhdl_utils.all;
+
 entity instruction_fetch is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
@@ -61,8 +63,6 @@ begin
         end if;
     end process;
 
-    enable <= not prefetch_full or load_pc_i;
-
     process (clk_i)
     begin
         if rising_edge(clk_i) then
@@ -71,7 +71,7 @@ begin
             end if;
         end if;
     end process;
-    next_pc <= 
+    next_pc <=
         target_pc_i when load_pc_i = '1' else
         std_logic_vector(unsigned(pc) + 4);
 
@@ -80,32 +80,54 @@ begin
     cmd_adr_o <= pc;
     cmd_vld_o <= cmd_valid;
     booted_o <= booted;
-    
-    rsp_valid <= valid and rsp_vld_i;
 
-    -- prefetch
-    prefetch_flush <= flush_i;
-    u_prefetch : entity work.prefetch
-        generic map (
-            G_PREFETCH_DEPTH => G_PREFETCH_SIZE,
-            G_EXTENSION_C => G_EXTENSION_C
-        )
-        port map (
-            arst_i => arst_i,
-            clk_i => clk_i,
-            enable_i => enable_i,
-            flush_i => prefetch_flush,
-            valid_i => cmd_valid,
-            load_pc_i => load_pc_i,
-            pc_align_i => target_pc_i(1),
-            instr_valid_i => rsp_valid,
-            instr_data_i => rsp_dat_i,
-            valid_o => instr_valid_o,
-            data_o => instr_data_o,
-            full_o => prefetch_full,
-            ready_o => open,
-            instr_compressed_o => instr_compressed_o
-        );
-    prefetch_full_o <= prefetch_full; 
+    gen_prefetch_buffer: if G_PREFETCH_SIZE > 1 generate
+        rsp_valid <= valid and rsp_vld_i;
+        enable <= not prefetch_full or load_pc_i;
+        -- prefetch
+        prefetch_flush <= flush_i;
+        u_prefetch : entity work.prefetch
+            generic map (
+                G_PREFETCH_DEPTH => G_PREFETCH_SIZE,
+                G_EXTENSION_C => G_EXTENSION_C
+            )
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                enable_i => enable_i,
+                flush_i => prefetch_flush,
+                valid_i => cmd_valid,
+                load_pc_i => load_pc_i,
+                pc_align_i => target_pc_i(1),
+                instr_valid_i => rsp_valid,
+                instr_data_i => rsp_dat_i,
+                valid_o => instr_valid_o,
+                data_o => instr_data_o,
+                full_o => prefetch_full,
+                ready_o => open,
+                instr_compressed_o => instr_compressed_o
+            );
+    end generate gen_prefetch_buffer;
+
+    gen_no_prefetch_buffer : if G_PREFETCH_SIZE <= 1 generate
+        enable <= enable_i or load_pc_i;
+        rsp_valid <= '0';
+        instr_compressed_o <= '0';
+        prefetch_flush <= '0';
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if enable = '1' then
+                    instr_valid_o <= cmd_rdy_i and not flush_i;
+                end if;
+            end if;
+        end process;
+        instr_data_o <= rsp_dat_i;
+        prefetch_full <= '0';
+        vhdl_assert(G_EXTENSION_C, "EXTENSION C requires a prefetcher buffer");
+    end generate gen_no_prefetch_buffer;
+
+    prefetch_full_o <= prefetch_full;
+
 
 end architecture rtl;
