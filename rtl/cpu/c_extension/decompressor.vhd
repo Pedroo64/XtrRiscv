@@ -27,7 +27,7 @@ begin
     rs1_zero <= '1' when unsigned(ci(11 downto 7)) = 0 else '0';
     rs2_zero <= '1' when unsigned(ci(6 downto 2)) = 0 else '0';
 
-    process (ci_op, ci)
+    process (ci_op, ci, rs1_zero, rs2_zero)
     begin
         instr <= (others => 'X');
         illegal <= '0';

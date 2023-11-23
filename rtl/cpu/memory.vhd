@@ -111,7 +111,7 @@ begin
     cmd_we_o <= opcode.store;
     cmd_siz_o <= funct3(1 downto 0);
 
-    process (opcode, valid, cmd_rdy_i, funct3, shifter_ready_i)
+    process (opcode, cmd_rdy_i, funct3, shifter_ready_i)
     begin
         if (opcode.store or opcode.load) = '1' then
             busy <= not cmd_rdy_i;
