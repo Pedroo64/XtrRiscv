@@ -120,14 +120,14 @@ begin
                     when "11" =>
                         instr(24 downto 20) <= "01" & ci(4 downto 2); -- C.RS2
                         instr(6 downto 0) <= RV32I_OP_REG_REG;
-                        -- 00 = C.SUB
-                        -- 01 = C.XOR
-                        -- 10 = C.OR
-                        -- 11 = C.AND
                         instr(31 downto 25) <= '0' & not (ci(6) or ci(5)) & (29 downto 25 => '0');
-                        instr(14) <= ci(6) or ci(5);
-                        instr(13) <= ci(6);
-                        instr(12) <= ci(6) and ci(5);
+                        case ci(6 downto 5) is
+                            when "00" => instr(14 downto 12) <= "000";
+                            when "01" => instr(14 downto 12) <= "100";
+                            when "10" => instr(14 downto 12) <= "110";
+                            when "11" => instr(14 downto 12) <= "111";
+                            when others =>
+                        end case;
                     when others =>
                 end case;
                 illegal <= ci(12);

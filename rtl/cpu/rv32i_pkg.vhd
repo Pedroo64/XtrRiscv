@@ -28,6 +28,17 @@ package rv32i_pkg is
         j_type : std_logic;
     end record;
 
+    type execute_ctrl_t is record
+        alu_op_a_sel : std_logic;
+        alu_op_b_sel : std_logic;
+        alu_op : std_logic_vector(1 downto 0);
+        alu_arith : std_logic;
+        alu_res_sel : std_logic_vector(2 downto 0);
+        shifter_en : std_logic;
+        muldiv_en : std_logic;
+    end record;
+
+
     -- RV32I Base Instruction Set Opcodes
 constant RV32I_OP_LUI       :   std_logic_vector(6 downto 0) := "0110111";
 constant RV32I_OP_AUIPC     :   std_logic_vector(6 downto 0) := "0010111";
@@ -76,13 +87,13 @@ constant RV32I_FN3_CSRRCI       :   std_logic_vector(2 downto 0) := "111";
 constant RV32I_ZERO             :   std_logic_vector(4 downto 0) := "00000";
 
 -- Memory access width
-constant RV32I_LB               :   std_logic_vector(1 downto 0) := "00";
-constant RV32I_LH               :   std_logic_vector(1 downto 0) := "01";
-constant RV32I_LW               :   std_logic_vector(1 downto 0) := "10";
+constant RV32I_FN3_LB           :   std_logic_vector(1 downto 0) := "00";
+constant RV32I_FN3_LH           :   std_logic_vector(1 downto 0) := "01";
+constant RV32I_FN3_LW           :   std_logic_vector(1 downto 0) := "10";
 
-constant RV32I_SB               :   std_logic_vector(1 downto 0) := "00";
-constant RV32I_SH               :   std_logic_vector(1 downto 0) := "01";
-constant RV32I_SW               :   std_logic_vector(1 downto 0) := "10";
+constant RV32I_FN3_SB           :   std_logic_vector(1 downto 0) := "00";
+constant RV32I_FN3_SH           :   std_logic_vector(1 downto 0) := "01";
+constant RV32I_FN3_SW           :   std_logic_vector(1 downto 0) := "10";
 
 -- Test conditions
 constant RV32I_FN3_BEQ          :   std_logic_vector(2 downto 0) := "000";
@@ -101,5 +112,10 @@ constant RV32M_FN3_DIV          :   std_logic_vector(2 downto 0) := "100";
 constant RV32M_FN3_DIVU         :   std_logic_vector(2 downto 0) := "101";
 constant RV32M_FN3_REM          :   std_logic_vector(2 downto 0) := "110";
 constant RV32M_FN3_REMU         :   std_logic_vector(2 downto 0) := "111";
+
+constant RV32M_FN7_MULDIV       :   std_logic_vector(6 downto 0) := "0000001";
+constant RV32M_FN7_SA           :   std_logic_vector(6 downto 0) := "0100000";
+constant RV32M_FN7_SL           :   std_logic_vector(6 downto 0) := "0000000";
+constant RV32M_FN7_SUB          :   std_logic_vector(6 downto 0) := "0100000";
 
 end package rv32i_pkg;

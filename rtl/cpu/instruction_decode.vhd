@@ -6,7 +6,9 @@ use work.rv32i_pkg.all;
 
 entity instruction_decode is
     generic (
-        G_EXTENSION_C : boolean := FALSE
+        G_EXTENSION_C : boolean := FALSE;
+        G_EXTENSION_M : boolean := FALSE;
+        G_SHIFTER_EARLY_INJECTION : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -20,23 +22,31 @@ entity instruction_decode is
         opcode_o : out opcode_t;
         opcode_type_o : out opcode_type_t;
         rs1_adr_o : out std_logic_vector(4 downto 0);
+        rs1_en_o : out std_logic;
         rs2_adr_o : out std_logic_vector(4 downto 0);
+        rs2_en_o : out std_logic;
         rd_adr_o : out std_logic_vector(4 downto 0);
         rd_we_o : out std_logic;
         immediate_o : out std_logic_vector(31 downto 0);
         funct3_o : out std_logic_vector(2 downto 0);
         funct7_o : out std_logic_vector(6 downto 0);
         compressed_o : out std_logic;
-        instr_o : out std_logic_vector(31 downto 0)
+        instr_o : out std_logic_vector(31 downto 0);
+        ctrl_o : out execute_ctrl_t
     );
 end entity instruction_decode;
 
 architecture rtl of instruction_decode is
     signal fetched_instr, decompressed_instr, instr_dat : std_logic_vector(31 downto 0);
     signal instr_opcode : std_logic_vector(6 downto 0);
+    signal rs1_en, rs2_en : std_logic;
     signal rd_we, compressed : std_logic;
     signal opcode : opcode_t;
     signal opcode_type : opcode_type_t;
+    signal ctrl : execute_ctrl_t;
+    alias instr_funct3 : std_logic_vector(2 downto 0) is instr_dat(14 downto 12);
+    alias instr_funct7 : std_logic_vector(6 downto 0) is instr_dat(31 downto 25);
+    signal rs1_adr : std_logic_vector(4 downto 0);
 begin
     gen_compress: if G_EXTENSION_C = TRUE generate
         -- decompressor
@@ -137,9 +147,123 @@ begin
         end case;
     end process;
 
+    process (instr_opcode, instr_funct3, instr_funct7)
+    begin
+        ctrl.alu_op_a_sel <= '0';
+        ctrl.alu_op_b_sel <= '0';
+        ctrl.alu_arith <= '0';
+        ctrl.shifter_en <= '0';
+        ctrl.muldiv_en <= '0';
+        case instr_opcode is
+            when RV32I_OP_LUI     =>
+            when RV32I_OP_AUIPC   => ctrl.alu_op_a_sel <= '1';
+            when RV32I_OP_JAL     => ctrl.alu_op_a_sel <= '1';
+            when RV32I_OP_JALR    =>
+            when RV32I_OP_BRANCH  => ctrl.alu_op_a_sel <= '1';
+            when RV32I_OP_LOAD    =>
+            when RV32I_OP_STORE   =>
+            when RV32I_OP_REG_IMM =>
+                case instr_funct3 is
+                    when RV32I_FN3_ADD  =>
+                    when RV32I_FN3_SL   => if instr_funct7 = RV32M_FN7_SL then ctrl.shifter_en <= '1'; end if;
+                    when RV32I_FN3_SLT  => ctrl.alu_arith <= '1';
+                    when RV32I_FN3_SLTU => ctrl.alu_arith <= '1';
+                    when RV32I_FN3_XOR  =>
+                    when RV32I_FN3_SR   => if instr_funct7 = RV32M_FN7_SL or instr_funct7 = RV32M_FN7_SA then ctrl.shifter_en <= '1'; end if;
+                    when RV32I_FN3_OR   =>
+                    when RV32I_FN3_AND  =>
+                    when others =>
+                end case;
+            when RV32I_OP_REG_REG =>
+                ctrl.alu_op_b_sel <= '1';
+                case instr_funct3 is
+                    when RV32I_FN3_ADD  => if instr_funct7 = RV32M_FN7_SUB then ctrl.alu_arith <= '1'; end if;
+                    when RV32I_FN3_SL   => if instr_funct7 = RV32M_FN7_SL then ctrl.shifter_en <= '1'; end if;
+                    when RV32I_FN3_SLT  => ctrl.alu_arith <= '1';
+                    when RV32I_FN3_SLTU => ctrl.alu_arith <= '1';
+                    when RV32I_FN3_XOR  =>
+                    when RV32I_FN3_SR   => if instr_funct7 = RV32M_FN7_SL or instr_funct7 = RV32M_FN7_SA then ctrl.shifter_en <= '1'; end if;
+                    when RV32I_FN3_OR   =>
+                    when RV32I_FN3_AND  =>
+                    when others =>
+                end case;
+                if G_EXTENSION_M = TRUE and instr_funct7 = RV32M_FN7_MULDIV then ctrl.muldiv_en <= '1'; end if;
+            when RV32I_OP_FENCE  =>
+            when RV32I_OP_SYS    =>
+            when others =>
+        end case;
+    end process;
+
+    gen_shifter_early_injection: if G_SHIFTER_EARLY_INJECTION = TRUE generate
+        process (instr_opcode, instr_funct3)
+        begin
+            ctrl.alu_res_sel <= "000";
+            case instr_opcode is
+                when RV32I_OP_JAL | RV32I_OP_JALR | RV32I_OP_BRANCH =>
+                    ctrl.alu_res_sel <= "1--";
+                when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
+                    case instr_funct3 is
+                        when RV32I_FN3_SL | RV32I_FN3_SR => ctrl.alu_res_sel <= "011";
+                        when RV32I_FN3_SLT | RV32I_FN3_SLTU => ctrl.alu_res_sel <= "010";
+                        when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => ctrl.alu_res_sel <= "001";
+                        when others => ctrl.alu_res_sel <= "000";
+                    end case;
+                when others =>
+            end case;
+        end process;
+    end generate gen_shifter_early_injection;
+    gen_no_shifter_early_injection: if G_SHIFTER_EARLY_INJECTION = FALSE generate
+        process (instr_opcode, instr_funct3)
+        begin
+            ctrl.alu_res_sel <= "-00";
+            case instr_opcode is
+                when RV32I_OP_JAL | RV32I_OP_JALR | RV32I_OP_BRANCH =>
+                    ctrl.alu_res_sel(1 downto 0) <= "11";
+                when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
+                    case instr_funct3 is
+                        when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => ctrl.alu_res_sel(1 downto 0) <= "01";
+                        when RV32I_FN3_SLT | RV32I_FN3_SLTU => ctrl.alu_res_sel(1 downto 0) <= "10";
+                        when others =>
+                    end case;
+                when others =>
+            end case;
+        end process;
+    end generate gen_no_shifter_early_injection;
+
+    process (instr_opcode)
+    begin
+        rs1_en <= '0';
+        rs2_en <= '0';
+        case instr_opcode is
+            when RV32I_OP_LUI =>
+            when RV32I_OP_AUIPC =>
+            when RV32I_OP_JAL =>
+            when RV32I_OP_JALR =>
+                rs1_en <= '1';
+            when RV32I_OP_BRANCH =>
+                rs1_en <= '1';
+                rs2_en <= '1';
+            when RV32I_OP_LOAD =>
+                rs1_en <= '1';
+            when RV32I_OP_STORE =>
+                rs1_en <= '1';
+                rs2_en <= '1';
+            when RV32I_OP_REG_IMM =>
+                rs1_en <= '1';
+            when RV32I_OP_REG_REG =>
+                rs1_en <= '1';
+                rs2_en <= '1';
+            when RV32I_OP_FENCE =>
+            when RV32I_OP_SYS =>
+                rs1_en <= '1';
+            when others =>
+        end case;
+    end process;
+
     opcode_o <= opcode;
 
-    rs1_adr_o <= (others => '0') when opcode.lui = '1' else instr_dat(19 downto 15);
+    rs1_adr <= (others => '0') when opcode.lui = '1' else instr_dat(19 downto 15);
+    rs1_adr_o <= rs1_adr;
     rs2_adr_o <= instr_dat(24 downto 20);
     rd_adr_o <= instr_dat(11 downto 7);
 
@@ -148,6 +272,11 @@ begin
     rd_we_o <= rd_we;
     opcode_type_o <= opcode_type;
     compressed_o <= compressed;
+
+    rs1_en_o <= rs1_en;
+    rs2_en_o <= rs2_en;
+
+    ctrl_o <= ctrl;
 
     process (clk_i, arst_i)
     begin

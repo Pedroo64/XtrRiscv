@@ -130,30 +130,18 @@ begin
             end loop;
             return reversed;
         end function;
-        type array_t is array (natural range <>) of std_logic_vector(31 downto 0);
-        signal shift_data : array_t(0 to 5);
+        signal norm : std_logic_vector(31 downto 0);
+        signal shift : std_logic_vector(32 downto 0);
     begin
-        process (type_i, data_i, shift_data, shift_i)
+        norm <= reverse_bit_order(data_i) when type_i(1) = '0' else data_i;
+        shift <= std_logic_vector(shift_right(signed((type_i(0) and norm(31)) & norm), to_integer(unsigned(shift_i))));
+
+        process (type_i, shift)
         begin
-            if type_i(1) = '1' then
-                shift_data(5) <= data_i;
+            if type_i(1) = '0' then
+                nxt_data <= reverse_bit_order(shift(31 downto 0));
             else
-                shift_data(5) <= reverse_bit_order(data_i);
-            end if;
-            for i in shift_i'range loop
-                if shift_i(i) = '1' then
-                    shift_data(i) <= (data_i'left downto data_i'length - 2**i => (type_i(0) and data_i(data_i'left))) & shift_data(i + 1)(data_i'left downto 2**i);
-                else
-                    shift_data(i) <= shift_data(i + 1);
-                end if;
-            end loop;
-        end process;
-        process (type_i, shift_data)
-        begin
-            if type_i(1) = '1' then
-                nxt_data <= shift_data(0);
-            else
-                nxt_data <= reverse_bit_order(shift_data(0));
+                nxt_data <= shift(31 downto 0);
             end if;
         end process;
         gen_no_early_injection: if G_SHIFTER_EARLY_INJECTION = FALSE generate

@@ -54,10 +54,11 @@ architecture rtl of cpu is
     signal decode_opcode : opcode_t;
     signal decode_opcode_type : opcode_type_t;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
-    signal decode_rd_we : std_logic;
+    signal decode_rs1_en, decode_rs2_en, decode_rd_we : std_logic;
     signal decode_imm, decode_instr : std_logic_vector(31 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
+    signal decode_ctrl : execute_ctrl_t;
 -- execute
     signal execute_en, execute_flush, execute_valid, execute_multicycle_enable, execute_multicycle_flush : std_logic;
     signal execute_opcode : opcode_t;
@@ -139,7 +140,9 @@ begin
 -- decode
     u_decode : entity work.instruction_decode
         generic map (
-            G_EXTENSION_C => G_EXTENSION_C
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_EXTENSION_M => G_EXTENSION_M,
+            G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION
         )
         port map (
             arst_i => arst_i,
@@ -153,14 +156,17 @@ begin
             opcode_o => decode_opcode,
             opcode_type_o => decode_opcode_type,
             rs1_adr_o => decode_rs1_adr,
+            rs1_en_o => decode_rs1_en,
             rs2_adr_o => decode_rs2_adr,
+            rs2_en_o => decode_rs2_en,
             rd_adr_o => decode_rd_adr,
             rd_we_o => decode_rd_we,
             immediate_o => decode_imm,
             funct3_o => decode_funct3,
             funct7_o => decode_funct7,
             compressed_o => decode_instr_compressed,
-            instr_o => decode_instr
+            instr_o => decode_instr,
+            ctrl_o => decode_ctrl
         );
 -- execute
     u_execute : entity work.execute
@@ -178,6 +184,7 @@ begin
             multicycle_flush_i => execute_multicycle_flush,
             valid_i => decode_valid,
             instr_i => decode_instr,
+            ctrl_i => decode_ctrl,
             compressed_i => decode_instr_compressed,
             opcode_i => decode_opcode,
             rs1_adr_i => decode_rs1_adr,
@@ -301,7 +308,9 @@ begin
             decode_opcode_i => decode_opcode,
             decode_opcode_type_i => decode_opcode_type,
             decode_rs1_adr_i => decode_rs1_adr,
+            decode_rs1_en_i => decode_rs1_en,
             decode_rs2_adr_i => decode_rs2_adr,
+            decode_rs2_en_i => decode_rs2_en,
             execute_valid_i => execute_valid,
             execute_rd_adr_i => execute_rd_adr,
             execute_rd_we_i => execute_rd_we,

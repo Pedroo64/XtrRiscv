@@ -19,6 +19,7 @@ entity execute is
         multicycle_flush_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
+        ctrl_i : in execute_ctrl_t;
         compressed_i : in std_logic;
         opcode_i : in opcode_t;
         rs1_adr_i : in std_logic_vector(4 downto 0);
@@ -64,6 +65,7 @@ architecture rtl of execute is
     signal funct7 : std_logic_vector(6 downto 0);
     signal alu_result_a, alu_result_b : std_logic_vector(31 downto 0);
     signal opcode : opcode_t;
+    signal ctrl : execute_ctrl_t;
 -- PC
     signal pc, pc_incr : std_logic_vector(31 downto 0);
 -- ALU
@@ -97,6 +99,7 @@ begin
                 opcode <= opcode_i;
                 compressed <= compressed_i;
                 instr <= instr_i;
+                ctrl <= ctrl_i;
             end if;
         end if;
     end process;
@@ -127,7 +130,7 @@ begin
     rs1_adr_o <= rs1_adr;
     rs2_adr_o <= rs2_adr;
     current_pc_o <= pc;
-    multicycle_o <= '1' when valid = '1' and (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and G_FULL_BARREL_SHIFTER = FALSE else '0';
+    multicycle_o <= '1' when valid = '1' and ctrl.shifter_en = '1' and G_FULL_BARREL_SHIFTER = FALSE else '0';
 -- PC
     process (clk_i)
     begin
@@ -145,55 +148,55 @@ begin
 -- ALU
     u_alu : entity work.alu
         port map (
-            a_i => alu_a,
-            b_i => alu_b,
+            arith_a_i => alu_a,
+            arith_b_i => alu_b,
             signed_i => alu_signed,
             arith_op_i => alu_arith,
+            logic_a_i => alu_a,
+            logic_b_i => alu_b,
             logic_op_i => alu_logic,
             arith_result_o => alu_arith_r,
             logic_result_o => alu_logic_r
         );
+
     alu_a <= 
-        pc when (opcode.auipc or opcode.jal or opcode.branch) = '1' else
+        pc when ctrl.alu_op_a_sel = '1' else
         rs1_dat_i;
 
     alu_b <= 
-        immediate when (opcode.reg_reg) = '0' else
-        rs2_dat_i;
+        rs2_dat_i when ctrl.alu_op_b_sel = '1' else
+        immediate;
 
-    alu_arith <= (opcode.reg_reg and funct7(5)) or (funct3(1) and (opcode.reg_reg or opcode.reg_imm)); -- SLT
+    alu_arith <= ctrl.alu_arith;
+
     alu_signed <= not funct3(0); -- SLT
     alu_logic <= funct3(1 downto 0);
 
-    process (opcode, pc_incr, funct3, alu_logic_r, alu_arith_r, rs2_dat_i, shifter_data_out)
+    process (ctrl, alu_arith_r, alu_logic_r, shifter_data_out, pc_incr)
     begin
-        if (opcode.jal or opcode.jalr or opcode.branch) = '1' then
-            alu_result_a <= pc_incr;
-            alu_result_b <= alu_arith_r(31 downto 0);
+        if G_SHIFTER_EARLY_INJECTION = TRUE then
+            case ctrl.alu_res_sel is
+                when "000" => alu_result_a <= alu_arith_r(31 downto 0);
+                when "001" => alu_result_a <= alu_logic_r;
+                when "010" => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+                when "011" => alu_result_a <= shifter_data_out;
+                when others => alu_result_a <= pc_incr;
+            end case;
         else
-            if G_SHIFTER_EARLY_INJECTION = TRUE then
-                if (opcode.reg_imm or opcode.reg_reg) = '1' then
-                    case funct3 is
-                        when RV32I_FN3_SL | RV32I_FN3_SR => alu_result_a <= shifter_data_out;
-                        when RV32I_FN3_SLT | RV32I_FN3_SLTU => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
-                        when RV32I_FN3_XOR | RV32I_FN3_OR | RV32I_FN3_AND => alu_result_a <= alu_logic_r;
-                        when others => alu_result_a <= alu_arith_r(31 downto 0);
-                    end case;
-                else
-                    alu_result_a <= alu_arith_r(31 downto 0);
-                end if;
-            else
-                if (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(2)) = '1' then
-                    alu_result_a <= alu_logic_r;
-                elsif (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3(1)) = '1' then
-                    alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
-                else
-                    alu_result_a <= alu_arith_r(31 downto 0);
-                end if;
-            end if;
-            alu_result_b <= rs2_dat_i;
+            case ctrl.alu_res_sel(1 downto 0) is
+                when "00" => alu_result_a <= alu_arith_r(31 downto 0);
+                when "01" => alu_result_a <= alu_logic_r;
+                when "10" => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
+                when "11" => alu_result_a <= pc_incr;
+                when others => alu_result_a <= (others => '-');
+            end case;
         end if;
     end process;
+
+    alu_result_b <= 
+        alu_arith_r(31 downto 0) when ctrl.alu_res_sel(2) = '1' and G_SHIFTER_EARLY_INJECTION = TRUE else
+        alu_arith_r(31 downto 0) when ctrl.alu_res_sel(1) = '1' and G_SHIFTER_EARLY_INJECTION = FALSE else
+        rs2_dat_i;
 
 -- SHIFTER
     u_shifter : entity work.shifter
@@ -218,7 +221,7 @@ begin
     shifter_type <= funct3(2) & funct7(5);
     shifter_data_in <= rs1_dat_i;
     shifter_start <= 
-        '1' when valid = '1' and (opcode.reg_imm or opcode.reg_reg) = '1' and (funct3 = RV32I_FN3_SL or funct3 = RV32I_FN3_SR) and (funct7(0) = '0' or G_MULDIV = FALSE) and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
+        '1' when valid = '1' and ctrl.shifter_en = '1' and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
         '0';
     shifter_result_o <= shifter_data_out;
     shifter_ready_o <= shifter_ready;
@@ -255,7 +258,7 @@ gen_muldiv: if G_MULDIV = TRUE generate
             ready_o => muldiv_ready
         );
     muldiv_srst <= multicycle_flush_i;
-    muldiv_start <= '1' when muldiv_valid = '1' and (opcode.reg_reg and funct7(0)) = '1' else '0';
+    muldiv_start <= muldiv_valid and ctrl.muldiv_en;
     muldiv_result_o <= muldiv_result;
 end generate gen_muldiv;
     muldiv_ready_o <= muldiv_ready when G_MULDIV = TRUE else '0';
