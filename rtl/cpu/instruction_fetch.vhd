@@ -33,7 +33,7 @@ end entity instruction_fetch;
 
 architecture rtl of instruction_fetch is
     signal enable : std_logic;
-    signal booted, valid, cmd_valid : std_logic;
+    signal booted, cmd_valid : std_logic;
     signal pc, next_pc : std_logic_vector(31 downto 0);
     signal prefetch_full : std_logic;
     signal rsp_valid : std_logic;
@@ -45,21 +45,6 @@ begin
             booted <= '0';
         elsif rising_edge(clk_i) then
             booted <= not srst_i;
-        end if;
-    end process;
-
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            valid <= '0';
-        elsif rising_edge(clk_i) then
-            if enable = '1' then
-                if flush_i = '1' then
-                    valid <= '0';
-                else
-                    valid <= cmd_rdy_i;
-                end if;
-            end if;
         end if;
     end process;
 
@@ -82,6 +67,22 @@ begin
     booted_o <= booted;
 
     gen_prefetch_buffer: if G_PREFETCH_SIZE > 1 generate
+        signal valid : std_logic;
+    begin
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                valid <= '0';
+            elsif rising_edge(clk_i) then
+                if enable = '1' then
+                    if flush_i = '1' then
+                        valid <= '0';
+                    else
+                        valid <= cmd_rdy_i;
+                    end if;
+                end if;
+            end if;
+        end process;
         rsp_valid <= valid and rsp_vld_i;
         enable <= not prefetch_full or load_pc_i;
         -- prefetch

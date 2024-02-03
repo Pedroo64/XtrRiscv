@@ -28,16 +28,26 @@ package rv32i_pkg is
         j_type : std_logic;
     end record;
 
-    type execute_ctrl_t is record
-        alu_op_a_sel : std_logic;
-        alu_op_b_sel : std_logic;
-        alu_op : std_logic_vector(1 downto 0);
+    type execute_struct_t is record
         alu_arith : std_logic;
-        alu_res_sel : std_logic_vector(2 downto 0);
         shifter_en : std_logic;
         muldiv_en : std_logic;
+        src1 : std_logic_vector(31 downto 0);
+        src2 : std_logic_vector(31 downto 0);
+        pc : std_logic_vector(31 downto 0);
+        base_addr : std_logic_vector(31 downto 0);
+        imm : std_logic_vector(31 downto 0);
+        rd_res_sel : std_logic_vector(1 downto 0);
+        rd_adr_is_zero : std_logic;
+        jal : std_logic;
+        branch : std_logic;
+        lsu_valid : std_logic;
+        load, store : std_logic;
+        csr_en : std_logic;
+        ecall : std_logic;
+        ebreak : std_logic;
+        mret : std_logic;
     end record;
-
 
     -- RV32I Base Instruction Set Opcodes
 constant RV32I_OP_LUI       :   std_logic_vector(6 downto 0) := "0110111";

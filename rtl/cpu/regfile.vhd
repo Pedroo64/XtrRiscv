@@ -43,7 +43,6 @@ begin
 
     rs1_dat_o <= rs1_dat;
     rs2_dat_o <= rs2_dat;
-
-    we <= '0' when unsigned(rd_adr_i) = 0 else rd_we_i;
+    we <= rd_we_i;
 
 end architecture rtl;
