@@ -12,6 +12,7 @@ entity cpu is
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
+        G_REGFILE_BYPASS : boolean := FALSE;
         G_FULL_BARREL_SHIFTER : boolean := FALSE;
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
@@ -45,6 +46,12 @@ architecture rtl of cpu is
     constant C_ECALL : boolean := G_EXTENSION_ZICSR;
     constant C_EBREAK : boolean := G_EXTENSION_ZICSR;
     constant C_INTERRUPTS : boolean := G_EXTENSION_ZICSR;
+-- NOTE: INSTRUCTION_MISALIGNED does not pass riscv-arch-est
+constant C_INSTRUCTION_MISALIGNED : boolean := FALSE;
+-- NOTE: LOAD_MISALIGNED and STORE_MISALIGNED passes riscv-arch-est but not sure
+-- what to do if another misaligned is detected in the handler
+    constant C_LOAD_MISALIGNED : boolean := FALSE;
+    constant C_STORE_MISALIGNED : boolean := FALSE;
     signal ctl_booted : std_logic;
 -- fetch
     signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed : std_logic;
@@ -52,22 +59,24 @@ architecture rtl of cpu is
 -- decode
     signal decode_en, decode_flush, decode_valid, decode_instr_compressed : std_logic;
     signal decode_opcode : opcode_t;
-    signal decode_opcode_type : opcode_type_t;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
     signal decode_rs1_en, decode_rs2_en, decode_rd_we : std_logic;
     signal decode_imm, decode_instr : std_logic_vector(31 downto 0);
+    signal decode_rs1_dat, decode_rs2_dat : std_logic_vector(31 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
-    signal decode_ctrl : execute_ctrl_t;
+    signal decode_ctrl : execute_struct_t;
 -- execute
     signal execute_en, execute_flush, execute_valid, execute_multicycle_enable, execute_multicycle_flush : std_logic;
     signal execute_opcode : opcode_t;
     signal execute_rs1_adr, execute_rs2_adr, execute_rd_adr : std_logic_vector(4 downto 0);
     signal execute_rd_we : std_logic;
-    signal execute_pc, execute_rs1_dat, execute_rs2_dat, execute_alu_result_a, execute_alu_result_b, execute_imm : std_logic_vector(31 downto 0);
+    signal execute_pc, execute_src1, execute_src2, execute_alu_result_a, execute_alu_result_b, execute_imm : std_logic_vector(31 downto 0);
     signal execute_funct3 : std_logic_vector(2 downto 0);
     signal execute_funct7 : std_logic_vector(6 downto 0);
     signal execute_multicycle : std_logic;
+    signal execute_ecall, execute_ebreak, execute_mret : std_logic;
+    signal execute_struct : execute_struct_t;
 -- execute-shifter
     signal execute_shifter_result : std_logic_vector(31 downto 0);
     signal execute_shifter_start, execute_shifter_ready : std_logic;
@@ -89,6 +98,13 @@ architecture rtl of cpu is
     signal writeback_rd_adr : std_logic_vector(4 downto 0);
     signal writeback_rd_dat : std_logic_vector(31 downto 0);
     signal writeback_rd_we : std_logic;
+    signal writeback_mem_read, writeback_mem_read_vld : std_logic;
+-- LSU
+    signal lsu_valid, lsu_flush : std_logic;
+    signal lsu_address, lsu_write_data, lsu_read_data : std_logic_vector(31 downto 0);
+    signal lsu_load, lsu_store : std_logic;
+    signal lsu_size : std_logic_vector(1 downto 0);
+    signal lsu_cmd_rdy, lsu_rsp_rdy : std_logic;
 -- branch unit
     signal branch_load_pc, branch_branch : std_logic;
     signal branch_target_pc : std_logic_vector(31 downto 0);
@@ -98,6 +114,7 @@ architecture rtl of cpu is
     signal csr_read_dat : std_logic_vector(31 downto 0) := (others => '0');
     signal csr_exception_entry, csr_exception_exit, csr_exception_async, csr_exception_sync : std_logic := '0';
     signal csr_mtvec, csr_mepc : std_logic_vector(31 downto 0) := (others => '-');
+    signal csr_misaligned_load, csr_misaligned_store : std_logic;
 -- regfile
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we : std_logic;
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr : std_logic_vector(4 downto 0);
@@ -142,6 +159,7 @@ begin
         generic map (
             G_EXTENSION_C => G_EXTENSION_C,
             G_EXTENSION_M => G_EXTENSION_M,
+            G_EXTENSION_ZICSR => G_EXTENSION_ZICSR,
             G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION
         )
         port map (
@@ -152,16 +170,20 @@ begin
             valid_i => fetch_instr_valid,
             instr_i => fetch_instr_data,
             compressed_i => fetch_instr_compressed,
+            load_pc_i => branch_load_pc,
+            target_pc_i => branch_target_pc,
             valid_o => decode_valid,
             opcode_o => decode_opcode,
-            opcode_type_o => decode_opcode_type,
+            next_rs1_adr_o => regfile_rs1_adr,
+            next_rs2_adr_o => regfile_rs2_adr,
             rs1_adr_o => decode_rs1_adr,
             rs1_en_o => decode_rs1_en,
+            rs1_dat_i => decode_rs1_dat,
             rs2_adr_o => decode_rs2_adr,
             rs2_en_o => decode_rs2_en,
+            rs2_dat_i => decode_rs2_dat,
             rd_adr_o => decode_rd_adr,
             rd_we_o => decode_rd_we,
-            immediate_o => decode_imm,
             funct3_o => decode_funct3,
             funct7_o => decode_funct7,
             compressed_o => decode_instr_compressed,
@@ -185,17 +207,13 @@ begin
             valid_i => decode_valid,
             instr_i => decode_instr,
             ctrl_i => decode_ctrl,
-            compressed_i => decode_instr_compressed,
             opcode_i => decode_opcode,
             rs1_adr_i => decode_rs1_adr,
             rs2_adr_i => decode_rs2_adr,
             rd_adr_i => decode_rd_adr,
             rd_we_i => decode_rd_we,
-            immediate_i => decode_imm,
             funct3_i => decode_funct3,
             funct7_i => decode_funct7,
-            rs1_dat_i => execute_rs1_dat,
-            rs2_dat_i => execute_rs2_dat,
             valid_o => execute_valid,
             opcode_o => execute_opcode,
             rd_adr_o => execute_rd_adr,
@@ -216,7 +234,18 @@ begin
             shifter_ready_o => execute_shifter_ready,
             muldiv_start_o => execute_muldiv_start,
             muldiv_result_o => execute_muldiv_result,
-            muldiv_ready_o => execute_muldiv_ready
+            muldiv_ready_o => execute_muldiv_ready,
+            src1_dat_o => execute_src1,
+            src2_dat_o => execute_src2,
+            lsu_valid_o => lsu_valid,
+            lsu_address_o => lsu_address,
+            lsu_write_data_o => lsu_write_data,
+            lsu_load_o => lsu_load,
+            lsu_store_o => lsu_store,
+            ecall_o => execute_ecall,
+            ebreak_o => execute_ebreak,
+            mret_o => execute_mret,
+            struct_o => execute_struct
         );
 -- memory
     u_memory : entity work.memory
@@ -250,17 +279,17 @@ begin
             alu_result_a_o => memory_alu_result_a,
             alu_result_b_o => memory_alu_result_b,
             cmd_en_i => memory_cmd_en,
-            cmd_adr_o => mem_cmd_adr,
-            cmd_dat_o => mem_cmd_dat,
-            cmd_vld_o => mem_cmd_vld,
-            cmd_we_o => mem_cmd_we,
-            cmd_siz_o => mem_cmd_siz,
-            cmd_rdy_i => data_cmd_rdy_i,
+            cmd_adr_o => open,
+            cmd_dat_o => open,
+            cmd_vld_o => open,
+            cmd_we_o => open,
+            cmd_siz_o => open,
+            cmd_rdy_i => '1',
             ready_o => memory_ready
         );
     data_cmd_adr_o <= mem_cmd_adr;
     data_cmd_dat_o <= mem_cmd_dat;
-    data_cmd_vld_o <= mem_cmd_vld;
+    data_cmd_vld_o <= mem_cmd_vld and memory_cmd_en;
     data_cmd_we_o <= mem_cmd_we;
     data_cmd_siz_o <= mem_cmd_siz;
 -- writeback
@@ -274,6 +303,7 @@ begin
             enable_i => writeback_en,
             valid_i => memory_valid,
             memory_read_i => memory_opcode.load,
+            memory_addr_i => memory_alu_result_b(1 downto 0),
             funct3_i => memory_funct3,
             rd_adr_i => memory_rd_adr,
             rd_dat_i => memory_rd_dat,
@@ -284,6 +314,8 @@ begin
             muldiv_result_i => execute_muldiv_result,
             muldiv_ready_i => execute_muldiv_ready,
             valid_o => writeback_valid,
+            mem_read_o => writeback_mem_read,
+            mem_read_vld_o => writeback_mem_read_vld,
             rd_adr_o => writeback_rd_adr,
             rd_dat_o => writeback_rd_dat,
             rd_we_o => writeback_rd_we,
@@ -306,7 +338,6 @@ begin
             load_pc_i => branch_load_pc,
             decode_valid_i => decode_valid,
             decode_opcode_i => decode_opcode,
-            decode_opcode_type_i => decode_opcode_type,
             decode_rs1_adr_i => decode_rs1_adr,
             decode_rs1_en_i => decode_rs1_en,
             decode_rs2_adr_i => decode_rs2_adr,
@@ -328,6 +359,8 @@ begin
             writeback_rd_we_i => writeback_rd_we,
             writeback_ready_i => writeback_ready,
             writeback_muldiv_i => writeback_muldiv,
+            lsu_cmd_rdy_i => lsu_cmd_rdy,
+            lsu_rsp_rdy_i => lsu_rsp_rdy,
             fetch_flush_o => fetch_flush,
             fetch_enable_o => fetch_en,
             decode_flush_o => decode_flush,
@@ -350,8 +383,34 @@ begin
             execute_rd_dat_i => execute_alu_result_a,
             memory_rd_dat_i => memory_rd_dat,
             writeback_rd_dat_i => writeback_rd_dat,
-            execute_rs1_dat_o => execute_rs1_dat,
-            execute_rs2_dat_o => execute_rs2_dat
+            decode_rs1_dat_o => decode_rs1_dat,
+            decode_rs2_dat_o => decode_rs2_dat
+        );
+
+    lsu_flush <= fetch_load_pc or csr_misaligned_load or csr_misaligned_store; -- execute_flush;
+    lsu_size <= execute_funct3(1 downto 0);
+    u_lsu : entity work.lsu
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            valid_i => lsu_valid,
+            flush_i => lsu_flush,
+            address_i => lsu_address,
+            data_i => lsu_write_data,
+            load_i => lsu_load,
+            store_i => lsu_store,
+            size_i => lsu_size,
+            data_o => lsu_read_data,
+            cmd_adr_o => mem_cmd_adr,
+            cmd_dat_o => mem_cmd_dat,
+            cmd_siz_o => mem_cmd_siz,
+            cmd_vld_o => mem_cmd_vld,
+            cmd_we_o => mem_cmd_we,
+            cmd_rdy_i => data_cmd_rdy_i,
+            rsp_dat_i => data_rsp_dat_i,
+            rsp_vld_i => data_rsp_vld_i,
+            cmd_rdy_o => lsu_cmd_rdy,
+            rsp_rdy_o => lsu_rsp_rdy
         );
 
 -- branch unit
@@ -363,8 +422,9 @@ begin
             arst_i => arst_i,
             clk_i => clk_i,
             booted_i => ctl_booted,
-            execute_rs1_dat_i => execute_rs1_dat,
-            execute_rs2_dat_i => execute_rs2_dat,
+            execute_opcode_i => execute_opcode,
+            execute_rs1_dat_i => execute_src1,
+            execute_rs2_dat_i => execute_src2,
             execute_funct3_i => execute_funct3,
             memory_valid_i => memory_valid,
             memory_enable_i => memory_en,
@@ -385,23 +445,29 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             G_ECALL => C_ECALL,
             G_EBREAK => C_EBREAK,
             G_INTERRUPTS => C_INTERRUPTS,
+            G_INSTRUCTION_MISALIGNED => C_INSTRUCTION_MISALIGNED,
+            G_LOAD_MISALIGNED => C_LOAD_MISALIGNED,
+            G_STORE_MISALIGNED => C_STORE_MISALIGNED,
             G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
+            execute_ecall_i => execute_ecall,
+            execute_ebreak_i => execute_ebreak,
+            execute_mret_i => execute_mret,
             execute_en_i => execute_en,
             execute_valid_i => execute_valid,
             execute_opcode_i => execute_opcode,
-            execute_immediate_i => execute_imm,
+            execute_immediate_i => execute_src2,
             execute_funct3_i => execute_funct3,
             execute_current_pc_i => execute_pc,
-            execute_rs1_dat_i => execute_rs1_dat,
+            execute_rs1_dat_i => execute_src1,
             execute_zimm_i => execute_rs1_adr,
             memory_en_i => memory_en,
             memory_valid_i => memory_valid,
             memory_opcode_i => memory_opcode,
-            memory_address_i => memory_alu_result_a,
+            memory_address_i => lsu_address,
             memory_funct3_i => memory_funct3,
             memory_target_pc_i => memory_alu_result_b,
             memory_branch_i => branch_branch,
@@ -415,17 +481,25 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             exception_sync_o => csr_exception_sync,
             exception_async_o => csr_exception_async,
             mtvec_o => csr_mtvec,
-            mepc_o => csr_mepc
+            mepc_o => csr_mepc,
+            misaligned_load_o => csr_misaligned_load,
+            misaligned_store_o => csr_misaligned_store
         );
 end generate gen_csr;
+gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
+    csr_misaligned_load <= '0';
+    csr_misaligned_store <= '0';
+end generate gen_no_csr;
 
 -- regfile
-    regfile_rs1_en <= execute_en;
-    regfile_rs1_adr <= decode_rs1_adr;
-    regfile_rs2_en <= execute_en;
-    regfile_rs2_adr <= decode_rs2_adr;
+    regfile_rs1_en <= '1';
+    regfile_rs2_en <= '1';
     regfile_rd_adr <= writeback_rd_adr;
-    regfile_rd_we <= writeback_rd_we and writeback_en;
+    regfile_rd_we <= 
+        '1' when writeback_valid = '1' and writeback_rd_we = '1' and writeback_mem_read = '0' else
+        '1' when writeback_valid = '1' and writeback_rd_we = '1' and writeback_mem_read = '1' and writeback_mem_read_vld = '1' else
+        '0';
+
     regfile_rd_dat <= writeback_rd_dat;
     u_regfile : entity work.regfile
         port map (
@@ -445,32 +519,32 @@ end generate gen_csr;
 
 gen_verif: if G_VERIFICATION = TRUE generate
     u_cpu_checker : entity work.cpu_checker
+        generic map (
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_EXTENSION_ZICSR => G_EXTENSION_ZICSR
+        )
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
             decode_valid_i => decode_valid,
-            decode_opcode_i => decode_instr(6 downto 0),
-            decode_funct3_i => decode_funct3,
-            decode_funct7_i => decode_funct7,
-            decode_immediate_i => decode_imm,
-            decode_rs1_dat_i => execute_rs1_dat,
-            decode_rs2_dat_i => execute_rs2_dat,
-            decode_rd_adr_i => decode_rd_adr,
-            decode_rd_we_i => decode_rd_we,
-            decode_compressed_i => decode_instr_compressed,
+            decode_instr_i => decode_instr,
+            decode_instr_compress_i => decode_instr_compressed,
+            decode_rs1_dat_i => decode_rs1_dat,
+            decode_rs2_dat_i => decode_rs2_dat,
             execute_enable_i => execute_en,
             execute_flush_i => execute_flush,
             execute_current_pc_i => execute_pc,
             memory_enable_i => memory_en,
             memory_flush_i => memory_flush,
-            memory_mem_cmd_adr_i => mem_cmd_adr,
-            memory_mem_cmd_dat_i => mem_cmd_dat,
-            memory_mem_cmd_vld_i => mem_cmd_vld,
-            memory_mem_cmd_we_i => mem_cmd_we,
             writeback_enable_i => writeback_en,
             writeback_flush_i => writeback_flush,
-            writeback_mem_rsp_dat_i => data_rsp_dat_i,
-            writeback_mem_rsp_vld_i => data_rsp_vld_i,
+            mem_cmd_adr_i => mem_cmd_adr,
+            mem_cmd_dat_i => mem_cmd_dat,
+            mem_cmd_vld_i => lsu_valid,
+            mem_cmd_we_i => mem_cmd_we,
+            mem_rsp_dat_i => data_rsp_dat_i,
+            mem_rsp_vld_i => data_rsp_vld_i,
+            fetch_enable_i => fetch_en,
             fetch_load_pc_i => fetch_load_pc,
             fetch_target_pc_i => fetch_target_pc,
             csr_exception_entry_i => csr_exception_entry,

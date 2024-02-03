@@ -101,26 +101,30 @@ begin
     valid_o <= valid;
     rd_we_o <= rd_we and valid;
 
-    cmd_adr_o <= alu_result_a;
-    cmd_dat_o <= 
-        alu_result_b(7 downto 0) & alu_result_b(7 downto 0) & alu_result_b(7 downto 0) & alu_result_b(7 downto 0) when funct3(1 downto 0) = "00" else
-        alu_result_b(15 downto 0) & alu_result_b(15 downto 0) when funct3(1 downto 0) = "01" else
-        alu_result_b;
-    cmd_valid <= (opcode.store or opcode.load) and valid;
-    cmd_vld_o <= cmd_valid and cmd_en_i;
-    cmd_we_o <= opcode.store;
-    cmd_siz_o <= funct3(1 downto 0);
+--    cmd_adr_o <= alu_result_a;
+--    cmd_dat_o <= 
+--        alu_result_b(7 downto 0) & alu_result_b(7 downto 0) & alu_result_b(7 downto 0) & alu_result_b(7 downto 0) when funct3(1 downto 0) = "00" else
+--        alu_result_b(15 downto 0) & alu_result_b(15 downto 0) when funct3(1 downto 0) = "01" else
+--        alu_result_b;
+--    cmd_valid <= (opcode.store or opcode.load) and valid;
+--    cmd_vld_o <= cmd_valid and cmd_en_i;
+--    cmd_we_o <= opcode.store;
+--    cmd_siz_o <= funct3(1 downto 0);
 
-    process (opcode, cmd_rdy_i, funct3, shifter_ready_i)
-    begin
-        if (opcode.store or opcode.load) = '1' then
-            busy <= not cmd_rdy_i;
-        elsif (G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01") then
-            busy <= not shifter_ready_i;
-        else
-            busy <= '0';
-        end if;
-    end process;
+--    process (opcode, cmd_rdy_i, funct3, shifter_ready_i)
+--    begin
+--        if (opcode.store or opcode.load) = '1' then
+--            busy <= not cmd_rdy_i;
+--        elsif (G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE and (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01") then
+--            busy <= not shifter_ready_i;
+--        else
+--            busy <= '0';
+--        end if;
+--    end process;
+
+    busy <= 
+        '1' when (opcode.reg_reg or opcode.reg_imm) = '1' and funct3(1 downto 0) = "01" and G_FULL_BARREL_SHIFTER = FALSE and G_SHIFTER_EARLY_INJECTION = FALSE else
+        '0';
 
     ready_o <= not (busy and valid);
 

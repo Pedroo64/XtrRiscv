@@ -10,6 +10,7 @@ OUTPUT_FILE	?= "none"
 EXECUTE_BYPASS ?= FALSE
 MEMORY_BYPASS ?= FALSE
 WRITEBACK_BYPASS ?= FALSE
+REGFILE_BYPASS ?= FALSE
 FULL_BARREL_SHIFTER ?= FALSE
 SHIFTER_EARLY_INJECTION ?= FALSE
 EXTENSION_ZICSR ?= TRUE
@@ -18,7 +19,7 @@ EXTENSION_C ?= TRUE
 
 PROJECT_FILE ?= $(MKFILE_DIR)/work/proj.mpf
 
-ifeq ($(ZICSR), TRUE)
+ifeq ($(EXTENSION_ZICSR), TRUE)
 CSR_WAVE = add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_csr/u_csr/*
 endif
 
@@ -31,7 +32,6 @@ endif
 WAVE_ARGS=\
 	add wave -divider "cpu" -ports sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/*; \
 	add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
-	add wave -divider "prefetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/u_prefetch/*; \
 	add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
 	add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
 	add wave -divider "execute" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/*; \
@@ -39,13 +39,15 @@ WAVE_ARGS=\
 	add wave -divider "writeback" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_writeback/*; \
 	add wave -divider "ctl" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_control_unit/*; \
 	add wave -divider "branch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_branch_unit/*; \
+	add wave -divider "lsu" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_lsu/*; \
 	$(CSR_WAVE); \
 	$(MULDIV_WAVE); \
+	add wave -divider "verif" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_verif/u_cpu_checker/*; \
 	config wave -signalnamewidth 1
 
 SIM_ARGS=\
 	-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
-	-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) \
+	-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_REGFILE_BYPASS=$(REGFILE_BYPASS) \
 	-gG_FULL_BARREL_SHIFTER=$(FULL_BARREL_SHIFTER) -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION) \
 	-gG_EXTENSION_ZICSR=$(EXTENSION_ZICSR) -gG_EXTENSION_M=$(EXTENSION_M) -gG_EXTENSION_C=$(EXTENSION_C) \
 	-g/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/G_VERIFICATION=TRUE; \
@@ -82,6 +84,7 @@ add_sources: create_project
 		project addfile $(SRCS_PATH)/cpu/control_unit.vhd; \
 		project addfile $(SRCS_PATH)/cpu/interrupt_handler.vhd; \
 		project addfile $(SRCS_PATH)/cpu/branch_unit.vhd; \
+		project addfile $(SRCS_PATH)/cpu/lsu.vhd; \
 		project addfile $(SRCS_PATH)/cpu/cpu_checker.vhd; \
 		project addfile $(SRCS_PATH)/cpu/cpu.vhd; \
 		project addfile $(SRCS_PATH)/utils/utils.vhd; \

@@ -19,18 +19,14 @@ entity execute is
         multicycle_flush_i : in std_logic;
         valid_i : in std_logic;
         instr_i : in std_logic_vector(31 downto 0);
-        ctrl_i : in execute_ctrl_t;
-        compressed_i : in std_logic;
+        ctrl_i : in execute_struct_t;
         opcode_i : in opcode_t;
         rs1_adr_i : in std_logic_vector(4 downto 0);
         rs2_adr_i : in std_logic_vector(4 downto 0);
         rd_adr_i : in std_logic_vector(4 downto 0);
         rd_we_i : in std_logic;
-        immediate_i : in std_logic_vector(31 downto 0);
         funct3_i : in std_logic_vector(2 downto 0);
         funct7_i : in std_logic_vector(6 downto 0);
-        rs1_dat_i : in std_logic_vector(31 downto 0);
-        rs2_dat_i : in std_logic_vector(31 downto 0);
         valid_o : out std_logic;
         opcode_o : out opcode_t;
         rd_adr_o : out std_logic_vector(4 downto 0);
@@ -51,13 +47,24 @@ entity execute is
         target_pc_i : in std_logic_vector(31 downto 0);
         load_pc_i : in std_logic;
         current_pc_o : out std_logic_vector(31 downto 0);
-        multicycle_o : out std_logic
+        multicycle_o : out std_logic;
+        src1_dat_o : out std_logic_vector(31 downto 0);
+        src2_dat_o : out std_logic_vector(31 downto 0);
+        lsu_valid_o : out std_logic;
+        lsu_address_o : out std_logic_vector(31 downto 0);
+        lsu_write_data_o : out std_logic_vector(31 downto 0);
+        lsu_load_o : out std_logic;
+        lsu_store_o : out std_logic;
+        ecall_o : out std_logic;
+        ebreak_o : out std_logic;
+        mret_o : out std_logic;
+        struct_o : out execute_struct_t
     );
 end entity execute;
 
 architecture rtl of execute is
     constant C_ENABLE_SHIFTER_DATA_PATH : boolean := G_SHIFTER_EARLY_INJECTION;
-    signal valid, compressed : std_logic;
+    signal valid : std_logic;
     signal rs1_adr, rs2_adr, rd_adr : std_logic_vector(4 downto 0);
     signal rd_we : std_logic;
     signal immediate : std_logic_vector(31 downto 0);
@@ -65,9 +72,10 @@ architecture rtl of execute is
     signal funct7 : std_logic_vector(6 downto 0);
     signal alu_result_a, alu_result_b : std_logic_vector(31 downto 0);
     signal opcode : opcode_t;
-    signal ctrl : execute_ctrl_t;
+    signal ctrl : execute_struct_t;
 -- PC
     signal pc, pc_incr : std_logic_vector(31 downto 0);
+    signal address_pc : std_logic_vector(31 downto 0);
 -- ALU
     signal alu_arith, alu_signed : std_logic;
     signal alu_logic : std_logic_vector(1 downto 0);
@@ -93,11 +101,9 @@ begin
                 rs2_adr <= rs2_adr_i;
                 rd_adr <= rd_adr_i;
                 rd_we <= rd_we_i;
-                immediate <= immediate_i;
                 funct3 <= funct3_i;
                 funct7 <= funct7_i;
                 opcode <= opcode_i;
-                compressed <= compressed_i;
                 instr <= instr_i;
                 ctrl <= ctrl_i;
             end if;
@@ -118,33 +124,20 @@ begin
         end if;
     end process;
 
+    pc <= ctrl.pc;
+
     valid_o <= valid;
     opcode_o <= opcode;
     rd_adr_o <= rd_adr;
-    rd_we_o <= rd_we and valid;
+    rd_we_o <= rd_we and valid and not ctrl.rd_adr_is_zero;
     alu_result_a_o <= alu_result_a;
     alu_result_b_o <= alu_result_b;
-    immediate_o <= immediate;
     funct3_o <= funct3;
     funct7_o <= funct7;
     rs1_adr_o <= rs1_adr;
     rs2_adr_o <= rs2_adr;
     current_pc_o <= pc;
     multicycle_o <= '1' when valid = '1' and ctrl.shifter_en = '1' and G_FULL_BARREL_SHIFTER = FALSE else '0';
--- PC
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if enable_i = '1' then
-                if load_pc_i = '1' then
-                    pc <= target_pc_i;
-                elsif valid = '1' then
-                    pc <= pc_incr;
-                end if;
-            end if;
-        end if;
-    end process;
-    pc_incr <= std_logic_vector(unsigned(pc) + 2) when compressed = '1' else std_logic_vector(unsigned(pc) + 4);
 -- ALU
     u_alu : entity work.alu
         port map (
@@ -152,51 +145,46 @@ begin
             arith_b_i => alu_b,
             signed_i => alu_signed,
             arith_op_i => alu_arith,
-            logic_a_i => alu_a,
+            logic_a_i => ctrl.src1,
             logic_b_i => alu_b,
             logic_op_i => alu_logic,
             arith_result_o => alu_arith_r,
             logic_result_o => alu_logic_r
         );
 
-    alu_a <= 
-        pc when ctrl.alu_op_a_sel = '1' else
-        rs1_dat_i;
-
-    alu_b <= 
-        rs2_dat_i when ctrl.alu_op_b_sel = '1' else
-        immediate;
+    alu_a <= ctrl.src1;
+    alu_b <= ctrl.src2;
 
     alu_arith <= ctrl.alu_arith;
 
     alu_signed <= not funct3(0); -- SLT
+--    alu_signed <= ctrl.alu_signed;
     alu_logic <= funct3(1 downto 0);
 
-    process (ctrl, alu_arith_r, alu_logic_r, shifter_data_out, pc_incr)
+    process (ctrl, alu_arith_r, alu_logic_r, shifter_data_out)
     begin
         if G_SHIFTER_EARLY_INJECTION = TRUE then
-            case ctrl.alu_res_sel is
-                when "000" => alu_result_a <= alu_arith_r(31 downto 0);
-                when "001" => alu_result_a <= alu_logic_r;
-                when "010" => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
-                when "011" => alu_result_a <= shifter_data_out;
-                when others => alu_result_a <= pc_incr;
-            end case;
-        else
-            case ctrl.alu_res_sel(1 downto 0) is
+            case ctrl.rd_res_sel is
                 when "00" => alu_result_a <= alu_arith_r(31 downto 0);
                 when "01" => alu_result_a <= alu_logic_r;
                 when "10" => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
-                when "11" => alu_result_a <= pc_incr;
-                when others => alu_result_a <= (others => '-');
+                when "11" => alu_result_a <= shifter_data_out;
+                when others =>
+            end case;
+        else
+            case ctrl.rd_res_sel is
+                when "00" => alu_result_a <= alu_arith_r(31 downto 0);
+                when "01" => alu_result_a <= alu_logic_r;
+                when others => alu_result_a <= (31 downto 1 => '0') & alu_arith_r(alu_arith_r'left);
             end case;
         end if;
     end process;
 
-    alu_result_b <= 
-        alu_arith_r(31 downto 0) when ctrl.alu_res_sel(2) = '1' and G_SHIFTER_EARLY_INJECTION = TRUE else
-        alu_arith_r(31 downto 0) when ctrl.alu_res_sel(1) = '1' and G_SHIFTER_EARLY_INJECTION = FALSE else
-        rs2_dat_i;
+--    alu_eq_o <= '1' when alu_arith_r(31 downto 0) = (31 downto 0 => '0') else '0';
+--    alu_lt_o <= alu_arith_r(alu_arith_r'left);
+
+    address_pc <= std_logic_vector(unsigned(ctrl.base_addr) + unsigned(ctrl.imm));
+    alu_result_b <= address_pc;
 
 -- SHIFTER
     u_shifter : entity work.shifter
@@ -219,13 +207,28 @@ begin
     shifter_srst <= multicycle_flush_i;
     shifter_shmt <= alu_b(4 downto 0);
     shifter_type <= funct3(2) & funct7(5);
-    shifter_data_in <= rs1_dat_i;
-    shifter_start <= 
+    shifter_data_in <= ctrl.src1;
+    shifter_start <=
         '1' when valid = '1' and ctrl.shifter_en = '1' and (multicycle_enable_i = '1' or G_FULL_BARREL_SHIFTER = TRUE) else
         '0';
     shifter_result_o <= shifter_data_out;
     shifter_ready_o <= shifter_ready;
     shifter_start_o <= shifter_start when G_SHIFTER_EARLY_INJECTION = FALSE else '0';
+
+-- LSU
+    lsu_address_o <= address_pc;
+    lsu_valid_o <= ctrl.lsu_valid and valid;
+    lsu_load_o <= opcode.load;
+    lsu_store_o <= opcode.store;
+    process (ctrl, funct3)
+    begin
+        lsu_write_data_o <= ctrl.src2;
+        case funct3(1 downto 0) is
+            when "00" => lsu_write_data_o <= ctrl.src2(7 downto 0) & ctrl.src2(7 downto 0) & ctrl.src2(7 downto 0) & ctrl.src2(7 downto 0);
+            when "01" => lsu_write_data_o <= ctrl.src2(15 downto 0) & ctrl.src2(15 downto 0);
+            when others =>
+        end case;
+    end process;
 
 -- MUL-DIV
 gen_muldiv: if G_MULDIV = TRUE generate
@@ -250,8 +253,8 @@ gen_muldiv: if G_MULDIV = TRUE generate
             arst_i => arst_i,
             clk_i => clk_i,
             srst_i => muldiv_srst,
-            a_i => rs1_dat_i,
-            b_i => rs2_dat_i,
+            a_i => ctrl.src1,
+            b_i => ctrl.src2,
             funct3_i => funct3,
             start_i => muldiv_start,
             result_o => muldiv_result,
@@ -263,4 +266,11 @@ gen_muldiv: if G_MULDIV = TRUE generate
 end generate gen_muldiv;
     muldiv_ready_o <= muldiv_ready when G_MULDIV = TRUE else '0';
     muldiv_start_o <= muldiv_start when G_MULDIV = TRUE else '0';
+
+    src1_dat_o <= ctrl.src1;
+    src2_dat_o <= ctrl.src2;
+    struct_o <= ctrl;
+    ecall_o <= ctrl.ecall and valid;
+    ebreak_o <= ctrl.ebreak and valid;
+    mret_o <= ctrl.mret and valid;
 end architecture rtl;
