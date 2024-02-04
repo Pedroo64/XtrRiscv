@@ -108,8 +108,6 @@ begin
     end process;
 
 -- Exception handling
--- TODO: Future improvement: Possibility to pipeline the interrupt to flush the execute stage wait for the PC to propagate to the memory stage
--- and then jump to the interrupt handler with memory_pc containing the interrupted instruction
     process (clk_i)
     begin
         if rising_edge(clk_i) then
