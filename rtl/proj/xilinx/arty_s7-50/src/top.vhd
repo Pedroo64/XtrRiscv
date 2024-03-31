@@ -6,7 +6,7 @@ entity top is
     generic (
         G_FREQ      : integer := 100e6;
         G_RAM_SIZE  : integer := 64*1024;
-        G_INIT_FILE : string := "../../../soft/bin/test.mem"
+        G_INIT_FILE : string := "../../../soft/helloworld/bin/helloworld.mem"
     );
     port (
         pin_arst_n_i : in std_logic;
