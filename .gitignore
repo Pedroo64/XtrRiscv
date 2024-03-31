@@ -23,6 +23,10 @@
 !*.ld
 # Cocotb
 !*.py
+
+# Modelsim/Questa
+!*.do
+
 !*/
 
 # CMake
@@ -36,3 +40,5 @@ CMakeFiles
 # Radiant
 *impl_1*
 *impl*
+
+*_work
