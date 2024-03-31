@@ -1,49 +1,111 @@
 MKFILE_PATH =  $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  =  $(dir $(MKFILE_PATH))
 
+#
+# DUT Arguments
+#
+
+INIT_FILE	            ?= none
+OUTPUT_FILE	            ?= none
+EXECUTE_BYPASS          ?= TRUE
+MEMORY_BYPASS           ?= TRUE
+WRITEBACK_BYPASS        ?= TRUE
+REGFILE_BYPASS          ?= TRUE
+FULL_BARREL_SHIFTER     ?= TRUE
+SHIFTER_EARLY_INJECTION ?= TRUE
+EXTENSION_ZICSR         ?= TRUE
+EXTENSION_M             ?= TRUE
+EXTENSION_C             ?= TRUE
+
+#
+# Simulator Arguments
+#
+
+TOP_LEVEL   ?= tb_xtr_soc
+WAVE        ?= $(MKFILE_DIR)/work/wave.wlf
+
+COVERAGE    ?= 0
+SPEED       ?= 0
+
+STOP_TIME   ?= 15ms
+GUI          = 1
+
 VSIM        ?= vsim
+VCOM        ?= vcom
 VSIM_FLAGS  ?=
-SRCS_PATH    = $(MKFILE_DIR)/../..
 
-INIT_FILE	?= "none"
-OUTPUT_FILE	?= "none"
-EXECUTE_BYPASS ?= FALSE
-MEMORY_BYPASS ?= FALSE
-WRITEBACK_BYPASS ?= FALSE
-REGFILE_BYPASS ?= FALSE
-FULL_BARREL_SHIFTER ?= FALSE
-SHIFTER_EARLY_INJECTION ?= FALSE
-EXTENSION_ZICSR ?= TRUE
-EXTENSION_M ?= TRUE
-EXTENSION_C ?= TRUE
+#
+# Design sources
+#
 
-PROJECT_FILE ?= $(MKFILE_DIR)/work/proj.mpf
+RTL_DIR       = $(MKFILE_DIR)/../..
 
-ifeq ($(EXTENSION_ZICSR), TRUE)
-CSR_WAVE = add wave -divider "csr" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_csr/u_csr/*
+VHDL_SOURCES += $(RTL_DIR)/utils/vhdl_utils.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/rv32i_pkg.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/csr_def.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/cpu_checker.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/utils/cpu_fifo.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/comparator.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/alu.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/c_extension/decompressor.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/mul.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/div.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/muldiv.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/shifter.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/instruction_fetch.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/prefetch.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/instruction_decode.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/execute.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/memory.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/writeback.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/csr.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/regfile.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/control_unit.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/interrupt_handler.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/branch_unit.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/lsu.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/cpu.vhd
+VHDL_SOURCES += $(RTL_DIR)/utils/utils.vhd
+VHDL_SOURCES += $(RTL_DIR)/utils/xtr_def.vhd
+VHDL_SOURCES += $(RTL_DIR)/utils/xtr_split.vhd
+VHDL_SOURCES += $(RTL_DIR)/utils/data_handshake.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/xtr_cpu.vhd
+VHDL_SOURCES += $(RTL_DIR)/soc/ram/ghdl/bram.vhd
+VHDL_SOURCES += $(RTL_DIR)/soc/ram/xtr_ram.vhd
+VHDL_SOURCES += $(RTL_DIR)/soc/timer/xtr_mtime.vhd
+VHDL_SOURCES += $(RTL_DIR)/testbenches/src/sim_stdout.vhd
+VHDL_SOURCES += $(RTL_DIR)/testbenches/src/sim_file.vhd
+VHDL_SOURCES += $(RTL_DIR)/testbenches/src/sim_soc.vhd
+VHDL_SOURCES += $(RTL_DIR)/testbenches/tb_xtr_soc.vhd
+
+#
+# Internal
+#
+
+SPEED_ARG    = -voptargs=+acc
+BATCH        =
+COVERAGE_ARG =
+WAVE_ARG     =
+LOG_WAVE     =
+
+ifeq ($(GUI), 0)
+    BATCH = -c
 endif
 
-ifeq ($(EXTENSION_M), TRUE)
-MULDIV_WAVE  = add wave -divider "muldiv" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/*;
-MULDIV_WAVE += add wave -divider "mul" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/u_mul/*;
-MULDIV_WAVE += add wave -divider "div" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/gen_muldiv/u_muldiv/u_div/*
+ifeq ($(SPEED), 1)
+	SPEED_ARG = -vopt
 endif
 
-WAVE_ARGS=\
-	add wave -divider "cpu" -ports sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/*; \
-	add wave -divider "fetch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_fetch/*; \
-	add wave -divider "decode" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_decode/*; \
-	add wave -divider "regfile" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_regfile/*; \
-	add wave -divider "execute" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_execute/*; \
-	add wave -divider "memory" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_memory/*; \
-	add wave -divider "writeback" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_writeback/*; \
-	add wave -divider "ctl" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_control_unit/*; \
-	add wave -divider "branch" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_branch_unit/*; \
-	add wave -divider "lsu" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/u_lsu/*; \
-	$(CSR_WAVE); \
-	$(MULDIV_WAVE); \
-	add wave -divider "verif" -position insertpoint sim:/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/gen_verif/u_cpu_checker/*; \
-	config wave -signalnamewidth 1
+ifeq ($(COVERAGE), 1)
+	COVERAGE_ARG = -coverage
+endif
+
+ifneq ($(WAVE),)
+	ifeq ($(SPEED), 0)
+		WAVE_ARG = -wlf $(WAVE)
+		LOG_WAVE = log * -r
+	endif
+endif
 
 SIM_ARGS=\
 	-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
@@ -53,65 +115,14 @@ SIM_ARGS=\
 	-g/tb_xtr_soc/u_xtr_soc/u_xtr_cpu/u_cpu/G_VERIFICATION=TRUE; \
 	set NumericStdNoWarnings 1
 
-all: compile
+compile:
+	$(VCOM) -autoorder -check_synthesis $(VHDL_SOURCES)
 
-create_project:
-	@rm -rf work
-	@mkdir work
-	$(VSIM) -c $(VSIM_FLAGS) -do "project new work proj;  exit -f"
+run:
+	$(VSIM) $(BATCH) -do "vsim $(SPEED_ARG) work.$(TOP_LEVEL) $(WAVE_ARG) $(SIM_ARGS); $(LOG_WAVE); run $(STOP_TIME); exit;"
 
-add_sources: create_project
-	$(VSIM) -c $(VSIM_FLAGS) -nolog -do "project open work/proj.mpf; \
-		project addfile $(SRCS_PATH)/utils/vhdl_utils.vhd; \
-		project addfile $(SRCS_PATH)/cpu/utils/cpu_fifo.vhd; \
-		project addfile $(SRCS_PATH)/cpu/comparator.vhd; \
-		project addfile $(SRCS_PATH)/cpu/alu.vhd; \
-		project addfile $(SRCS_PATH)/cpu/rv32i_pkg.vhd; \
-		project addfile $(SRCS_PATH)/cpu/shifter.vhd; \
-		project addfile $(SRCS_PATH)/cpu/c_extension/decompressor.vhd; \
-		project addfile $(SRCS_PATH)/cpu/m_extension/mul.vhd; \
-		project addfile $(SRCS_PATH)/cpu/m_extension/div.vhd; \
-		project addfile $(SRCS_PATH)/cpu/m_extension/muldiv.vhd; \
-		project addfile $(SRCS_PATH)/cpu/csr_def.vhd; \
-		project addfile $(SRCS_PATH)/cpu/prefetch.vhd; \
-		project addfile $(SRCS_PATH)/cpu/instruction_fetch.vhd; \
-		project addfile $(SRCS_PATH)/cpu/instruction_decode.vhd; \
-		project addfile $(SRCS_PATH)/cpu/execute.vhd; \
-		project addfile $(SRCS_PATH)/cpu/memory.vhd; \
-		project addfile $(SRCS_PATH)/cpu/writeback.vhd; \
-		project addfile $(SRCS_PATH)/cpu/csr.vhd; \
-		project addfile $(SRCS_PATH)/cpu/regfile.vhd; \
-		project addfile $(SRCS_PATH)/cpu/control_unit.vhd; \
-		project addfile $(SRCS_PATH)/cpu/interrupt_handler.vhd; \
-		project addfile $(SRCS_PATH)/cpu/branch_unit.vhd; \
-		project addfile $(SRCS_PATH)/cpu/lsu.vhd; \
-		project addfile $(SRCS_PATH)/cpu/cpu_checker.vhd; \
-		project addfile $(SRCS_PATH)/cpu/cpu.vhd; \
-		project addfile $(SRCS_PATH)/utils/utils.vhd; \
-		project addfile $(SRCS_PATH)/utils/xtr_def.vhd; \
-		project addfile $(SRCS_PATH)/utils/xtr_split.vhd; \
-		project addfile $(SRCS_PATH)/utils/data_handshake.vhd; \
-		project addfile $(SRCS_PATH)/cpu/xtr_cpu.vhd; \
-		project addfile $(SRCS_PATH)/soc/ram/bram.vhd; \
-		project addfile $(SRCS_PATH)/soc/ram/xtr_ram.vhd; \
-		project addfile $(SRCS_PATH)/soc/timer/xtr_mtime.vhd; \
-		project addfile $(SRCS_PATH)/testbenches/src/sim_stdout.vhd; \
-		project addfile $(SRCS_PATH)/testbenches/src/sim_file.vhd; \
-		project addfile $(SRCS_PATH)/testbenches/src/sim_soc.vhd; \
-		project addfile $(SRCS_PATH)/testbenches/tb_xtr_soc.vhd; \
-		exit -f"
-
-compile: add_sources
-	$(VSIM) -c $(VSIM_FLAGS) -do "project open work/proj.mpf; project compileall; exit -f"
-
-open_project:
-	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf;"
-
-start_sim:
-	$(VSIM) $(VSIM_FLAGS) -do "project open work/proj.mpf; vsim -voptargs=+acc work.tb_xtr_soc $(SIM_ARGS); $(WAVE_ARGS);"
-
-run_sim:
-	$(VSIM) -c $(VSIM_FLAGS) -do "project open $(PROJECT_FILE); vsim -voptargs=+acc work.tb_xtr_soc $(SIM_ARGS); run -all; exit -f'"
+restore:
+	$(VSIM) -view $(WAVE)
 
 clean:
-	@rm -r work
+	rm -rf work
