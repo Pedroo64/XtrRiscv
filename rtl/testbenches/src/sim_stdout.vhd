@@ -34,8 +34,14 @@ begin
         end if;
     end process;
 
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            xtr_rsp_o.vld <= xtr_cmd_i.vld and not xtr_cmd_i.we;
+        end if;
+    end process;
+
     xtr_rsp_o.rdy <= '1';
-    xtr_rsp_o.vld <= '0';
     xtr_rsp_o.dat <= (others => '0');
 
 end architecture rtl;
