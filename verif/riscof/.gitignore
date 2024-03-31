@@ -1,0 +1,11 @@
+*
+!.gitignore
+!*.ini
+!*.yaml
+!*.py
+!*.h
+!*.ld
+!*.md
+!*/
+
+riscof_work
