@@ -6,7 +6,8 @@
 !*.vhd
 # Vivado
 !*.xdc
-!*.xpr
+!*.tcl
+
 # Radiant
 !*.pdc
 !*.rdf
