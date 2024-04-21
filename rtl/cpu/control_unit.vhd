@@ -168,7 +168,7 @@ begin
     memory_flush_o <= srst_i or memory_flush;
     writeback_flush_o <= srst_i or writeback_flush;
 
-    execute_multicycle_flush_o <= srst_i or load_pc_i;
+    execute_multicycle_flush_o <= srst_i;
 
     fetch_enable_o <= not fetch_stall;
     decode_enable_o <= not decode_stall;
