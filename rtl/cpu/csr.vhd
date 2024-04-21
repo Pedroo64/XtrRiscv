@@ -165,9 +165,13 @@ begin
     process (exception_sync, exception_async, exception_exit, r_csr)
     begin
         if (exception_sync or exception_async) = '1' then
-            target_pc_o <= r_csr.mtvec;
+            target_pc_o <= r_csr.mtvec(31 downto 2) & "00";
         elsif exception_exit = '1' then
-            target_pc_o <= r_csr.mepc;
+            if G_EXTENSION_C = TRUE then
+                target_pc_o <= r_csr.mepc(31 downto 1) & '0';
+            else
+                target_pc_o <= r_csr.mepc(31 downto 2) & "00";
+            end if;
         else
             target_pc_o <= (others => 'X');
         end if;
