@@ -380,7 +380,7 @@ begin
                                 signed((execute_rs1_dat(31) and not execute_funct3(0)) & execute_rs1_dat) rem
                                 signed((execute_rs2_dat(31) and not execute_funct3(0)) & execute_rs2_dat));
                     else
-                        execute_div <= '0' & execute_rs1_dat;
+                        execute_rem <= '0' & execute_rs1_dat;
                     end if;
                 when others =>
             end case;
