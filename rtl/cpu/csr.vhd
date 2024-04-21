@@ -210,8 +210,8 @@ begin
     with csr_read_address select
         csr_read_data <=
             r_csr.mscratch        when CSR_MSCRATCH,
-            r_csr.mie             when CSR_MSTATUS,
-            r_csr.mstatus         when CSR_MIE,
+            r_csr.mie             when CSR_MIE,
+            r_csr.mstatus         when CSR_MSTATUS,
             r_csr.mtvec           when CSR_MTVEC,
             r_csr.mepc            when CSR_MEPC,
             r_csr.mcause          when CSR_MCAUSE,
