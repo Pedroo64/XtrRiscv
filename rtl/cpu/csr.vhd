@@ -157,7 +157,7 @@ begin
     exception_sync <= ecall or ebreak or instruction_address_misaligned or load_address_misaligned or store_address_misaligned;
     exception_async <= async_exception and async_exception_en and execute_pc_valid;
 
-    exception_entry <= exception_sync or (exception_async and not memory_branch);
+    exception_entry <= exception_sync or (exception_async and not (memory_branch and memory_valid_i));
     exception_exit <= mret;
 
     load_pc_o <= exception_entry or exception_exit;
