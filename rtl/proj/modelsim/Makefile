@@ -114,7 +114,7 @@ SIM_ARGS=\
 	set NumericStdNoWarnings 1
 
 compile:
-	$(VCOM) -autoorder $(VHDL_SOURCES)
+	$(VCOM) -autoorder -check_synthesis $(VHDL_SOURCES)
 
 run:
 	$(VSIM) $(BATCH) -do "vsim $(SPEED_ARG) work.$(TOP_LEVEL) $(WAVE_ARG) $(SIM_ARGS); $(LOG_WAVE); run $(STOP_TIME); exit;"
