@@ -11,3 +11,12 @@ void uart_putc(void *base, char c) {
     } while (s & UART_TX_BUSY);
     SB(c, 0, base);
 }
+
+void uart_puts(void *base, const char *s) {
+    char c;
+    while (*s) {
+        c = *s;
+        uart_putc(base, c);
+        s++;
+    }
+}
