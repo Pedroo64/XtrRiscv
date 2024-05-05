@@ -30,14 +30,9 @@ architecture rtl of xtr_uart is
     signal rx_dat, rx_dat_latch : std_logic_vector(7 downto 0);
     signal rx_vld, d_rx_vld, rx_available : std_logic;
     signal rx_baud_en : std_logic;
-    attribute mark_debug : string;
-    attribute mark_debug of rx_dat : signal is "true";
-    attribute mark_debug of rx_vld : signal is "true";
-    attribute mark_debug of rx_available : signal is "true";
 begin
     status_o <= rx_baud_en & d_rx_vld; -- used for boottrap component
     xtr_rsp_o.dat <= x"00000" & '0' & (not tx_rdy) & '0' & rx_available & rx_dat_latch;
-    --XtrRsp.Dat <= x"00000" & Baud & TxBusy & dRxVld & RxAvailable & RxDatVld;
     xtr_rsp_o.rdy <= '1';
     process (clk_i, arst_i)
     begin
