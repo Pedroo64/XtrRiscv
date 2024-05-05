@@ -18,15 +18,22 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-project(helloworld C ASM CXX)
+project(freertos C ASM CXX)
 
-# Remove this if targeting hardware
-add_compile_definitions(SIM_BUILD)
+if (DEFINED SIM_BUILD)
+    add_compile_definitions(SIM_BUILD)
+    set(FCPU 1000)
+else ()
+    if (NOT DEFINED FCPU)
+        message(FATAL_ERROR "You must define set FCPU when running on hardware. Eg: cmake . -DFCPU=100000000 for 100MHz")
+    endif ()
+endif()
+
+add_compile_definitions(FCPU=${FCPU})    
 
 include_directories(inc)
 file(GLOB src
     src/*.c
-    src/*.cpp
 )
 
 include_directories(../lib/inc)
@@ -42,3 +49,19 @@ target_link_libraries(${CMAKE_PROJECT_NAME} c)
 target_link_libraries(${CMAKE_PROJECT_NAME} gcc)
 
 include(../scripts/targets.cmake)
+
+set(FREERTOS_PORT GCC_RISC_V CACHE STRING "")
+
+add_library(freertos_config INTERFACE)
+target_include_directories(freertos_config INTERFACE "inc")
+
+# Select the heap port.  values between 1-4 will pick a heap.
+set(FREERTOS_HEAP "4" CACHE STRING "" FORCE)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/FreeRTOS-Kernel FreeRTOS-Kernel)
+
+add_compile_definitions(portasmHANDLE_INTERRUPT=external_interrupt_handler)
+
+target_link_libraries(${CMAKE_PROJECT_NAME} freertos_kernel freertos_config)
+target_link_libraries(freertos_kernel INTERFACE c)
+target_link_libraries(freertos_kernel INTERFACE gcc)

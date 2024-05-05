@@ -1,3 +1,6 @@
 [submodule "vendor/riscv-arch-test"]
 	path = vendor/riscv-arch-test
 	url = https://github.com/riscv-non-isa/riscv-arch-test
+[submodule "vendor/FreeRTOS-Kernel"]
+	path = vendor/FreeRTOS-Kernel
+	url = https://github.com/FreeRTOS/FreeRTOS-Kernel
