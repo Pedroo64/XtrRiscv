@@ -8,7 +8,6 @@ use work.vhdl_utils.all;
 entity cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
-        G_PREFETCH_SIZE : integer := 16;
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
@@ -131,7 +130,6 @@ begin
     u_fetch : entity work.instruction_fetch
         generic map (
             G_BOOT_ADDRESS => G_BOOT_ADDRESS,
-            G_PREFETCH_SIZE => G_PREFETCH_SIZE,
             G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
@@ -150,8 +148,7 @@ begin
             instr_valid_o => fetch_instr_valid,
             instr_data_o => fetch_instr_data,
             instr_compressed_o => fetch_instr_compressed,
-            booted_o => ctl_booted,
-            prefetch_full_o => open
+            booted_o => ctl_booted
         );
 
 -- decode
