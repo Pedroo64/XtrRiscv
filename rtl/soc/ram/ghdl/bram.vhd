@@ -42,6 +42,7 @@ architecture rtl of bram is
 begin
     
     process (clk_i, arst_i)
+        variable inited : boolean := false;
         variable ram : ram_t;
         procedure ocram_readmemfile(file_name : string) is
             file file_handle : text;
@@ -66,7 +67,10 @@ begin
         end procedure;
     begin
         if arst_i = '1' then
-            ocram_readmemfile(C_INIT_FILE);
+            if inited = false then
+                ocram_readmemfile(C_INIT_FILE);
+                inited := true;
+            end if;
         elsif rising_edge(clk_i) then
             if en_a_i = '1' then
                 dat_a_o <= ram(to_integer(unsigned(addr_a_i)));
@@ -88,6 +92,7 @@ begin
                     end loop;
                 end if;
             end if;
+            inited := false;
         end if;
     end process;
     
