@@ -46,7 +46,7 @@ architecture rtl of cpu is
     constant C_EBREAK : boolean := G_EXTENSION_ZICSR;
     constant C_INTERRUPTS : boolean := G_EXTENSION_ZICSR;
 -- NOTE: INSTRUCTION_MISALIGNED does not pass riscv-arch-est
-constant C_INSTRUCTION_MISALIGNED : boolean := FALSE;
+    constant C_INSTRUCTION_MISALIGNED : boolean := FALSE;
 -- NOTE: LOAD_MISALIGNED and STORE_MISALIGNED passes riscv-arch-est but not sure
 -- what to do if another misaligned is detected in the handler
     constant C_LOAD_MISALIGNED : boolean := FALSE;
