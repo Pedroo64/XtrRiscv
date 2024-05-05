@@ -102,13 +102,16 @@
         <Source name="../../../../cpu/m_extension/div.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
-        <Source name="../../../../cpu/utils/cpu_fifo.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/prefetch.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
         <Source name="../../../../cpu/c_extension/decompressor.vhd" type="VHDL" type_short="VHDL">
+            <Options/>
+        </Source>
+        <Source name="../../../../utils/vhdl_utils.vhd" type="VHDL" type_short="VHDL">
+            <Options/>
+        </Source>
+        <Source name="../../../../cpu/lsu.vhd" type="VHDL" type_short="VHDL">
+            <Options/>
+        </Source>
+        <Source name="../../../../cpu/cpu_checker.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
         <Source name="../constraints/constraints.pdc" type="Physical Constraints File" type_short="PDC">

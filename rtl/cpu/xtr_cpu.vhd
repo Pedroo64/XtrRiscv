@@ -7,7 +7,6 @@ use work.xtr_def.all;
 entity xtr_cpu is
     generic (
         G_BOOT_ADDRESS : std_logic_vector(31 downto 0) := (others => '0');
-        G_PREFETCH_SIZE : integer := 16;
         G_EXECUTE_BYPASS : boolean := FALSE;
         G_MEMORY_BYPASS : boolean := FALSE;
         G_WRITEBACK_BYPASS : boolean := FALSE;
@@ -43,7 +42,6 @@ begin
     u_cpu : entity work.cpu
         generic map (
             G_BOOT_ADDRESS => G_BOOT_ADDRESS,
-            G_PREFETCH_SIZE => G_PREFETCH_SIZE,
             G_EXECUTE_BYPASS => G_EXECUTE_BYPASS,
             G_MEMORY_BYPASS => G_MEMORY_BYPASS,
             G_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS,

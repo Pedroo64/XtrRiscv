@@ -45,6 +45,8 @@ end entity instruction_decode;
 architecture rtl of instruction_decode is
     signal valid : std_logic;
     signal fetched_instr, decompressed_instr, instr_dat : std_logic_vector(31 downto 0);
+    signal decompressed_rs1_adr, decompressed_rs2_adr : std_logic_vector(4 downto 0);
+    signal fetched_rs1_adr, fetched_rs2_adr : std_logic_vector(4 downto 0);
     signal instr_opcode : std_logic_vector(6 downto 0);
     signal rs1_en, rs2_en : std_logic;
     signal rd_we, compressed : std_logic;
@@ -53,7 +55,6 @@ architecture rtl of instruction_decode is
     signal ctrl : execute_struct_t;
     alias instr_funct3 : std_logic_vector(2 downto 0) is instr_dat(14 downto 12);
     alias instr_funct7 : std_logic_vector(6 downto 0) is instr_dat(31 downto 25);
-    signal rs1_adr : std_logic_vector(4 downto 0);
     signal imm_i, imm_s, imm_b, imm_u, imm_j : std_logic_vector(31 downto 0);
     signal pc, nxt_pc, pc_incr, pc_plus_4 : std_logic_vector(31 downto 0);
     signal pc_en : std_logic;
@@ -63,9 +64,13 @@ begin
         u_decompressor : entity work.decompressor
             port map (
                 instr_i => instr_i(15 downto 0),
-                instr_o => decompressed_instr
+                instr_o => decompressed_instr,
+                rs1_adr_o => decompressed_rs1_adr,
+                rs2_adr_o => decompressed_rs2_adr
             );
     end generate gen_compress;
+    fetched_rs1_adr <= decompressed_rs1_adr when compressed_i = '1' else fetched_instr(19 downto 15);
+    fetched_rs2_adr <= decompressed_rs2_adr when compressed_i = '1' else fetched_instr(24 downto 20);
     fetched_instr <= decompressed_instr when compressed_i = '1' else instr_i;
 
     process (clk_i)
@@ -95,8 +100,8 @@ begin
 
     instr_opcode <= instr_dat(6 downto 2) & "11";
 
-    next_rs1_adr_o <= fetched_instr(19 downto 15) when enable_i = '1' else instr_dat(19 downto 15);
-    next_rs2_adr_o <= fetched_instr(24 downto 20) when enable_i = '1' else instr_dat(24 downto 20);
+    next_rs1_adr_o <= fetched_rs1_adr when enable_i = '1' else instr_dat(19 downto 15);
+    next_rs2_adr_o <= fetched_rs2_adr when enable_i = '1' else instr_dat(24 downto 20);
     rs1_adr_o <= instr_dat(19 downto 15);
     rs2_adr_o <= instr_dat(24 downto 20);
     rd_adr_o <= instr_dat(11 downto 7);

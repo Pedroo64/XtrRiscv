@@ -10,7 +10,9 @@ entity decompressor is
     );
     port (
         instr_i : in std_logic_vector(15 downto 0);
-        instr_o : out std_logic_vector(31 downto 0)
+        instr_o : out std_logic_vector(31 downto 0);
+        rs1_adr_o : out std_logic_vector(4 downto 0);
+        rs2_adr_o : out std_logic_vector(4 downto 0)
     );
 end entity decompressor;
 
@@ -20,6 +22,7 @@ architecture rtl of decompressor is
     signal instr : std_logic_vector(31 downto 0);
     signal rs1_zero, rs2_zero : std_logic;
     signal illegal : std_logic;
+    signal rs1_adr, rs2_adr : std_logic_vector(4 downto 0);
 begin
     ci <= instr_i;
     ci_op <= ci(1 downto 0) & ci(15 downto 13);
@@ -31,6 +34,8 @@ begin
     begin
         instr <= (others => 'X');
         illegal <= '0';
+        rs1_adr <= (others => 'X');
+        rs2_adr <= (others => 'X');
         case ci_op is
             when "00000" => -- C.ADDI4SPN
                 instr(31 downto 30) <= (others => '0');
@@ -43,14 +48,16 @@ begin
                 instr(14 downto 12) <= "000";
                 instr(11 downto 7) <= "01" & ci(4 downto 2); -- c.rd
                 instr(6 downto 0) <= RV32I_OP_REG_IMM;
+                rs1_adr <= "00010";
             when "00010" => -- C.LW
                 instr(31 downto 27) <= (others => '0'); -- imm 11-7
                 instr(26 downto 22) <= ci(5) & ci(12) & ci(11) & ci(10) & ci(6); -- imm 6-2
                 instr(21 downto 20) <= (others => '0'); -- imm 1-0
-                instr(19 downto 15) <= "01" & ci(9 downto 7);
+                instr(19 downto 15) <= "01" & ci(9 downto 7); -- c.rs1
                 instr(14 downto 12) <= "010";
                 instr(11 downto 7) <= "01" & ci(4 downto 2); -- c.rd
                 instr(6 downto 0) <= RV32I_OP_LOAD;
+                rs1_adr <= "01" & ci(9 downto 7);
             when "00110" => -- C.SW
                 instr(31 downto 27) <= (others => '0'); -- imm 11 - 7
                 instr(26 downto 25) <= ci(5) & ci(12); -- imm 6 - 5
@@ -59,6 +66,8 @@ begin
                 instr(14 downto 12) <= "010";
                 instr(11 downto 7) <= ci(11 downto 10) & ci(6) & "00"; -- imm 4 - 0
                 instr(6 downto 0) <= RV32I_OP_STORE;
+                rs1_adr <= "01" & ci(9 downto 7);
+                rs2_adr <= "01" & ci(4 downto 2);
             when "01000" => -- C.ADDI
                 instr(31 downto 25) <= (others => ci(12));
                 instr(24 downto 20) <= ci(6 downto 2);
@@ -66,6 +75,7 @@ begin
                 instr(14 downto 12) <= "000";
                 instr(11 downto 7) <= ci(11 downto 7); -- rd
                 instr(6 downto 0) <= RV32I_OP_REG_IMM;
+                rs1_adr <= ci(11 downto 7);
             when "01001" => -- C.JAL
                 instr(31) <= ci(12); -- imm 20
                 instr(30) <= ci(8); -- imm 10
@@ -86,6 +96,7 @@ begin
                 instr(14 downto 12) <= "000";
                 instr(11 downto 7) <= ci(11 downto 7);
                 instr(6 downto 0) <= RV32I_OP_REG_IMM;
+                rs1_adr <= (others => '0');
             when "01011" => -- C.ADDI16SP OR C.LUI
                 if unsigned(ci(11 downto 7)) = 2 then -- C.ADDI16SP
                     instr(31 downto 29) <= (others => ci(12));
@@ -101,6 +112,7 @@ begin
                     instr(11 downto 7) <= ci(11 downto 7); -- RD
                     instr(6 downto 0) <= RV32I_OP_LUI; -- OPCODE
                 end if;
+                rs1_adr <= ci(11 downto 7);
             when "01100" =>
                 instr(19 downto 15) <= "01" & ci(9 downto 7); -- C.RS1
                 instr(11 downto 07) <= "01" & ci(9 downto 7); -- C.RD
@@ -130,6 +142,8 @@ begin
                         end case;
                     when others =>
                 end case;
+                rs1_adr <= "01" & ci(9 downto 7);
+                rs2_adr <= "01" & ci(4 downto 2);
                 illegal <= ci(12);
             when "01101" => -- C.J
                 instr(31) <= ci(12); -- imm 20
@@ -155,9 +169,11 @@ begin
                 instr(8) <= ci(3); -- imm 1
                 instr(7) <= ci(12); -- imm 11
                 instr(24 downto 20) <= (others => '0'); -- x0
-                instr(19 downto 15) <= "01" & ci(9 downto 7);
+                instr(19 downto 15) <= "01" & ci(9 downto 7); -- c.rs1
                 instr(14 downto 12) <= "00" & ci(13);
                 instr(6 downto 0) <= RV32I_OP_BRANCH;
+                rs1_adr <= "01" & ci(9 downto 7);
+                rs2_adr <= (others => '0');
             when "10000" => -- C.SLLI
                 instr(31 downto 26) <= (others => '0');
                 instr(25 downto 20) <= ci(12) & ci(6 downto 2);
@@ -165,6 +181,7 @@ begin
                 instr(14 downto 12) <= "001"; -- FUNCT3
                 instr(11 downto 7) <= ci(11 downto 7); -- RD
                 instr(6 downto 0) <= RV32I_OP_REG_IMM; -- OPCODE
+                rs1_adr <= ci(11 downto 7);
             when "10010" => -- C.LWSP
                 instr(31 downto 28) <= (others => '0'); -- imm 11-8
                 instr(27 downto 22) <= ci(3) & ci(2) & ci(12) & ci(6) & ci(5) & ci(4); -- imm 7-2
@@ -173,6 +190,7 @@ begin
                 instr(14 downto 12) <= "010";
                 instr(11 downto 7) <= ci(11 downto 7); -- RD
                 instr(6 downto 0) <= RV32I_OP_LOAD; -- OPCODE
+                rs1_adr <= "00010";
             when "10100" =>
                 if ci(12) = '0' then
                     if rs2_zero = '1' then -- C.JR
@@ -181,6 +199,7 @@ begin
                         instr(14 downto 12) <= (others => '0'); -- FUNCT3
                         instr(11 downto 7) <= (others => '0'); -- RD = x0
                         instr(6 downto 0) <= RV32I_OP_JALR; -- OPCODE
+                        rs1_adr <= ci(11 downto 7);
                     else -- C.MV
                         instr(31 downto 25) <= (others => '0'); -- FUNCT7
                         instr(24 downto 20) <= ci(6 downto 2); -- RS2
@@ -188,6 +207,7 @@ begin
                         instr(14 downto 12) <= (others => '0'); -- FUNCT3
                         instr(11 downto 7) <= ci(11 downto 7); -- RD
                         instr(6 downto 0) <= RV32I_OP_REG_REG; -- OPCODE
+                        rs1_adr <= (others => '0');
                     end if;
                 else
                     if rs2_zero = '1' then
@@ -209,7 +229,9 @@ begin
                         instr(11 downto 7) <= ci(11 downto 7); -- RD
                         instr(6 downto 0) <= RV32I_OP_REG_REG; -- OPCODE
                     end if;
+                    rs1_adr <= ci(11 downto 7);
                 end if;
+                rs2_adr <= ci(6 downto 2);
             when "10110" => -- C.SWSP
                 instr(31 downto 28) <= (others => '0'); -- imm 11-8
                 instr(27 downto 25) <= ci(8) & ci(7) & ci(12); -- imm 7-5
@@ -219,11 +241,16 @@ begin
                 instr(19 downto 15) <= "00010"; -- RS1 = SP
                 instr(14 downto 12) <= "010"; -- FUNCT3
                 instr(6 downto 0) <= RV32I_OP_STORE; -- OPCODE
+                rs1_adr <= "00010";
+                rs2_adr <= ci(6 downto 2);
             when others =>
                 illegal <= '1';
         end case;
     end process;
 
     instr_o <= instr(31 downto 16) & ci when illegal = '1' and G_CATCH_ILLEGAL = TRUE else instr;
+    rs1_adr_o <= rs1_adr;
+    rs2_adr_o <= rs2_adr;
+
 
 end architecture rtl;
