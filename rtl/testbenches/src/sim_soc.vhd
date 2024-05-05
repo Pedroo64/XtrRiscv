@@ -44,6 +44,7 @@ architecture rtl of sim_soc is
     signal memory_test_delay_cnt : unsigned(5 downto 0) := (others => '0');
     signal memory_test_reg : std_logic_vector(31 downto 0) := (others => '0');
 -- external irq
+    signal irq_en : std_logic;
     signal irq_cnt : unsigned(12 downto 0);
 begin
     -- Hold reset for at least 4 clock cycles
@@ -197,8 +198,12 @@ begin
     begin
         if arst_i = '1' then
             irq_cnt <= (others => '0');
+            irq_en <= '0';
         elsif rising_edge(clk_i) then
-            if xtr_cmd_lyr_2(6).vld = '1' then
+            if (xtr_cmd_lyr_2(6).vld = '1' and xtr_cmd_lyr_2(6).we = '1' and xtr_cmd_lyr_2(6).adr(15) = '0') then
+                irq_en <= xtr_cmd_lyr_2(6).dat(0);
+            end if;
+            if (xtr_cmd_lyr_2(6).vld = '1' and xtr_cmd_lyr_2(6).we = '1' and xtr_cmd_lyr_2(6).adr(15) = '1') or irq_en = '0' then
                 irq_cnt <= (others => '0');
             elsif irq_cnt(irq_cnt'left) = '0' then
                 irq_cnt <= irq_cnt + 1;
