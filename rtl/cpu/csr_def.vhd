@@ -7,6 +7,7 @@ package csr_def is
     constant CSR_FN12_ECALL  : std_logic_vector(11 downto 0) := "000000000000";
     constant CSR_FN12_EBREAK : std_logic_vector(11 downto 0) := "000000000001";
     constant CSR_FN12_MRET   : std_logic_vector(11 downto 0) := "001100000010";
+    constant CSR_FN12_DRET   : std_logic_vector(11 downto 0) := "011110110010";
 
     constant CSR_MVENDORID  : std_logic_vector(11 downto 0) := x"F11";
     constant CSR_MARCHID    : std_logic_vector(11 downto 0) := x"F12";
@@ -36,6 +37,13 @@ package csr_def is
     constant CSR_MSTATUS_MIE : integer := 3;
     constant CSR_MIE_MEIE : integer := 11;
     constant CSR_MIE_MTIE : integer := 7;
+
+-- Debug extension
+    constant CSR_DCSR       : std_logic_vector(11 downto 0) := x"7B0";
+    constant CSR_DPC        : std_logic_vector(11 downto 0) := x"7B1";
+--    constant CSR_DSCRATCH0  : std_logic_vector(11 downto 0) := x"7B2";
+--    constant CSR_DSCRATCH1  : std_logic_vector(11 downto 0) := x"7B3";
+    constant CSR_DM_DATA0   : std_logic_vector(11 downto 0) := x"7C0";
 
 -- mcause
     constant CSR_MCAUSE_USER_SOFTWARE_INTERRUPT         : std_logic_vector(31 downto 0) := x"80000000";
@@ -71,6 +79,9 @@ type csr_registers_t is record
     mepc : std_logic_vector(31 downto 0);
     mcause : std_logic_vector(31 downto 0);
     mtval : std_logic_vector(31 downto 0);
+    dcsr : std_logic_vector(31 downto 0);
+    dpc : std_logic_vector(31 downto 0);
+    dm_data0 : std_logic_vector(31 downto 0);
 end record;
 
 end package csr_def;

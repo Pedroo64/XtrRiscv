@@ -26,6 +26,10 @@ entity xtr_soc is
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
+        tck_i : in std_logic;
+        tdi_i : in std_logic;
+        tdo_o : out std_logic;
+        tms_i : in std_logic;
         uart_rx_i : in std_logic_vector(G_UART - 1 downto 0);
         uart_tx_o : out std_logic_vector(G_UART - 1 downto 0);
         external_irq_i : in std_logic
@@ -72,6 +76,7 @@ begin
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
+            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i, 
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
             external_irq_i => external_irq, timer_irq_i => timer_irq);

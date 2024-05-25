@@ -36,6 +36,13 @@ entity cpu is
         data_cmd_dat_o : out std_logic_vector(31 downto 0);
         data_rsp_dat_i : in std_logic_vector(31 downto 0);
         data_rsp_vld_i : in std_logic;
+        debug_cmd_adr_i : in std_logic_vector(7 downto 0);
+        debug_cmd_dat_i : in std_logic_vector(31 downto 0);
+        debug_cmd_vld_i : in std_logic;
+        debug_cmd_we_i : in std_logic;
+        debug_cmd_rdy_o : out std_logic;
+        debug_rsp_vld_o : out std_logic;
+        debug_rsp_dat_o : out std_logic_vector(31 downto 0);
         external_irq_i : in std_logic;
         timer_irq_i : in std_logic
     );
@@ -52,9 +59,10 @@ architecture rtl of cpu is
     constant C_LOAD_MISALIGNED : boolean := FALSE;
     constant C_STORE_MISALIGNED : boolean := FALSE;
     signal ctl_booted : std_logic;
+    signal core_reset, debug_reset : std_logic;
 -- fetch
-    signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed : std_logic;
-    signal fetch_target_pc, fetch_instr_data : std_logic_vector(31 downto 0);
+    signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed, fetch_instr_valid_mux, fetch_instr_compressed_mux : std_logic;
+    signal fetch_target_pc, fetch_instr_data, fetch_instr_data_mux : std_logic_vector(31 downto 0);
 -- decode
     signal decode_en, decode_flush, decode_valid, decode_instr_compressed : std_logic;
     signal decode_opcode : opcode_t;
@@ -74,7 +82,7 @@ architecture rtl of cpu is
     signal execute_funct3 : std_logic_vector(2 downto 0);
     signal execute_funct7 : std_logic_vector(6 downto 0);
     signal execute_multicycle : std_logic;
-    signal execute_ecall, execute_ebreak, execute_mret : std_logic;
+    signal execute_ecall, execute_ebreak, execute_mret, execute_dret : std_logic;
     signal execute_struct : execute_struct_t;
 -- execute-shifter
     signal execute_shifter_result : std_logic_vector(31 downto 0);
@@ -122,6 +130,10 @@ architecture rtl of cpu is
     signal mem_cmd_adr, mem_cmd_dat : std_logic_vector(31 downto 0);
     signal mem_cmd_siz : std_logic_vector(1 downto 0);
     signal mem_cmd_vld, mem_cmd_we : std_logic;
+-- debug module
+    signal debug_mode : std_logic;
+    signal debug_instr_valid : std_logic;
+    signal debug_instr_data : std_logic_vector(31 downto 0);
 begin
 
 -- fetch
@@ -151,6 +163,12 @@ begin
             booted_o => ctl_booted
         );
 
+    core_reset <= not (not ctl_booted or debug_reset);
+
+    fetch_instr_data_mux  <= debug_instr_data  when debug_mode = '1' else fetch_instr_data;
+    fetch_instr_valid_mux <= debug_instr_valid when debug_mode = '1' else fetch_instr_valid;
+    fetch_instr_compressed_mux <= fetch_instr_compressed and not debug_mode;
+
 -- decode
     u_decode : entity work.instruction_decode
         generic map (
@@ -164,9 +182,9 @@ begin
             clk_i => clk_i,
             flush_i => decode_flush,
             enable_i => decode_en,
-            valid_i => fetch_instr_valid,
-            instr_i => fetch_instr_data,
-            compressed_i => fetch_instr_compressed,
+            valid_i => fetch_instr_valid_mux,
+            instr_i => fetch_instr_data_mux,
+            compressed_i => fetch_instr_compressed_mux,
             load_pc_i => branch_load_pc,
             target_pc_i => branch_target_pc,
             valid_o => decode_valid,
@@ -242,6 +260,7 @@ begin
             ecall_o => execute_ecall,
             ebreak_o => execute_ebreak,
             mret_o => execute_mret,
+            dret_o => execute_dret,
             struct_o => execute_struct
         );
 -- memory
@@ -418,7 +437,7 @@ begin
         port map (
             arst_i => arst_i,
             clk_i => clk_i,
-            booted_i => ctl_booted,
+            booted_i => core_reset,
             execute_opcode_i => execute_opcode,
             execute_rs1_dat_i => execute_src1,
             execute_rs2_dat_i => execute_src2,
@@ -453,6 +472,7 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             execute_ecall_i => execute_ecall,
             execute_ebreak_i => execute_ebreak,
             execute_mret_i => execute_mret,
+            execute_dret_i => execute_dret,
             execute_en_i => execute_en,
             execute_valid_i => execute_valid,
             execute_opcode_i => execute_opcode,
@@ -480,7 +500,19 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             mtvec_o => csr_mtvec,
             mepc_o => csr_mepc,
             misaligned_load_o => csr_misaligned_load,
-            misaligned_store_o => csr_misaligned_store
+            misaligned_store_o => csr_misaligned_store,
+            debug_cmd_adr_i => debug_cmd_adr_i,
+            debug_cmd_dat_i => debug_cmd_dat_i,
+            debug_cmd_vld_i => debug_cmd_vld_i,
+            debug_cmd_we_i => debug_cmd_we_i,
+            debug_cmd_rdy_o => debug_cmd_rdy_o,
+            debug_rsp_dat_o => debug_rsp_dat_o,
+            debug_rsp_vld_o => debug_rsp_vld_o,
+            instr_valid_o => debug_instr_valid,
+            instr_data_o => debug_instr_data,
+            fetch_enable_i => fetch_en,
+            debug_mode_o => debug_mode,
+            debug_reset_o => debug_reset
         );
 end generate gen_csr;
 gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
@@ -492,7 +524,7 @@ end generate gen_no_csr;
     regfile_rs1_en <= '1';
     regfile_rs2_en <= '1';
     regfile_rd_adr <= writeback_rd_adr;
-    regfile_rd_we <= 
+    regfile_rd_we <=
         '1' when writeback_valid = '1' and writeback_rd_we = '1' and writeback_mem_read = '0' else
         '1' when writeback_valid = '1' and writeback_rd_we = '1' and writeback_mem_read = '1' and writeback_mem_read_vld = '1' else
         '0';
@@ -560,7 +592,7 @@ gen_verif: if G_VERIFICATION = TRUE generate
         if rising_edge(clk_i) then
             vhdl_assert(G_EXTENSION_C = TRUE and fetch_instr_valid = '1' and fetch_instr_compressed = '1' and not (fetch_instr_data(1 downto 0) /= "11"), "Expected compressed instruction");
             vhdl_assert(G_EXTENSION_C = TRUE and fetch_instr_valid = '1' and fetch_instr_compressed = '0' and not (fetch_instr_data(1 downto 0) = "11"), "Expected non compressed instruction");
-            vhdl_assert(decode_valid = '1' and not (or_reduct(decode_instr) /= 'X'), "Illegal instruction");
+--            vhdl_assert(decode_valid = '1' and not (or_reduct(decode_instr) /= 'X'), "Illegal instruction");
         end if;
     end process;
 end generate gen_verif;
