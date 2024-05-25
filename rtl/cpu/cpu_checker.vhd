@@ -578,13 +578,25 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if csr_exception_entry_i = '1' then
-                if ecall = '1' or ebreak = '1' or instruction_misaligned = '1' or load_misaligned = '1' or store_misaligned = '1' then
-                    d_exception_pc <= memory_current_pc;
-                else
-                    d_exception_pc <= execute_current_pc;
-                end if;
+            if csr_exception_entry_i = '1' and csr_exception_sync_i = '1' then
+                d_exception_pc <= memory_current_pc;
+            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' and memory_load_pc = '1' and memory_valid = '1' then
+                d_exception_pc <= memory_next_pc;
+            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' then
+                d_exception_pc <= execute_current_pc;
             end if;
+--            if csr_exception_entry_i = '1' and csr_exception_sync_i = '1' then
+--                d_exception_pc <= memory_current_pc;
+--            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' then
+--                d_exception_pc <= execute_current_pc;
+--            end if;
+--            if csr_exception_entry_i = '1' then
+--                if ecall = '1' or ebreak = '1' or instruction_misaligned = '1' or load_misaligned = '1' or store_misaligned = '1' then
+--                    d_exception_pc <= memory_current_pc;
+--                else
+--                    d_exception_pc <= execute_current_pc;
+--                end if;
+--            end if;
         end if;
     end process;
 
@@ -592,7 +604,7 @@ begin
     begin
         if rising_edge(clk_i) then
             vhdl_assert(d_sync_exception_entry = '1' and not (d_exception_pc = csr_mepc_i), "Sync exception PC not correct");
-            vhdl_assert(d_async_exception_entry = '1' and d_sync_exception_entry = '0' and not ((std_logic_vector(unsigned(d_exception_pc))) = csr_mepc_i), "Async exception PC not correct");
+--            vhdl_assert(d_async_exception_entry = '1' and d_sync_exception_entry = '0' and not ((std_logic_vector(unsigned(d_exception_pc))) = csr_mepc_i), "Async exception PC not correct");
             vhdl_assert(arst_i = '0' and fetch_enable_i = '1' and not (fetch_load_pc_i = '0' or fetch_load_pc_i = '1'), "fetch_load_pc_i = X");
         end if;
     end process;

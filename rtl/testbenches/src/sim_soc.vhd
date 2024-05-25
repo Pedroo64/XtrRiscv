@@ -24,6 +24,10 @@ entity sim_soc is
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
+        tck_i : in std_logic;
+        tdi_i : in std_logic;
+        tdo_o : out std_logic;
+        tms_i : in std_logic;
         external_irq_i : in std_logic
     );
 end entity sim_soc;
@@ -75,6 +79,7 @@ begin
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
+            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
             external_irq_i => external_irq, timer_irq_i => timer_irq);
@@ -111,7 +116,7 @@ begin
         port map (
             arst_i => arst_i, clk_i => clk_i,
             xtr_cmd_i => xtr_cmd_lyr_2(0), xtr_rsp_o => xtr_rsp_lyr_2(0));
-    
+
     gen_file_output: if G_OUTPUT_FILE /= "none" generate
         -- 8XX1 0000
         -- FXX1 FFFF
@@ -120,7 +125,7 @@ begin
                 C_OUTPUT_FILE => G_OUTPUT_FILE)
             port map (
                 arst_i => arst_i, clk_i => clk_i,
-                xtr_cmd_i => xtr_cmd_lyr_2(1), xtr_rsp_o => xtr_rsp_lyr_2(1));        
+                xtr_cmd_i => xtr_cmd_lyr_2(1), xtr_rsp_o => xtr_rsp_lyr_2(1));
     end generate gen_file_output;
 
 
@@ -190,7 +195,7 @@ begin
     end process;
     xtr_rsp_lyr_2(3).dat <= memory_test_reg when xtr_rsp_lyr_2(3).vld = '1' else (others => 'X');
     xtr_rsp_lyr_2(3).rdy <= '1' when xtr_cmd_lyr_2(3).adr(15) = '1' and xtr_cmd_lyr_2(3).vld = '1' and xtr_cmd_lyr_2(3).we = '0' and memory_current_st = st_idle else memory_test_delay_cnt(memory_test_delay_cnt'left);
-    
+
     -- External IRQ
     -- 8XX6 0000
     -- 8XX6 FFFF

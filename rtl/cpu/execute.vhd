@@ -58,6 +58,7 @@ entity execute is
         ecall_o : out std_logic;
         ebreak_o : out std_logic;
         mret_o : out std_logic;
+        dret_o : out std_logic;
         struct_o : out execute_struct_t
     );
 end entity execute;
@@ -273,4 +274,5 @@ end generate gen_muldiv;
     ecall_o <= ctrl.ecall and valid;
     ebreak_o <= ctrl.ebreak and valid;
     mret_o <= ctrl.mret and valid;
+    dret_o <= ctrl.dret and valid;
 end architecture rtl;

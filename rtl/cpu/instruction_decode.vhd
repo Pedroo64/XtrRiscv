@@ -240,6 +240,7 @@ begin
         ctrl.ecall <= '0';
         ctrl.ebreak <= '0';
         ctrl.mret <= '0';
+        ctrl.dret <= '0';
 --        ctrl.jal <= '0';
 --        ctrl.branch <= '0';
 --        ctrl.load <= '0';
@@ -284,6 +285,7 @@ begin
                         when CSR_FN12_ECALL  => ctrl.ecall <= '1';
                         when CSR_FN12_EBREAK => ctrl.ebreak <= '1';
                         when CSR_FN12_MRET   => ctrl.mret <= '1';
+                        when CSR_FN12_DRET   => ctrl.dret <= '1';
                         when others =>
                     end case;
                 end if;

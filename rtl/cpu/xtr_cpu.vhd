@@ -21,6 +21,10 @@ entity xtr_cpu is
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
+        tck_i : in std_logic;
+        tdi_i : in std_logic;
+        tdo_o : out std_logic;
+        tms_i : in std_logic;
         instr_cmd_o : out xtr_cmd_t;
         instr_rsp_i : in xtr_rsp_t;
         data_cmd_o : out xtr_cmd_t;
@@ -37,8 +41,19 @@ architecture rtl of xtr_cpu is
     signal data_cmd_vld, data_cmd_we, data_cmd_rdy, data_rsp_vld : std_logic;
     signal data_cmd_siz : std_logic_vector(1 downto 0);
     signal data_cmd_sel : std_logic_vector(3 downto 0);
+    signal debug_cmd_adr : std_logic_vector(7 downto 0);
+    signal debug_cmd_dat, debug_rsp_dat : std_logic_vector(31 downto 0);
+    signal debug_cmd_vld, debug_cmd_we, debug_cmd_rdy, debug_rsp_vld : std_logic;
 begin
-    
+
+    u_dtm : entity work.jtag_dtm
+        port map (
+            arst_i => arst_i, clk_i => clk_i,
+            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i,
+            cmd_adr_o => debug_cmd_adr, cmd_dat_o => debug_cmd_dat, cmd_vld_o => debug_cmd_vld, cmd_we_o => debug_cmd_we,
+            rsp_rdy_i => debug_cmd_rdy, rsp_vld_i => debug_rsp_vld, rsp_dat_i => debug_rsp_dat
+        );
+
     u_cpu : entity work.cpu
         generic map (
             G_BOOT_ADDRESS => G_BOOT_ADDRESS,
@@ -49,7 +64,7 @@ begin
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER,
             G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
             G_EXTENSION_ZICSR => G_EXTENSION_ZICSR,
-            G_EXTENSION_M => G_EXTENSION_M, 
+            G_EXTENSION_M => G_EXTENSION_M,
             G_EXTENSION_C => G_EXTENSION_C
         )
         port map (
@@ -58,6 +73,8 @@ begin
             instr_cmd_rdy_i => instr_cmd_rdy, instr_rsp_dat_i => instr_rsp_dat, instr_rsp_vld_i => instr_rsp_vld,
             data_cmd_adr_o => data_cmd_adr, data_cmd_vld_o => data_cmd_vld, data_cmd_we_o => data_cmd_we, data_cmd_siz_o => data_cmd_siz, data_cmd_dat_o => data_cmd_dat,
             data_cmd_rdy_i => data_cmd_rdy, data_rsp_vld_i => data_rsp_vld, data_rsp_dat_i => data_rsp_dat,
+            debug_cmd_adr_i => debug_cmd_adr, debug_cmd_vld_i => debug_cmd_vld, debug_cmd_we_i => debug_cmd_we, debug_cmd_dat_i => debug_cmd_dat,
+            debug_cmd_rdy_o => debug_cmd_rdy, debug_rsp_vld_o => debug_rsp_vld, debug_rsp_dat_o => debug_rsp_dat,
             external_irq_i => external_irq_i, timer_irq_i => timer_irq_i);
 
     instr_cmd_o.adr <= instr_cmd_adr;
@@ -84,14 +101,14 @@ begin
             when "00" =>
                 case data_cmd_adr(1 downto 0) is
                     when "00" =>
-                        data_cmd_sel <= "0001";   
+                        data_cmd_sel <= "0001";
                     when "01" =>
-                        data_cmd_sel <= "0010";  
+                        data_cmd_sel <= "0010";
                     when "10" =>
-                        data_cmd_sel <= "0100";  
+                        data_cmd_sel <= "0100";
                     when "11" =>
-                        data_cmd_sel <= "1000";  
-                    when others =>            
+                        data_cmd_sel <= "1000";
+                    when others =>
                 end case;
             when "01" =>
                 if data_cmd_adr(1) = '0' then
@@ -103,5 +120,5 @@ begin
                 data_cmd_sel <= "1111";
         end case;
     end process;
-    
+
 end architecture rtl;

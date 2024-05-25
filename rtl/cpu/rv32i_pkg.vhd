@@ -47,6 +47,7 @@ package rv32i_pkg is
         ecall : std_logic;
         ebreak : std_logic;
         mret : std_logic;
+        dret : std_logic;
     end record;
 
     -- RV32I Base Instruction Set Opcodes
@@ -77,6 +78,9 @@ constant RV32I_FN3_AND           :   std_logic_vector(2 downto 0) := "111";
 constant RV32I_SYS_ECALL        :   std_logic_vector(11 downto 0) := "000000000000";
 constant RV32I_SYS_EBREAK       :   std_logic_vector(11 downto 0) := "000000000001";
 constant RV32I_SYS_MRET         :   std_logic_vector(11 downto 0) := "001100000010";
+constant RV32I_SYS_DRET         :   std_logic_vector(11 downto 0) := "011110110010";
+-- x"7b200073"
+
 --constant RV32I_SYS_RDCYCLE       :   std_logic_vector := "110000000000";
 --constant RV32I_SYS_RDCYCLEH      :   std_logic_vector := "110010000000";
 --constant RV32I_SYS_RDTIME        :   std_logic_vector := "110000000001";

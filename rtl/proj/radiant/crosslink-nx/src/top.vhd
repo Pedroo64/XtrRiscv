@@ -11,6 +11,10 @@ entity top is
     port (
         pin_arst_n_i : in std_logic;
         pin_clk_i : in std_logic;
+        pin_tck_i : in std_logic;
+        pin_tdi_i : in std_logic;
+        pin_tdo_o : out std_logic;
+        pin_tms_i : in std_logic;
         pin_uart_rx_i : in std_logic;
         pin_uart_tx_o : out std_logic
     );
@@ -37,6 +41,7 @@ begin
             G_EXTENSION_ZICSR => TRUE, G_EXTENSION_M => TRUE, G_EXTENSION_C => TRUE)
         port map (
             arst_i => arst, clk_i => clk, srst_i => '0',
+            tck_i => pin_tck_i, tdi_i => pin_tdi_i, tdo_o => pin_tdo_o, tms_i => pin_tms_i,
             uart_rx_i => uart_rx, uart_tx_o => uart_tx, 
             external_irq_i => '0');
 

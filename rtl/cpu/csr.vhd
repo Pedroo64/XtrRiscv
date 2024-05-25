@@ -29,6 +29,7 @@ entity csr is
         execute_ecall_i : in std_logic;
         execute_ebreak_i : in std_logic;
         execute_mret_i : in std_logic;
+        execute_dret_i : in std_logic;
         memory_en_i : in std_logic;
         memory_valid_i : in std_logic;
         memory_opcode_i : in opcode_t;
@@ -48,7 +49,19 @@ entity csr is
         mtvec_o : out std_logic_vector(31 downto 0);
         mepc_o : out std_logic_vector(31 downto 0);
         misaligned_load_o : out std_logic;
-        misaligned_store_o : out std_logic
+        misaligned_store_o : out std_logic;
+        debug_cmd_adr_i : in std_logic_vector(7 downto 0);
+        debug_cmd_dat_i : in std_logic_vector(31 downto 0);
+        debug_cmd_vld_i : in std_logic;
+        debug_cmd_we_i : in std_logic;
+        debug_cmd_rdy_o : out std_logic;
+        debug_rsp_dat_o : out std_logic_vector(31 downto 0);
+        debug_rsp_vld_o : out std_logic;
+        instr_valid_o : out std_logic;
+        instr_data_o : out std_logic_vector(31 downto 0);
+        fetch_enable_i : in std_logic;
+        debug_mode_o : out std_logic;
+        debug_reset_o : out std_logic
     );
 end entity csr;
 
@@ -67,6 +80,7 @@ signal memory_pc : std_logic_vector(31 downto 0);
 signal memory_ecall, memory_ebreak, memory_mret : std_logic;
 signal memory_misaligned_load, memory_misaligned_store : std_logic;
 -- CSR logic
+signal async_exception_pending : std_logic;
 signal nxt_epc : std_logic_vector(31 downto 0);
 signal epc_sel : std_logic;
 signal instruction_address_misaligned, store_address_misaligned, load_address_misaligned, load_store_address_misaligned : std_logic;
@@ -81,14 +95,19 @@ signal csr_write_address, csr_read_address : std_logic_vector(11 downto 0);
 signal csr_write_data, csr_read_data : std_logic_vector(31 downto 0);
 signal csr_write_enable, csr_read_enable : std_logic;
 signal csr_machine_we, csr_machine_re : std_logic;
+-- debug csr
+signal execute_dret, memory_dret : std_logic;
+signal debug_reset, debug_halt, debug_mode, dcsr_step, dret, step : std_logic;
 -- CSR registers
 signal csr_mscratch_we, csr_mstatus_we, csr_mie_we, csr_mtvec_we, csr_mepc_we, csr_mcause_we, csr_mtval_we : std_logic;
+signal csr_dcsr_we, csr_dpc_we, csr_dm_data0_we : std_logic;
 signal r_csr : csr_registers_t;
 begin
 -- Execute stage
     execute_ecall <= execute_ecall_i;
     execute_ebreak <= execute_ebreak_i;
     execute_mret <= execute_mret_i;
+    execute_dret <= execute_dret_i;
     execute_branch <= execute_opcode_i.jal or execute_opcode_i.branch;
 
 -- Memory stage
@@ -103,6 +122,7 @@ begin
                 memory_pc <= execute_current_pc_i;
                 memory_misaligned_load <= execute_misaligned_load;
                 memory_misaligned_store <= execute_misaligned_store;
+                memory_dret <= execute_dret;
             end if;
         end if;
     end process;
@@ -123,14 +143,35 @@ begin
         end if;
     end process;
 
-    nxt_epc <=
-        execute_current_pc_i when epc_sel = '1' else
+    process (clk_i, arst_i)
+    begin
+        if arst_i = '1' then
+            async_exception_pending <= '0';
+        elsif rising_edge(clk_i) then
+            if async_exception_pending = '0' and ((async_exception = '1' and async_exception_en = '1') or dcsr_step = '1') then
+                async_exception_pending <= '1';
+            elsif async_exception_pending = '1' and memory_valid_i = '1' then
+                async_exception_pending <= '0';
+            end if;
+        end if;
+    end process;
+
+--    nxt_epc <=
+--        execute_current_pc_i when epc_sel = '1' else
+--        memory_pc;
+
+    nxt_epc <= 
+        r_csr.mtvec when exception_async = '1' and dcsr_step = '1' and exception_sync = '1' else 
+        memory_target_pc_i when exception_async = '1' and memory_branch_i = '1' else
+        execute_current_pc_i when exception_async = '1' and memory_branch_i = '0' else
         memory_pc;
 
-    epc_sel <=
-        '0' when ecall = '1' or ebreak = '1' or instruction_address_misaligned = '1' or load_address_misaligned = '1' or store_address_misaligned = '1' else
-        '1' when async_exception = '1' else
-        '-';
+--    epc_sel <= async_exception_pending and load_pc_i;
+
+--    epc_sel <=
+--        '0' when ecall = '1' or ebreak = '1' or instruction_address_misaligned = '1' or load_address_misaligned = '1' or store_address_misaligned = '1' else
+--        '1' when async_exception_pending = '1' else
+--        '-';
 
     instruction_address_misaligned <=
         memory_branch_i and (memory_target_pc_i(1) or memory_target_pc_i(0)) when C_INSTRUCTION_MISALIGNED = TRUE and G_EXTENSION_C = FALSE else
@@ -153,24 +194,32 @@ begin
     ecall <= memory_ecall and memory_valid_i;
     ebreak <= memory_ebreak and memory_valid_i;
     mret <= memory_mret and memory_valid_i;
+    dret <= memory_dret and memory_valid_i;
+    step <= dcsr_step and memory_valid_i;
 
     exception_sync <= ecall or ebreak or instruction_address_misaligned or load_address_misaligned or store_address_misaligned;
-    exception_async <= async_exception and async_exception_en and execute_pc_valid;
+    exception_async <= ((async_exception and async_exception_en) or (not debug_mode and (debug_halt or step))) and execute_pc_valid;
 
-    exception_entry <= exception_sync or (exception_async and not (memory_branch and memory_valid_i));
-    exception_exit <= mret;
+    exception_entry <= exception_sync or exception_async;-- and not (memory_branch and memory_valid_i));
+    exception_exit <= mret or dret;
 
     load_pc_o <= exception_entry or exception_exit;
 
-    process (exception_sync, exception_async, exception_exit, r_csr)
+    process (exception_sync, exception_async, exception_exit, r_csr, mret, dret)
     begin
         if (exception_sync or exception_async) = '1' then
             target_pc_o <= r_csr.mtvec(31 downto 2) & "00";
-        elsif exception_exit = '1' then
+        elsif exception_exit = '1' and mret = '1' then
             if G_EXTENSION_C = TRUE then
                 target_pc_o <= r_csr.mepc(31 downto 1) & '0';
             else
                 target_pc_o <= r_csr.mepc(31 downto 2) & "00";
+            end if;
+        elsif exception_exit = '1' and dret = '1' then
+            if G_EXTENSION_C = TRUE then
+                target_pc_o <= r_csr.dpc(31 downto 1) & '0';
+            else
+                target_pc_o <= r_csr.dpc(31 downto 2) & "00";
             end if;
         else
             target_pc_o <= (others => 'X');
@@ -220,6 +269,9 @@ begin
             r_csr.mepc            when CSR_MEPC,
             r_csr.mcause          when CSR_MCAUSE,
             r_csr.mtval           when CSR_MTVAL,
+            r_csr.dcsr            when CSR_DCSR,
+            r_csr.dpc             when CSR_DPC,
+            r_csr.dm_data0        when CSR_DM_DATA0,
             (others => '0') when others;
 
     with memory_funct3_i(1 downto 0) select
@@ -238,6 +290,9 @@ begin
         csr_mepc_we <= '0';
         csr_mcause_we <= '0';
         csr_mtval_we <= '0';
+        csr_dcsr_we <= '0';
+        csr_dpc_we <= '0';
+        csr_dm_data0_we <= '0';
         case csr_write_address is
             when CSR_MSCRATCH => csr_mscratch_we <= '1';
             when CSR_MSTATUS => csr_mstatus_we <= '1';
@@ -246,6 +301,9 @@ begin
             when CSR_MEPC => csr_mepc_we <= '1';
             when CSR_MCAUSE => csr_mcause_we <= '1';
             when CSR_MTVAL => csr_mtval_we <= '1';
+            when CSR_DCSR => csr_dcsr_we <= '1';
+            when CSR_DPC => csr_dpc_we <= '1';
+            when CSR_DM_DATA0 => csr_dm_data0_we <= '1';
             when others =>
         end case;
     end process;
@@ -345,6 +403,90 @@ begin
         end process;
     end block;
 
+    block_debug_module : block
+        signal dcsr_debugver : std_logic_vector(3 downto 0);
+        signal dcsr_ebreakm : std_logic;
+        signal dcsr_cause : std_logic_vector(2 downto 0);
+        signal dm_data0_wdata : std_logic_vector(31 downto 0);
+        signal dm_data0_we : std_logic;
+    begin
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                dcsr_ebreakm <= '0';
+                dcsr_cause <= (others => '0');
+                dcsr_step <= '0';
+                debug_mode <= '0';
+            elsif rising_edge(clk_i) then
+                if exception_entry = '1' and debug_mode = '0' and debug_halt = '1' then
+                    dcsr_cause <= std_logic_vector(to_unsigned(3, 3)); -- HALTREQ
+                elsif exception_entry = '1' and debug_mode = '0' and ebreak = '1' and dcsr_ebreakm = '1' then
+                    dcsr_cause <= std_logic_vector(to_unsigned(1, 3)); -- EBREAKM
+                elsif exception_entry = '1' and debug_mode = '0' and dcsr_step = '1' then
+                    dcsr_cause <= std_logic_vector(to_unsigned(4, 3)); -- STEP
+                elsif debug_mode = '1' and csr_dcsr_we = '1' then
+                    dcsr_ebreakm <= csr_write_data(15);
+                    dcsr_cause <= csr_write_data(8 downto 6);
+                    dcsr_step <= csr_write_data(2);
+                end if;
+                if exception_entry = '1' and debug_mode = '0' and (debug_halt or (ebreak and dcsr_ebreakm) or dcsr_step) = '1' then
+                    debug_mode <= '1';
+                elsif exception_exit = '1' and debug_mode = '1' and dret = '1' then
+                    debug_mode <= '0';
+                end if;
+            end if;
+        end process;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if exception_entry = '1' and debug_mode = '0' and ((ebreak = '1' and dcsr_ebreakm = '1') or dcsr_step = '1' or debug_halt = '1') then
+                    r_csr.dpc <= nxt_epc;
+                elsif debug_mode = '1' and csr_dpc_we = '1' then
+                    r_csr.dpc <= csr_write_data;
+                end if;
+                if dm_data0_we = '1' then
+                    r_csr.dm_data0 <= dm_data0_wdata;
+                elsif debug_mode = '1' and csr_dm_data0_we = '1' then
+                    r_csr.dm_data0 <= csr_write_data;
+                end if;
+            end if;
+        end process;
+
+        dcsr_debugver <= x"4";
+
+        r_csr.dcsr(31 downto 28) <= dcsr_debugver;
+        r_csr.dcsr(27 downto 16) <= (others => '0');
+        r_csr.dcsr(15) <= dcsr_ebreakm;
+        r_csr.dcsr(14 downto 9) <= (others => '0');
+        r_csr.dcsr(8 downto 6) <= dcsr_cause;
+        r_csr.dcsr(5 downto 3) <= (others => '0');
+        r_csr.dcsr(2) <= dcsr_step;
+        r_csr.dcsr(1 downto 0) <= (others => '0');
+
+        u_debug_module : entity work.debug_module
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                debug_mode_i => debug_mode,
+                debug_halt_o => debug_halt,
+                debug_reset_o => debug_reset,
+                debug_adr_i => debug_cmd_adr_i,
+                debug_vld_i => debug_cmd_vld_i,
+                debug_we_i => debug_cmd_we_i,
+                debug_dat_i => debug_cmd_dat_i,
+                debug_dat_o => debug_rsp_dat_o,
+                debug_vld_o => debug_rsp_vld_o,
+                debug_rdy_o => debug_cmd_rdy_o,
+                enable_i => fetch_enable_i,
+                instr_data_o => instr_data_o,
+                instr_valid_o => instr_valid_o,
+                csr_data0_dat_o => dm_data0_wdata,
+                csr_data0_vld_o => dm_data0_we,
+                csr_data0_dat_i => r_csr.dm_data0
+            );
+    end block;
 
     exception_async_o <= exception_async;
     exception_sync_o <= exception_sync;
@@ -352,5 +494,7 @@ begin
     exception_exit_o <= exception_exit;
     mtvec_o <= r_csr.mtvec;
     mepc_o <= r_csr.mepc;
+    debug_mode_o <= debug_mode;
+    debug_reset_o <= debug_reset;
 
 end architecture rtl;
