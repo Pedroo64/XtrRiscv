@@ -5,18 +5,14 @@ use IEEE.numeric_std.all;
 entity jtag_vpi is
     port (
         clk_i : in std_logic;
-        tck_o : out std_logic;
-        tdi_o : out std_logic;
-        tms_o : out std_logic;
+        tck_o : out std_logic := '0';
+        tdi_o : out std_logic := '0';
+        tms_o : out std_logic := '0';
         tdo_i : in std_logic
     );
 end entity jtag_vpi;
 
 architecture c_model of jtag_vpi is
 begin
-
-    tck_o <= '0';
-    tdi_o <= 'Z';
-    tms_o <= '1';
 
 end architecture c_model;

@@ -46,13 +46,13 @@ TcpServer server;
 
 #define	XFERT_MAX_SIZE	512
 
- struct jtag_cmd {
-     uint32_t cmd;
-     unsigned char buffer_out[XFERT_MAX_SIZE];
-     unsigned char buffer_in[XFERT_MAX_SIZE];
-     uint32_t length;
-     uint32_t nb_bits;
- };
+struct jtag_cmd {
+    uint32_t cmd;
+    unsigned char buffer_out[XFERT_MAX_SIZE];
+    unsigned char buffer_in[XFERT_MAX_SIZE];
+    uint32_t length;
+    uint32_t nb_bits;
+};
 
 void hexdump(const void *ptr_data, const size_t size) {
     const uint8_t *ptr = (const uint8_t*)ptr_data;

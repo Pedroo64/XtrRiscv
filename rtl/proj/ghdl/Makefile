@@ -1,7 +1,6 @@
-MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-CURRENT_DIR := $(notdir $(patsubst %/,%,$(dir $(MKFILE_PATH))))
-
-GHDL ?= ghdl
+ROOT_DIR = $(shell git rev-parse --show-toplevel)
+GHDL  ?= ghdl
+CMAKE ?= cmake
 
 INIT_FILE               ?= none
 OUTPUT_FILE             ?= none
@@ -15,12 +14,10 @@ EXTENSION_ZICSR         ?= true
 EXTENSION_M             ?= true
 EXTENSION_C             ?= true
 
-RTL_DIR ?= ./../..
+RTL_DIR ?= $(ROOT_DIR)/rtl
+VPI_DIR ?= $(RTL_DIR)/testbenches/src/vpi
 
 TOP_LEVEL ?= tb_xtr_soc
-STOP_TIME ?= 1ms
-
-SRC = $(RTL_DIR)/utils/vhdl_utils.vhd
 
 VHDL_SOURCES += $(RTL_DIR)/utils/vhdl_utils.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/rv32i_pkg.vhd
@@ -78,20 +75,26 @@ SIM_ARGS += -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION)
 SIM_ARGS += -gG_EXTENSION_ZICSR=$(EXTENSION_ZICSR)
 SIM_ARGS += -gG_EXTENSION_M=$(EXTENSION_M)
 SIM_ARGS += -gG_EXTENSION_C=$(EXTENSION_C)
-# SIM_ARGS += --ieee-asserts=disable
 EXTRA_ARGS += -fsynopsys
 
+RUN_ARGS += --vpi=$(VPI_DIR)/build/lib/libvpi.so
+
+ifdef STOP_TIME
+    STOP_TIME_ARG = --stop-time=$(STOP_TIME)
+else
+    STOP_TIME_ARG =
+endif
 
 import: $(BUILD_DIR) $(VHDL_SOURCES)
 	$(GHDL) -i -fsynopsys --workdir=$(BUILD_DIR) $(VHDL_SOURCES)
 
-unit: import
+unit: import vpi
 	$(GHDL) -m -fsynopsys --workdir=$(BUILD_DIR) $(TOP_LEVEL)
 
 run: unit run_only
 
 run_only:
-	$(GHDL) -r $(TOP_LEVEL) --ieee-asserts=disable --stop-time=$(STOP_TIME) $(RUN_ARGS) $(SIM_ARGS)
+	$(GHDL) -r $(TOP_LEVEL) --ieee-asserts=disable $(STOP_TIME_ARG) $(RUN_ARGS) $(SIM_ARGS)
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
@@ -99,3 +102,14 @@ $(BUILD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f *.o $(TOP_LEVEL)
+
+clean_all: clean clean_vpi
+
+setup_vpi:
+	$(CMAKE) $(VPI_DIR)/build
+
+vpi:
+	$(MAKE) -C $(VPI_DIR)/build vpi
+
+clean_vpi:
+	$(MAKE) -C $(VPI_DIR)/build clean
