@@ -15,7 +15,8 @@ entity xtr_cpu is
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
-        G_EXTENSION_C : boolean := FALSE
+        G_EXTENSION_C : boolean := FALSE;
+        G_DEBUG_MODULE : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
@@ -46,13 +47,22 @@ architecture rtl of xtr_cpu is
     signal debug_cmd_vld, debug_cmd_we, debug_cmd_rdy, debug_rsp_vld : std_logic;
 begin
 
-    u_dtm : entity work.jtag_dtm
-        port map (
-            arst_i => arst_i, clk_i => clk_i,
-            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i,
-            cmd_adr_o => debug_cmd_adr, cmd_dat_o => debug_cmd_dat, cmd_vld_o => debug_cmd_vld, cmd_we_o => debug_cmd_we,
-            rsp_rdy_i => debug_cmd_rdy, rsp_vld_i => debug_rsp_vld, rsp_dat_i => debug_rsp_dat
-        );
+    gen_dmi: if G_DEBUG_MODULE = TRUE generate
+        u_dtm : entity work.jtag_dtm
+            port map (
+                arst_i => arst_i, clk_i => clk_i,
+                tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i,
+                cmd_adr_o => debug_cmd_adr, cmd_dat_o => debug_cmd_dat, cmd_vld_o => debug_cmd_vld, cmd_we_o => debug_cmd_we,
+                rsp_rdy_i => debug_cmd_rdy, rsp_vld_i => debug_rsp_vld, rsp_dat_i => debug_rsp_dat
+            );
+    end generate gen_dmi;
+    no_dmi: if G_DEBUG_MODULE = FALSE generate
+        debug_cmd_adr <= (others => '0');
+        debug_cmd_vld <= '0';
+        debug_cmd_we  <= '0';
+        debug_cmd_dat <= (others => '0');
+    end generate no_dmi;
+
 
     u_cpu : entity work.cpu
         generic map (
@@ -65,7 +75,8 @@ begin
             G_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
             G_EXTENSION_ZICSR => G_EXTENSION_ZICSR,
             G_EXTENSION_M => G_EXTENSION_M,
-            G_EXTENSION_C => G_EXTENSION_C
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_DEBUG_MODULE => G_DEBUG_MODULE
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,

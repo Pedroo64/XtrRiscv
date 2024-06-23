@@ -3,7 +3,7 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 package rv32i_pkg is
-    
+
     type opcode_t is record
         lui : std_logic;
         auipc : std_logic;
@@ -131,5 +131,8 @@ constant RV32M_FN7_MULDIV       :   std_logic_vector(6 downto 0) := "0000001";
 constant RV32M_FN7_SA           :   std_logic_vector(6 downto 0) := "0100000";
 constant RV32M_FN7_SL           :   std_logic_vector(6 downto 0) := "0000000";
 constant RV32M_FN7_SUB          :   std_logic_vector(6 downto 0) := "0100000";
+
+-- Instructions
+constant RV32I_INSTR_NOP        :   std_logic_vector(31 downto 0) := (31 downto 7 => '0') & RV32I_OP_REG_IMM;
 
 end package rv32i_pkg;

@@ -19,7 +19,8 @@ entity sim_soc is
         G_CPU_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
-        G_EXTENSION_C : boolean := FALSE
+        G_EXTENSION_C : boolean := FALSE;
+        G_DEBUG_MODULE : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -75,7 +76,8 @@ begin
             G_SHIFTER_EARLY_INJECTION => G_CPU_SHIFTER_EARLY_INJECTION,
             G_EXTENSION_ZICSR => G_EXTENSION_ZICSR,
             G_EXTENSION_M => G_EXTENSION_M,
-            G_EXTENSION_C => G_EXTENSION_C
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_DEBUG_MODULE => G_DEBUG_MODULE
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,

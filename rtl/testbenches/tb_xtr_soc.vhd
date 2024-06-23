@@ -14,7 +14,8 @@ entity tb_xtr_soc is
         G_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
         G_EXTENSION_C : boolean := FALSE;
-        G_EXTENSION_ZICSR : boolean := FALSE
+        G_EXTENSION_ZICSR : boolean := FALSE;
+        G_DEBUG_MODULE : boolean := FALSE
     );
 end entity tb_xtr_soc;
 
@@ -73,7 +74,8 @@ begin
             G_CPU_EXECUTE_BYPASS => G_EXECUTE_BYPASS, G_CPU_MEMORY_BYPASS => G_MEMORY_BYPASS,
             G_CPU_WRITEBACK_BYPASS => G_WRITEBACK_BYPASS, G_CPU_REGFILE_BYPASS => G_REGFILE_BYPASS,
             G_FULL_BARREL_SHIFTER => G_FULL_BARREL_SHIFTER, G_CPU_SHIFTER_EARLY_INJECTION => G_SHIFTER_EARLY_INJECTION,
-            G_EXTENSION_ZICSR => G_EXTENSION_ZICSR, G_EXTENSION_M => G_EXTENSION_M, G_EXTENSION_C => G_EXTENSION_C)
+            G_EXTENSION_ZICSR => G_EXTENSION_ZICSR, G_EXTENSION_M => G_EXTENSION_M, G_EXTENSION_C => G_EXTENSION_C,
+            G_DEBUG_MODULE => G_DEBUG_MODULE)
         port map (
             arst_i => arst, clk_i => clk,
             tck_i => tck, tdi_i => tdi, tdo_o => tdo, tms_i => tms,
