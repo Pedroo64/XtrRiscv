@@ -13,6 +13,7 @@ SHIFTER_EARLY_INJECTION ?= true
 EXTENSION_ZICSR         ?= true
 EXTENSION_M             ?= true
 EXTENSION_C             ?= true
+DEBUG_MODULE            ?= true
 
 RTL_DIR ?= $(ROOT_DIR)/rtl
 VPI_DIR ?= $(RTL_DIR)/testbenches/src/vpi
@@ -75,6 +76,7 @@ SIM_ARGS += -gG_SHIFTER_EARLY_INJECTION=$(SHIFTER_EARLY_INJECTION)
 SIM_ARGS += -gG_EXTENSION_ZICSR=$(EXTENSION_ZICSR)
 SIM_ARGS += -gG_EXTENSION_M=$(EXTENSION_M)
 SIM_ARGS += -gG_EXTENSION_C=$(EXTENSION_C)
+SIM_ARGS += -gG_DEBUG_MODULE=$(DEBUG_MODULE)
 EXTRA_ARGS += -fsynopsys
 
 RUN_ARGS += --vpi=$(VPI_DIR)/build/lib/libvpi.so

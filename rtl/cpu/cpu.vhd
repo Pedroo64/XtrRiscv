@@ -17,6 +17,7 @@ entity cpu is
         G_EXTENSION_M : boolean := FALSE;
         G_EXTENSION_C : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
+        G_DEBUG_MODULE : boolean := FALSE;
         G_VERIFICATION : boolean := FALSE
     );
     port (
@@ -60,9 +61,12 @@ architecture rtl of cpu is
     constant C_STORE_MISALIGNED : boolean := FALSE;
     signal ctl_booted : std_logic;
     signal core_reset, debug_reset : std_logic;
+-- fetch bus
+    signal instr_cmd_vld, instr_cmd_rdy, instr_rsp_vld : std_logic;
+    signal instr_rsp_dat : std_logic_vector(31 downto 0);
 -- fetch
-    signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed, fetch_instr_valid_mux, fetch_instr_compressed_mux : std_logic;
-    signal fetch_target_pc, fetch_instr_data, fetch_instr_data_mux : std_logic_vector(31 downto 0);
+    signal fetch_en, fetch_flush, fetch_instr_valid, fetch_load_pc, fetch_instr_compressed : std_logic;
+    signal fetch_target_pc, fetch_instr_data : std_logic_vector(31 downto 0);
 -- decode
     signal decode_en, decode_flush, decode_valid, decode_instr_compressed : std_logic;
     signal decode_opcode : opcode_t;
@@ -132,9 +136,16 @@ architecture rtl of cpu is
     signal mem_cmd_vld, mem_cmd_we : std_logic;
 -- debug module
     signal debug_mode : std_logic;
-    signal debug_instr_valid : std_logic;
-    signal debug_instr_data : std_logic_vector(31 downto 0);
+    signal debug_instr_cmd_valid, debug_instr_cmd_ready, debug_instr_rsp_valid : std_logic;
+    signal debug_instr_rsp_data : std_logic_vector(31 downto 0);
 begin
+
+-- fetch bus
+    debug_instr_cmd_valid <= instr_cmd_vld and debug_mode;
+    instr_cmd_vld_o <= instr_cmd_vld and not debug_mode;
+    instr_cmd_rdy <= (instr_cmd_rdy_i and not debug_mode) or (debug_instr_cmd_ready and debug_mode);
+    instr_rsp_dat <= instr_rsp_dat_i when debug_mode = '0' else debug_instr_rsp_data;
+    instr_rsp_vld <= (instr_rsp_vld_i and not debug_mode) or (debug_instr_rsp_valid and debug_mode);
 
 -- fetch
     fetch_load_pc <= branch_load_pc;
@@ -153,10 +164,10 @@ begin
             load_pc_i => fetch_load_pc,
             target_pc_i => fetch_target_pc,
             cmd_adr_o => instr_cmd_adr_o,
-            cmd_vld_o => instr_cmd_vld_o,
-            cmd_rdy_i => instr_cmd_rdy_i,
-            rsp_dat_i => instr_rsp_dat_i,
-            rsp_vld_i => instr_rsp_vld_i,
+            cmd_vld_o => instr_cmd_vld,
+            cmd_rdy_i => instr_cmd_rdy,
+            rsp_dat_i => instr_rsp_dat,
+            rsp_vld_i => instr_rsp_vld,
             instr_valid_o => fetch_instr_valid,
             instr_data_o => fetch_instr_data,
             instr_compressed_o => fetch_instr_compressed,
@@ -165,9 +176,8 @@ begin
 
     core_reset <= not (not ctl_booted or debug_reset);
 
-    fetch_instr_data_mux  <= debug_instr_data  when debug_mode = '1' else fetch_instr_data;
-    fetch_instr_valid_mux <= debug_instr_valid when debug_mode = '1' else fetch_instr_valid;
-    fetch_instr_compressed_mux <= fetch_instr_compressed and not debug_mode;
+    -- fetch_instr_data_mux  <= debug_instr_data  when debug_mode = '1' else fetch_instr_data;
+    -- fetch_instr_valid_mux <= debug_instr_valid when debug_mode = '1' else fetch_instr_valid;
 
 -- decode
     u_decode : entity work.instruction_decode
@@ -182,9 +192,9 @@ begin
             clk_i => clk_i,
             flush_i => decode_flush,
             enable_i => decode_en,
-            valid_i => fetch_instr_valid_mux,
-            instr_i => fetch_instr_data_mux,
-            compressed_i => fetch_instr_compressed_mux,
+            valid_i => fetch_instr_valid,
+            instr_i => fetch_instr_data,
+            compressed_i => fetch_instr_compressed,
             load_pc_i => branch_load_pc,
             target_pc_i => branch_target_pc,
             valid_o => decode_valid,
@@ -464,7 +474,8 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             G_INSTRUCTION_MISALIGNED => C_INSTRUCTION_MISALIGNED,
             G_LOAD_MISALIGNED => C_LOAD_MISALIGNED,
             G_STORE_MISALIGNED => C_STORE_MISALIGNED,
-            G_EXTENSION_C => G_EXTENSION_C
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_DEBUG_MODULE => G_DEBUG_MODULE
         )
         port map (
             arst_i => arst_i,
@@ -508,8 +519,10 @@ gen_csr: if G_EXTENSION_ZICSR = TRUE generate
             debug_cmd_rdy_o => debug_cmd_rdy_o,
             debug_rsp_dat_o => debug_rsp_dat_o,
             debug_rsp_vld_o => debug_rsp_vld_o,
-            instr_valid_o => debug_instr_valid,
-            instr_data_o => debug_instr_data,
+            instr_cmd_valid_i => debug_instr_cmd_valid,
+            instr_cmd_ready_o => debug_instr_cmd_ready,
+            instr_rsp_valid_o => debug_instr_rsp_valid,
+            instr_rsp_data_o => debug_instr_rsp_data,
             fetch_enable_i => fetch_en,
             debug_mode_o => debug_mode,
             debug_reset_o => debug_reset
@@ -518,6 +531,8 @@ end generate gen_csr;
 gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
     csr_misaligned_load <= '0';
     csr_misaligned_store <= '0';
+    debug_mode <= '0';
+    debug_reset <= '0';
 end generate gen_no_csr;
 
 -- regfile

@@ -20,16 +20,17 @@ entity xtr_soc is
         G_CPU_SHIFTER_EARLY_INJECTION : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
         G_EXTENSION_M : boolean := FALSE;
-        G_EXTENSION_C : boolean := FALSE
+        G_EXTENSION_C : boolean := FALSE;
+        G_DEBUG_MODULE : boolean := FALSE
     );
     port (
         arst_i : in std_logic := '0';
         clk_i : in std_logic;
         srst_i : in std_logic := '0';
-        tck_i : in std_logic;
-        tdi_i : in std_logic;
+        tck_i : in std_logic := '0';
+        tdi_i : in std_logic := '0';
         tdo_o : out std_logic;
-        tms_i : in std_logic;
+        tms_i : in std_logic := '0';
         uart_rx_i : in std_logic_vector(G_UART - 1 downto 0);
         uart_tx_o : out std_logic_vector(G_UART - 1 downto 0);
         external_irq_i : in std_logic
@@ -72,7 +73,8 @@ begin
             G_SHIFTER_EARLY_INJECTION => G_CPU_SHIFTER_EARLY_INJECTION,
             G_EXTENSION_ZICSR => G_EXTENSION_ZICSR,
             G_EXTENSION_M => G_EXTENSION_M,
-            G_EXTENSION_C => G_EXTENSION_C
+            G_EXTENSION_C => G_EXTENSION_C,
+            G_DEBUG_MODULE => G_DEBUG_MODULE
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
