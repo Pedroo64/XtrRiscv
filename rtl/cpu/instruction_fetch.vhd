@@ -31,7 +31,6 @@ entity instruction_fetch is
 end entity instruction_fetch;
 
 architecture rtl of instruction_fetch is
-    signal enable : std_logic;
     signal booted, cmd_valid : std_logic;
     signal pc, next_pc : std_logic_vector(31 downto 0);
     signal instr_data, instr_data_q : std_logic_vector(31 downto 0);
@@ -50,8 +49,10 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if enable = '1' and cmd_rdy_i = '1' then
-                pc <= next_pc;
+            if enable_i = '1' then
+                if (cmd_rdy_i = '1' and stall = '0') or load_pc_i = '1' then
+                    pc <= next_pc;
+                end if;
             end if;
         end if;
     end process;
@@ -59,13 +60,11 @@ begin
         target_pc_i when load_pc_i = '1' else
         std_logic_vector(unsigned(pc) + 4);
 
-    cmd_valid <= booted and enable;
+    cmd_valid <= booted and not stall and enable_i;
 
     cmd_adr_o <= pc;
     cmd_vld_o <= cmd_valid;
     booted_o <= booted;
-
-    enable <= (enable_i and not stall) or load_pc_i;
 
     process (clk_i)
     begin
@@ -149,7 +148,7 @@ begin
             instr_data;
 
         instr_compressed_o <= (not pc_align and compress_instr_low) or (pc_align and dispatch_high_compress) or (not aligned and compress_instr_high);
-        
+
     end generate gen_aligner;
 
     gen_no_aligner: if G_EXTENSION_C = FALSE generate
@@ -158,7 +157,7 @@ begin
         instr_data_o <= instr_data;
         instr_compressed_o <= '0';
     end generate gen_no_aligner;
-        
+
     instr_valid_o <= instr_valid;
 
 end architecture rtl;
