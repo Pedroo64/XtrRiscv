@@ -1,5 +1,4 @@
-MKFILE_PATH =  $(abspath $(lastword $(MAKEFILE_LIST)))
-MKFILE_DIR  =  $(dir $(MKFILE_PATH))
+ROOT_DIR = $(shell git rev-parse --show-toplevel)
 
 #
 # DUT Arguments
@@ -28,8 +27,8 @@ WAVE        ?= $(MKFILE_DIR)/work/wave.wlf
 COVERAGE    ?= 0
 SPEED       ?= 0
 
-STOP_TIME   ?= 15ms
-GUI          = 1
+STOP_TIME   ?=
+GUI          = 0
 
 VSIM        ?= vsim
 VCOM        ?= vcom
@@ -39,7 +38,8 @@ VSIM_FLAGS  ?=
 # Design sources
 #
 
-RTL_DIR       = $(MKFILE_DIR)/../..
+RTL_DIR       = $(ROOT_DIR)/rtl
+FLI_DIR       = $(ROOT_DIR)/rtl/testbenches/src/fli/build
 
 VHDL_SOURCES += $(RTL_DIR)/utils/vhdl_utils.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/rv32i_pkg.vhd
@@ -111,6 +111,12 @@ ifneq ($(WAVE),)
 	endif
 endif
 
+ifneq ($(STOP_TIME),)
+    RUN_ARG = run $(STOP_TIME)
+else
+    RUN_ARG = run -all
+endif
+
 SIM_ARGS=\
 	-gG_INIT_FILE="$(INIT_FILE)" -gG_OUTPUT_FILE="$(OUTPUT_FILE)" \
 	-gG_EXECUTE_BYPASS=$(WRITEBACK_BYPASS) -gG_MEMORY_BYPASS=$(MEMORY_BYPASS) -gG_WRITEBACK_BYPASS=$(WRITEBACK_BYPASS) -gG_REGFILE_BYPASS=$(REGFILE_BYPASS) \
@@ -124,7 +130,7 @@ compile:
 	$(VCOM) -autoorder -check_synthesis $(VHDL_SOURCES)
 
 run:
-	$(VSIM) $(BATCH) -do "vsim $(SPEED_ARG) work.$(TOP_LEVEL) $(WAVE_ARG) $(SIM_ARGS); $(LOG_WAVE); run $(STOP_TIME); exit;"
+	$(VSIM) $(BATCH) -do "vsim $(SPEED_ARG) work.$(TOP_LEVEL) $(WAVE_ARG) $(SIM_ARGS); $(LOG_WAVE); $(RUN_ARG); exit;"
 
 restore:
 	$(VSIM) -view $(WAVE)
