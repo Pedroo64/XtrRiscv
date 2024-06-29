@@ -3,111 +3,165 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 entity mul is
+    generic (
+        G_FAST_MUL : boolean := FALSE
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
-        srst_i : in std_logic;
-        a_i : in std_logic_vector(31 downto 0);
-        b_i : in std_logic_vector(31 downto 0);
+        enable_i : in std_logic;
+        flush_i : in std_logic;
         funct3_i : in std_logic_vector(2 downto 0);
-        start_i : in std_logic;
-        res_o : out std_logic_vector(31 downto 0);
+        rs1_dat_i : in std_logic_vector(31 downto 0);
+        rs2_dat_i : in std_logic_vector(31 downto 0);
+        result_o : out std_logic_vector(63 downto 0);
         ready_o : out std_logic
     );
 end entity mul;
 
 architecture rtl of mul is
-    signal next_cnt, cnt : unsigned(5 downto 0);
-    signal alu_a, alu_b, alu_y : std_logic_vector(32 downto 0);
-    signal alu_op : std_logic;
-    signal funct3 : std_logic_vector(1 downto 0);
+    signal ready_q : std_logic;
     signal signed_a, signed_b : std_logic;
-    signal ready : std_logic;
-    signal next_multiplicand, multiplicand : std_logic_vector(31 downto 0);
-    signal next_product, product : std_logic_vector(63 downto 0);
-    signal load_product, load_multiplicand : std_logic;
 begin
-    
-    alu_a <= (signed_a and product(63)) & product(63 downto 32);
-    alu_b <= (signed_a and multiplicand(31)) & multiplicand;
 
-    alu_y <= 
-        std_logic_vector(unsigned(alu_a) - unsigned(alu_b)) when alu_op = '1' else
-        std_logic_vector(unsigned(alu_a) + unsigned(alu_b));
+    signed_a <= not (funct3_i(1) and funct3_i(0));
+    signed_b <= not funct3_i(1);
 
-    process (clk_i, arst_i)
+    gen_iter: if G_FAST_MUL = FALSE generate
+        signal cnt, cnt_q : unsigned(5 downto 0);
+        signal alu_a, alu_b, alu_y : std_logic_vector(32 downto 0);
+        signal alu_op_q : std_logic;
+        signal load_product, load_multiplicand : std_logic;
+        signal multiplicand, multiplicand_q : std_logic_vector(31 downto 0);
+        signal product, product_q : std_logic_vector(63 downto 0);
+        signal signed_a_q, signed_b_q : std_logic;
     begin
-        if arst_i = '1' then
-            ready <= '1';
-        elsif rising_edge(clk_i) then
-            if srst_i = '1' then
-                ready <= '1';
-            else
-                if start_i = '1' then
-                    ready <= '0';
-                elsif cnt(cnt'left) = '1' then
-                    ready <= '1';
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if ready_q = '1' and enable_i = '1' then
+                    signed_a_q <= signed_a;
+                    signed_b_q <= signed_b;
                 end if;
             end if;
-        end if;
-    end process;
+        end process;
 
-    signed_a <= not (funct3(1) and funct3(0));
-    signed_b <= not funct3(1);
+        alu_a <= (signed_a_q and product_q(63)) & product_q(63 downto 32);
+        alu_b <= (signed_a_q and multiplicand_q(31)) & multiplicand_q;
 
-    process (ready, b_i, alu_y, signed_a, product, start_i)
-    begin
-        if ready = '1' then
-            next_product(63 downto 32) <= (others => '0');
-            next_product(31 downto 0) <= b_i;
-            load_product <= start_i;
-        else
-            if product(0) = '1' then
-                next_product(63 downto 31) <= alu_y;
+        alu_y <=
+            std_logic_vector(unsigned(alu_a) - unsigned(alu_b)) when alu_op_q = '1' else
+            std_logic_vector(unsigned(alu_a) + unsigned(alu_b));
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                ready_q <= '1';
+            elsif rising_edge(clk_i) then
+                if enable_i = '1' or cnt_q(cnt_q'left) = '1' or flush_i = '1' then
+                    ready_q <= flush_i or cnt_q(cnt_q'left);
+                end if;
+            end if;
+        end process;
+
+        process (ready_q, rs2_dat_i, alu_y, signed_a_q, product_q, enable_i)
+        begin
+            if ready_q = '1' then
+                product(63 downto 32) <= (others => '0');
+                product(31 downto 0) <= rs2_dat_i;
+                load_product <= enable_i;
             else
-                next_product(63 downto 31) <= (signed_a and product(63)) & product(63 downto 32);
+                if product_q(0) = '1' then
+                    product(63 downto 31) <= alu_y;
+                else
+                    product(63 downto 31) <= (signed_a_q and product_q(63)) & product_q(63 downto 32);
+                end if;
+                product(30 downto 0) <= product_q(31 downto 1);
+                load_product <= '1';
             end if;
-            next_product(30 downto 0) <= product(31 downto 1);
-            load_product <= '1';
-        end if;
-    end process;
+        end process;
 
-    process (a_i, ready)
+        process (rs1_dat_i, ready_q)
+        begin
+            multiplicand <= rs1_dat_i;
+            load_multiplicand <= ready_q;
+        end process;
+
+        cnt <= cnt_q + 1;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if load_multiplicand = '1' then
+                    multiplicand_q <= multiplicand;
+                end if;
+                if load_product = '1' then
+                    product_q <= product;
+                end if;
+                if ready_q = '1' then
+                    cnt_q <= to_unsigned(1, cnt_q'length);
+                else
+                    cnt_q <= cnt;
+                end if;
+                alu_op_q <= cnt(cnt'left) and signed_b_q;
+            end if;
+        end process;
+        result_o <= product_q;
+    end generate gen_iter;
+
+    gen_dsp: if G_FAST_MUL = TRUE generate
+        signal ex_q, mem_q : std_logic;
+        signal rs1_dat_q, rs2_dat_q : signed(32 downto 0);
+        signal product : signed(65 downto 0);
+        signal product_q, d_product_q : std_logic_vector(63 downto 0);
     begin
-        next_multiplicand <= a_i;
-        load_multiplicand <= ready;
-    end process;
-
-    process (ready, cnt)
-    begin
-        if ready = '1' then
-            next_cnt <= to_unsigned(1, next_cnt'length);
-        else
-            next_cnt <= cnt + 1;
-        end if;
-    end process;
-
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if load_multiplicand = '1' then
-                multiplicand <= next_multiplicand;
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                ready_q <= '1';
+            elsif rising_edge(clk_i) then
+                if enable_i = '1' or flush_i = '1' or mem_q = '1' then
+                    ready_q <= flush_i or mem_q;
+                end if;
             end if;
-            if load_product = '1' then
-                product <= next_product;
-            end if;
-            if ready = '1' and start_i = '1' then
-                funct3 <= funct3_i(1 downto 0);
-            end if;
-            cnt <= next_cnt;
-            alu_op <= next_cnt(cnt'left) and signed_b;
-        end if;
-    end process;
+        end process;
 
-    res_o <= 
-        product(31 downto 0) when funct3(1 downto 0) = "00" else
-        product(63 downto 32);
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if enable_i = '1' or flush_i = '1' or ex_q = '1' then
+                    ex_q <= not (flush_i or ex_q);
+                end if;
+                if ex_q = '1' or mem_q = '1' or flush_i = '1' then
+                    mem_q <= ex_q and not (flush_i or mem_q);
+                end if;
+            end if;
+        end process;
 
-    ready_o <= ready;
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if ready_q = '1' and enable_i = '1' then
+                    rs1_dat_q <= (signed_a and rs1_dat_i(rs1_dat_i'left)) & signed(rs1_dat_i);
+                    rs2_dat_q <= (signed_b and rs2_dat_i(rs2_dat_i'left)) & signed(rs2_dat_i);
+                end if;
+            end if;
+        end process;
+
+        product <= rs1_dat_q * rs2_dat_q;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                product_q <= std_logic_vector(product(63 downto 0));
+                d_product_q <= product_q;
+            end if;
+        end process;
+
+        result_o <= d_product_q;
+
+    end generate gen_dsp;
+
+    ready_o <= ready_q;
 
 end architecture rtl;

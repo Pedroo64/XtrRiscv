@@ -42,12 +42,14 @@ RTL_DIR       = $(ROOT_DIR)/rtl
 FLI_DIR       = $(ROOT_DIR)/rtl/testbenches/src/fli/build
 
 VHDL_SOURCES += $(RTL_DIR)/utils/vhdl_utils.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/utils/cpu_fifo.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/rv32i_pkg.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/csr_def.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/cpu_checker.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/c_extension/decompressor.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/c_extension/instruction_aligner.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/mul.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/div.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/muldiv.vhd

@@ -144,7 +144,7 @@ begin
                 end case;
                 rs1_adr <= "01" & ci(9 downto 7);
                 rs2_adr <= "01" & ci(4 downto 2);
-                illegal <= ci(12);
+                if ci(12 downto 10) = "111" then illegal <= '1'; end if;
             when "01101" => -- C.J
                 instr(31) <= ci(12); -- imm 20
                 instr(30) <= ci(8); -- imm 10
@@ -248,7 +248,7 @@ begin
         end case;
     end process;
 
-    instr_o <= instr(31 downto 16) & ci when illegal = '1' and G_CATCH_ILLEGAL = TRUE else instr;
+    instr_o <= (31 downto 16 => '0') & ci when illegal = '1' and G_CATCH_ILLEGAL = TRUE else instr;
     rs1_adr_o <= rs1_adr;
     rs2_adr_o <= rs2_adr;
 

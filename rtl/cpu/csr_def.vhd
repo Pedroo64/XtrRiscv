@@ -71,6 +71,17 @@ package csr_def is
     constant CSR_MCAUSE_HYPERVISOR_ECALL                : std_logic_vector(31 downto 0) := x"0000000A";
     constant CSR_MCAUSE_MACHINE_ECALL                   : std_logic_vector(31 downto 0) := x"0000000B";
 
+type csr_mstatus_t is record
+    mie : std_logic;
+    mpie : std_logic;
+    mpp : std_logic_vector(1 downto 0);
+end record;
+
+type csr_mie_t is record
+    meie : std_logic;
+    mtie : std_logic;
+end record;
+
 type csr_registers_t is record
     mscratch : std_logic_vector(31 downto 0);
     mstatus : std_logic_vector(31 downto 0);

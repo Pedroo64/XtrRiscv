@@ -13,6 +13,7 @@ package vhdl_utils is
     procedure vhdl_assert(cond : in std_logic; message : in string; sev_level : in severity_level := FAILURE);
 
     function to_hex_str(slv : std_logic_vector) return string;
+    function bool_to_sl(v : boolean) return std_logic;
 end package;
 
 package body vhdl_utils is
@@ -81,6 +82,11 @@ package body vhdl_utils is
             i := i + 4;
         end loop;
         return s;
+    end function;
+
+    function bool_to_sl (v : boolean) return std_logic is
+    begin
+        if v then return '1'; else return '0'; end if;
     end function;
 
 end package body vhdl_utils;
