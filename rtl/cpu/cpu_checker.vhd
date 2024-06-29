@@ -490,7 +490,7 @@ begin
     mem_cmd_adr <= execute_mem_adr;
     -- TODO
 --    mem_cmd_vld <= '1' when execute_valid = '1' and fetch_load_pc_i = '0' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) else '0';
-    mem_cmd_vld <= '1' when execute_valid = '1' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) else '0';
+    mem_cmd_vld <= '1' when execute_valid = '1' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) and fetch_load_pc_i = '0' else '0';
     mem_cmd_we  <= '1' when execute_opcode = RV32I_OP_STORE else '0';
     mem_rsp_vld <= '1' when writeback_valid = '1' and writeback_opcode = RV32I_OP_LOAD else '0';
     process (execute_funct3, execute_mem_dat)
