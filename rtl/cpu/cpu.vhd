@@ -75,9 +75,9 @@ architecture rtl of cpu is
     signal decode_alu_a_op : alu_a_op_t;
     signal decode_alu_a_res_sel : std_logic;
     signal decode_alu_b_src1, decode_alu_b_src2 : std_logic_vector(31 downto 0);
-    signal decode_lsu_load, decode_lsu_store : std_logic;
+    signal decode_lsu_valid, decode_lsu_load, decode_lsu_store : std_logic;
     -- execute
-    signal execute_enable, execute_flush, execute_valid_q, execute_rd_we_q, execute_load_q, execute_store_q: std_logic;
+    signal execute_enable, execute_flush, execute_valid_q, execute_rd_we_q, execute_lsu_valid_q, execute_load_q, execute_store_q: std_logic;
     signal execute_rd_adr_q : std_logic_vector(4 downto 0);
     signal execute_funct3_q : std_logic_vector(2 downto 0);
     signal execute_funct7_q : std_logic_vector(6 downto 0);
@@ -93,7 +93,7 @@ architecture rtl of cpu is
     signal memory_rd_adr_q : std_logic_vector(4 downto 0);
     signal memory_alu_a_res_q, memory_alu_b_res_q : std_logic_vector(31 downto 0);
     signal memory_branch_q, memory_load_q : std_logic;
-    signal memory_mem_dat_q, memory_mem_dat : std_logic_vector(31 downto 0);
+    signal memory_mem_dat : std_logic_vector(31 downto 0);
     -- writeback
     signal writeback_enable, writeback_flush, writeback_valid_q, writeback_rd_we_q : std_logic;
     signal writeback_funct3_q : std_logic_vector(2 downto 0);
@@ -265,14 +265,15 @@ begin
         decode_lsu_load <= '0';
         decode_lsu_store <= '0';
         decode_alu_a_res_sel <= '0';
+        decode_lsu_valid <= '0';
         case decode_opcode is
             when RV32I_OP_LUI     =>
             when RV32I_OP_AUIPC   =>
             when RV32I_OP_JAL     => decode_jump <= '1';
             when RV32I_OP_JALR    => decode_jump <= '1';
             when RV32I_OP_BRANCH  => decode_branch <= '1';
-            when RV32I_OP_LOAD    => decode_lsu_load <= '1';
-            when RV32I_OP_STORE   => decode_lsu_store <= '1';
+            when RV32I_OP_LOAD    => decode_lsu_load <= '1'; decode_lsu_valid <= '1';
+            when RV32I_OP_STORE   => decode_lsu_store <= '1'; decode_lsu_valid <= '1';
             when RV32I_OP_REG_IMM => if decode_funct3 = "001" or decode_funct3 = "101" then decode_alu_a_res_sel <= '1'; end if;
             when RV32I_OP_REG_REG => if decode_funct3 = "001" or decode_funct3 = "101" then decode_alu_a_res_sel <= '1'; end if;
             when RV32I_OP_FENCE   =>
@@ -342,14 +343,12 @@ begin
         if arst_i = '1' then
             execute_valid_q <= '0';
             execute_rd_we_q <= '0';
-            execute_jump_q <= '0';
-            execute_branch_q <= '0';
+            execute_lsu_valid_q <= '0';
         elsif rising_edge(clk_i) then
             if execute_enable = '1' then
                 execute_valid_q <= decode_valid_q and not execute_flush;
                 execute_rd_we_q <= decode_valid_q and decode_rd_we and not decode_rd_is_zero and not execute_flush;
-                execute_jump_q <= decode_jump and decode_valid_q and not execute_flush;
-                execute_branch_q <= decode_branch and decode_valid_q and not execute_flush;
+                execute_lsu_valid_q <= decode_valid_q and decode_lsu_valid and not execute_flush;
             end if;
         end if;
     end process;
@@ -367,6 +366,10 @@ begin
                 execute_alu_b_src2_q <= decode_alu_b_src2;
                 execute_funct3_q <= decode_funct3;
                 execute_funct7_q <= decode_funct7;
+                execute_jump_q <= decode_jump;
+                execute_branch_q <= decode_branch;
+                execute_load_q  <= decode_lsu_load;
+                execute_store_q <= decode_lsu_store;
             end if;
         end if;
     end process;
@@ -432,23 +435,8 @@ begin
         end case;
     end process;
 
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
 
-        elsif rising_edge(clk_i) then
-            if execute_enable = '1' then
-                execute_load_q  <= decode_valid_q and decode_lsu_load and not execute_flush;
-                execute_store_q <= decode_valid_q and decode_lsu_store and not execute_flush;
-            elsif memory_enable = '1' then
-                execute_load_q <= '0';
-                execute_store_q <= '0';
-            end if;
-        end if;
-    end process;
-
-    -- data_cmd_vld_o <= (execute_load_q or execute_store_q) and not execute_flush and memory_enable;
-    data_cmd_vld <= (execute_load_q or execute_store_q) and memory_enable and not branch_load_pc;
+    data_cmd_vld <= execute_lsu_valid_q and memory_enable and not branch_load_pc;
     data_cmd_we  <= execute_store_q;
     data_cmd_siz <= execute_funct3_q(1 downto 0);
 
@@ -465,13 +453,11 @@ begin
             memory_valid_q <= '0';
             memory_rd_we_q <= '0';
             memory_branch_q <= '0';
-            memory_load_q <= '0';
         elsif rising_edge(clk_i) then
             if memory_enable = '1' then
                 memory_valid_q  <= execute_valid_q and not memory_flush;
                 memory_rd_we_q  <= execute_rd_we_q and not memory_flush;
-                memory_branch_q <= execute_branch and not memory_flush;
-                memory_load_q   <= execute_load_q and execute_valid_q and not memory_flush;
+                memory_branch_q <= execute_valid_q and execute_branch and not memory_flush;
             end if;
         end if;
     end process;
@@ -484,20 +470,12 @@ begin
                 memory_rd_adr_q <= execute_rd_adr_q;
                 memory_alu_a_res_q <= execute_alu_a_res;
                 memory_alu_b_res_q <= execute_alu_b_res;
+                memory_load_q <= execute_load_q;
             end if;
         end if;
     end process;
 
-    -- process (clk_i)
-    -- begin
-    --     if rising_edge(clk_i) then
-    --         if data_cmd_rdy_i = '1' then
-    --             memory_mem_dat_q <= data_rsp_dat_i;
-    --         end if;
-    --     end if;
-    -- end process;
-
-    memory_mem_dat <= data_rsp_dat_i;-- when data_rsp_vld_i = '1' else memory_mem_dat_q;
+    memory_mem_dat <= data_rsp_dat_i;
 
 -- Writeback stage
     process (clk_i, arst_i)
@@ -505,12 +483,10 @@ begin
         if arst_i = '1' then
             writeback_valid_q <= '0';
             writeback_rd_we_q <= '0';
-            writeback_load_q <= '0';
         elsif rising_edge(clk_i) then
             if writeback_enable = '1' then
                 writeback_valid_q <= memory_valid_q and not writeback_flush;
                 writeback_rd_we_q <= memory_rd_we_q and not writeback_flush;
-                writeback_load_q  <= memory_load_q  and not writeback_flush;
             end if;
         end if;
     end process;
@@ -524,6 +500,7 @@ begin
                 writeback_alu_a_res_q <= memory_alu_a_res_q;
                 writeback_mem_dat_q <= memory_mem_dat;
                 writeback_mem_adr_q <= memory_alu_b_res_q(1 downto 0);
+                writeback_load_q <= memory_load_q;
             end if;
         end if;
     end process;
@@ -647,10 +624,10 @@ begin
         '0';
     ctl_execute_stall <=
         '1' when ctl_memory_stall = '1' else
-        '1' when (execute_load_q = '1' or execute_store_q = '1') and data_cmd_rdy_i = '0' else
+        '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else -- j @; l/s @delayed_cmd
         '0';
     ctl_memory_stall <=
-        '1' when memory_load_q = '1' and data_rsp_vld_i = '0' else
+        '1' when memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' else
         '0';
     ctl_writeback_stall <= '0';
 
@@ -663,11 +640,11 @@ begin
         '0';
     memory_flush    <=
         '1' when srst_i = '1' or branch_load_pc = '1' else
-        '1' when (execute_load_q = '1' or execute_store_q = '1') and data_cmd_rdy_i = '0' else
+        '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else
         '0';
     writeback_flush <=
         '1' when srst_i = '1' else
-        '1' when memory_load_q = '1' and data_rsp_vld_i = '0' else
+        '1' when memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' else
         '0';
 
     fetch_enable     <= not ctl_fetch_stall;
