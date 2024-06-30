@@ -366,6 +366,7 @@ begin
                 execute_alu_b_src1_q <= decode_alu_b_src1;
                 execute_alu_b_src2_q <= decode_alu_b_src2;
                 execute_funct3_q <= decode_funct3;
+                execute_funct7_q <= decode_funct7;
             end if;
         end if;
     end process;
@@ -411,8 +412,8 @@ begin
             execute_shifter_res <= std_logic_vector(shift_left( unsigned(execute_alu_a_src1_q), to_integer(unsigned(execute_alu_a_src2_q(4 downto 0)))));
         elsif execute_funct3_q(2) = '1' and execute_funct7_q(5) = '0' then
             execute_shifter_res <= std_logic_vector(shift_right(unsigned(execute_alu_a_src1_q), to_integer(unsigned(execute_alu_a_src2_q(4 downto 0)))));
-        elsif execute_funct3_q(2) = '1' and execute_funct7_q(5) = '0' then
-            execute_shifter_res <= std_logic_vector(shift_right(  signed(execute_alu_a_src1_q), to_integer(  signed(execute_alu_a_src2_q(4 downto 0)))));
+        elsif execute_funct3_q(2) = '1' and execute_funct7_q(5) = '1' then
+            execute_shifter_res <= std_logic_vector(shift_right(  signed(execute_alu_a_src1_q), to_integer(unsigned(execute_alu_a_src2_q(4 downto 0)))));
         else
             execute_shifter_res <= (others => 'X');
         end if;
@@ -437,8 +438,8 @@ begin
 
         elsif rising_edge(clk_i) then
             if execute_enable = '1' then
-                execute_load_q  <= decode_valid_q and decode_lsu_load;
-                execute_store_q <= decode_valid_q and decode_lsu_store;
+                execute_load_q  <= decode_valid_q and decode_lsu_load and not execute_flush;
+                execute_store_q <= decode_valid_q and decode_lsu_store and not execute_flush;
             elsif memory_enable = '1' then
                 execute_load_q <= '0';
                 execute_store_q <= '0';
@@ -470,7 +471,7 @@ begin
                 memory_valid_q  <= execute_valid_q and not memory_flush;
                 memory_rd_we_q  <= execute_rd_we_q and not memory_flush;
                 memory_branch_q <= execute_branch and not memory_flush;
-                memory_load_q   <= execute_load_q and not memory_flush;
+                memory_load_q   <= execute_load_q and execute_valid_q and not memory_flush;
             end if;
         end if;
     end process;
@@ -487,16 +488,16 @@ begin
         end if;
     end process;
 
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if data_cmd_rdy_i = '1' then
-                memory_mem_dat_q <= data_rsp_dat_i;
-            end if;
-        end if;
-    end process;
+    -- process (clk_i)
+    -- begin
+    --     if rising_edge(clk_i) then
+    --         if data_cmd_rdy_i = '1' then
+    --             memory_mem_dat_q <= data_rsp_dat_i;
+    --         end if;
+    --     end if;
+    -- end process;
 
-    memory_mem_dat <= data_rsp_dat_i when data_rsp_vld_i = '1' else memory_mem_dat_q;
+    memory_mem_dat <= data_rsp_dat_i;-- when data_rsp_vld_i = '1' else memory_mem_dat_q;
 
 -- Writeback stage
     process (clk_i, arst_i)
@@ -533,17 +534,17 @@ begin
         case writeback_funct3_q(1 downto 0) is
             when RV32I_FN3_LB =>
                 case writeback_mem_adr_q is
-                    when "00" => writeback_mem_dat <= (31 downto 8 => writeback_funct3_q(2) and writeback_mem_dat_q(07)) & writeback_mem_dat_q(07 downto 00);
-                    when "01" => writeback_mem_dat <= (31 downto 8 => writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 08);
-                    when "10" => writeback_mem_dat <= (31 downto 8 => writeback_funct3_q(2) and writeback_mem_dat_q(23)) & writeback_mem_dat_q(23 downto 16);
-                    when "11" => writeback_mem_dat <= (31 downto 8 => writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 24);
+                    when "00" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(07)) & writeback_mem_dat_q(07 downto 00);
+                    when "01" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 08);
+                    when "10" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(23)) & writeback_mem_dat_q(23 downto 16);
+                    when "11" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 24);
                     when others =>
                 end case;
             when RV32I_FN3_LH =>
                 if writeback_mem_adr_q(1) = '0' then
-                    writeback_mem_dat <= (31 downto 16 => writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 00);
+                    writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 00);
                 else
-                    writeback_mem_dat <= (31 downto 16 => writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 16);
+                    writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 16);
                 end if;
             when RV32I_FN3_LW =>
                 writeback_mem_dat <= writeback_mem_dat_q;
@@ -677,7 +678,7 @@ begin
 
 
 -- cpu checker
-    gen_checkar: if G_VERIFICATION = TRUE generate
+    gen_verif: if G_VERIFICATION = TRUE generate
         signal execute_pc_q : std_logic_vector(31 downto 0);
     begin
         process (clk_i)
@@ -728,6 +729,6 @@ begin
                 regfile_rd_dat_i => regfile_rd_dat,
                 regfile_rd_adr_i => regfile_rd_adr
             );
-    end generate gen_checkar;
+    end generate gen_verif;
 
 end architecture rtl;
