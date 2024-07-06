@@ -581,23 +581,23 @@ begin
     ctl_decode_regfile_rs1_match   <= '1' when decode_rs1_adr = regfile_rd_adr_q else '0';
     ctl_decode_regfile_rs2_match   <= '1' when decode_rs2_adr = regfile_rd_adr_q else '0';
 
-    ctl_decode_execute_rs1_hazard   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs1_match = '1' and execute_load_q = '1' else '0';
-    ctl_decode_execute_rs2_hazard   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs2_match = '1' and execute_load_q = '1' else '0';
-    ctl_decode_memory_rs1_hazard    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs1_match = '1' and memory_load_q = '1' else '0';
-    ctl_decode_memory_rs2_hazard    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs2_match = '1' and memory_load_q = '1' else '0';
-    ctl_decode_writeback_rs1_hazard <= '0';-- when writeback_rd_we_q = '1' and ctl_decode_writeback_rs1_match = '1' and writeback_load_q = '1' else '0';
-    ctl_decode_writeback_rs2_hazard <= '0';-- when writeback_rd_we_q = '1' and ctl_decode_writeback_rs2_match = '1' and writeback_load_q = '1' else '0';
-    ctl_decode_regfile_rs1_hazard   <= '0';-- when regfile_rd_we_q = '1' and ctl_decode_regfile_rs1_match = '1' and regfile_load_q = '1' else '0';
-    ctl_decode_regfile_rs2_hazard   <= '0';-- when regfile_rd_we_q = '1' and ctl_decode_regfile_rs2_match = '1' and regfile_load_q = '1' else '0';
+    ctl_decode_execute_rs1_hazard   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs1_match = '1' and (execute_load_q = '1' or G_EXECUTE_BYPASS = FALSE) else '0';
+    ctl_decode_execute_rs2_hazard   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs2_match = '1' and (execute_load_q = '1' or G_EXECUTE_BYPASS = FALSE) else '0';
+    ctl_decode_memory_rs1_hazard    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs1_match = '1' and (memory_load_q = '1' or G_MEMORY_BYPASS = FALSE) else '0';
+    ctl_decode_memory_rs2_hazard    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs2_match = '1' and (memory_load_q = '1' or G_MEMORY_BYPASS = FALSE) else '0';
+    ctl_decode_writeback_rs1_hazard <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs1_match = '1' and G_WRITEBACK_BYPASS = FALSE else '0';
+    ctl_decode_writeback_rs2_hazard <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs2_match = '1' and G_WRITEBACK_BYPASS = FALSE else '0';
+    ctl_decode_regfile_rs1_hazard   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs1_match = '1' and G_REGFILE_BYPASS = FALSE else '0';
+    ctl_decode_regfile_rs2_hazard   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs2_match = '1' and G_REGFILE_BYPASS = FALSE else '0';
 
-    ctl_decode_execute_rs1_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs1_match = '1' else '0';
-    ctl_decode_execute_rs2_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs2_match = '1' else '0';
-    ctl_decode_memory_rs1_forward    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs1_match = '1' else '0';
-    ctl_decode_memory_rs2_forward    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs2_match = '1' else '0';
-    ctl_decode_writeback_rs1_forward <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs1_match = '1' else '0';
-    ctl_decode_writeback_rs2_forward <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs2_match = '1' else '0';
-    ctl_decode_regfile_rs1_forward   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs1_match = '1' else '0';
-    ctl_decode_regfile_rs2_forward   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs2_match = '1' else '0';
+    ctl_decode_execute_rs1_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs1_match = '1' and G_EXECUTE_BYPASS = TRUE else '0';
+    ctl_decode_execute_rs2_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs2_match = '1' and G_EXECUTE_BYPASS = TRUE else '0';
+    ctl_decode_memory_rs1_forward    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs1_match = '1' and G_MEMORY_BYPASS = TRUE else '0';
+    ctl_decode_memory_rs2_forward    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs2_match = '1' and G_MEMORY_BYPASS = TRUE else '0';
+    ctl_decode_writeback_rs1_forward <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs1_match = '1' and G_WRITEBACK_BYPASS = TRUE else '0';
+    ctl_decode_writeback_rs2_forward <= '1' when writeback_rd_we_q = '1' and ctl_decode_writeback_rs2_match = '1' and G_WRITEBACK_BYPASS = TRUE else '0';
+    ctl_decode_regfile_rs1_forward   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs1_match = '1' and G_REGFILE_BYPASS = TRUE else '0';
+    ctl_decode_regfile_rs2_forward   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs2_match = '1' and G_REGFILE_BYPASS = TRUE else '0';
 
     decode_rs1_dat <=
         execute_alu_a_res     when ctl_decode_execute_rs1_forward   = '1' else
