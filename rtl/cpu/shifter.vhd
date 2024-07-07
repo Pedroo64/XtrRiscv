@@ -36,19 +36,20 @@ begin
         signal norm : std_logic_vector(31 downto 0);
         signal op_q : std_logic_vector(1 downto 0);
         signal data_q : std_logic_vector(31 downto 0);
-        signal cnt, cnt_q : unsigned(5 downto 0);
+        signal cnt : unsigned(5 downto 0);
+        signal cnt_q : unsigned(4 downto 0);
     begin
 
-        cnt <= cnt_q - 1;
+        cnt <= ('0' & cnt_q) - 1;
         process (clk_i, arst_i)
         begin
             if arst_i = '1' then
                 cnt_q <= (others => '0');
             elsif rising_edge(clk_i) then
                 if valid_i = '1' then
-                    cnt_q <= '0' & unsigned(shmt_i);
+                    cnt_q <= unsigned(shmt_i);
                 elsif cnt(cnt'left) = '0' then
-                    cnt_q <= cnt;
+                    cnt_q <= cnt(4 downto 0);
                 end if;
             end if;
         end process;
@@ -61,7 +62,7 @@ begin
                 if valid_i = '1' then
                     data_q <= data_i;
                     op_q <= type_i;
-                elsif cnt_q(5) = '0' then
+                else
                     data_q <= data;
                 end if;
             end if;
