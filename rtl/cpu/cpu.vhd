@@ -4,6 +4,7 @@ use IEEE.numeric_std.all;
 
 use work.rv32i_pkg.all;
 use work.vhdl_utils.all;
+use work.csr_def.all;
 
 entity cpu is
     generic (
@@ -59,7 +60,7 @@ architecture rtl of cpu is
     signal fetch_enable, fetch_flush, fetch_pc_en, fetch_load_pc_en : std_logic;
     signal fetch_pc_q, fetch_nxt_pc, fetch_target_pc : std_logic_vector(31 downto 0);
     signal fetch_instr_dat_q, fetch_instr_dat : std_logic_vector(31 downto 0);
-    signal fetch_valid_q, fetch_valid : std_logic;
+    signal fetch_valid_q : std_logic;
     signal fetch_rs1_adr, fetch_rs2_adr : std_logic_vector(4 downto 0);
     -- decode
     signal decode_enable, decode_flush, decode_valid_q : std_logic;
@@ -67,7 +68,7 @@ architecture rtl of cpu is
     signal decode_opcode : std_logic_vector(6 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
-    signal decode_jump, decode_branch : std_logic;
+    signal decode_jump, decode_branch, decode_sys : std_logic;
     signal decode_rs1_en, decode_rs2_en, decode_rd_we, decode_rd_is_zero : std_logic;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
     signal decode_rs1_dat, decode_rs2_dat : std_logic_vector(31 downto 0);
@@ -79,17 +80,15 @@ architecture rtl of cpu is
     signal decode_cmp_signed : std_logic;
     signal decode_alu_b_src1, decode_alu_b_src2 : std_logic_vector(31 downto 0);
     signal decode_lsu_valid, decode_lsu_load, decode_lsu_store : std_logic;
-    signal decode_shifter_en : std_logic;
     -- execute
     signal execute_enable, execute_flush, execute_valid_q, execute_rd_we_q, execute_lsu_valid_q, execute_load_q, execute_store_q: std_logic;
     signal execute_rd_adr_q : std_logic_vector(4 downto 0);
     signal execute_funct3_q : std_logic_vector(2 downto 0);
     signal execute_funct7_q : std_logic_vector(6 downto 0);
-    signal execute_jump_q, execute_branch_q, execute_branch : std_logic;
+    signal execute_jump_q, execute_branch_q, execute_branch, execute_sys_q : std_logic;
     signal execute_alu_a_src1_q, execute_alu_a_src2_q, execute_alu_a_r, execute_alu_a_res : std_logic_vector(31 downto 0);
     signal execute_alu_a_op_q : std_logic_vector(1 downto 0);
     signal execute_alu_a_arith_q : std_logic;
-    signal execute_arith_q : std_logic;
     signal execute_alu_a_res_sel_q : std_logic_vector(2 downto 0);
     signal execute_alu_b_src1_q, execute_alu_b_src2_q, execute_alu_b_res : std_logic_vector(31 downto 0);
     signal execute_shifter_res : std_logic_vector(31 downto 0);
@@ -99,8 +98,8 @@ architecture rtl of cpu is
     signal memory_enable, memory_flush, memory_valid_q, memory_rd_we_q : std_logic;
     signal memory_funct3_q : std_logic_vector(2 downto 0);
     signal memory_rd_adr_q : std_logic_vector(4 downto 0);
-    signal memory_alu_a_res_q, memory_alu_b_res_q : std_logic_vector(31 downto 0);
-    signal memory_branch_q, memory_load_q : std_logic;
+    signal memory_alu_a_res_q, memory_alu_b_res_q, memory_alu_a_res : std_logic_vector(31 downto 0);
+    signal memory_branch_q, memory_load_q, memory_sys_q : std_logic;
     signal memory_mem_dat : std_logic_vector(31 downto 0);
     -- writeback
     signal writeback_enable, writeback_flush, writeback_valid_q, writeback_rd_we_q : std_logic;
@@ -121,6 +120,7 @@ architecture rtl of cpu is
     signal ctl_decode_rs1_hazard, ctl_decode_rs2_hazard : std_logic;
     signal ctl_decode_execute_rs1_forward, ctl_decode_memory_rs1_forward, ctl_decode_writeback_rs1_forward, ctl_decode_regfile_rs1_forward : std_logic;
     signal ctl_decode_execute_rs2_forward, ctl_decode_memory_rs2_forward, ctl_decode_writeback_rs2_forward, ctl_decode_regfile_rs2_forward : std_logic;
+    signal ctl_decode_execute_csr_hazard : std_logic;
     -- regfile
     signal regfile_rs1_en, regfile_rs2_en, regfile_rd_we, regfile_rd_we_q : std_logic;
     signal regfile_rs1_adr, regfile_rs2_adr, regfile_rd_adr, regfile_rd_adr_q : std_logic_vector(4 downto 0);
@@ -129,6 +129,10 @@ architecture rtl of cpu is
     signal data_cmd_adr, data_cmd_dat : std_logic_vector(31 downto 0);
     signal data_cmd_vld, data_cmd_we : std_logic;
     signal data_cmd_siz : std_logic_vector(1 downto 0);
+    -- csr
+    signal csr_load_pc : std_logic;
+    signal csr_target_pc : std_logic_vector(31 downto 0);
+    signal csr_read_data : std_logic_vector(31 downto 0);
 begin
 
 -- Fetch stage
@@ -203,17 +207,23 @@ begin
         if rising_edge(clk_i) then
             if decode_enable = '1' then
                 decode_instr_dat_q <= fetch_instr_dat;
-                decode_pc_q <= decode_nxt_pc;
+                if branch_load_pc = '1' then
+                    decode_pc_q <= branch_target_pc;
+                else
+                    decode_pc_q <= decode_nxt_pc;
+                end if;
             end if;
         end if;
     end process;
 
     decode_pc_incr <= std_logic_vector(to_unsigned(4, decode_pc_incr'length));
 
-    decode_nxt_pc <=
-        branch_target_pc when branch_load_pc = '1' else
-        std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr)) when decode_valid_q = '1' else
-        decode_pc_q;
+    decode_nxt_pc  <= std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr and (31 downto 0 => decode_valid_q)));
+
+    -- decode_nxt_pc <=
+    --     branch_target_pc when branch_load_pc = '1' else
+    --     std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr)) when decode_valid_q = '1' else
+    --     decode_pc_q;
 
     decode_opcode <= decode_instr_dat_q(06 downto 02) & "11";
     decode_funct3 <= decode_instr_dat_q(14 downto 12);
@@ -273,8 +283,8 @@ begin
         decode_branch <= '0';
         decode_lsu_load <= '0';
         decode_lsu_store <= '0';
-        -- decode_alu_a_res_sel <= '0';
         decode_lsu_valid <= '0';
+        decode_sys <= '0';
         case decode_opcode is
             when RV32I_OP_LUI     =>
             when RV32I_OP_AUIPC   =>
@@ -283,58 +293,13 @@ begin
             when RV32I_OP_BRANCH  => decode_branch <= '1';
             when RV32I_OP_LOAD    => decode_lsu_load <= '1'; decode_lsu_valid <= '1';
             when RV32I_OP_STORE   => decode_lsu_store <= '1'; decode_lsu_valid <= '1';
-            when RV32I_OP_REG_IMM => -- if decode_funct3 = "001" or decode_funct3 = "101" then decode_alu_a_res_sel <= '1'; end if;
-            when RV32I_OP_REG_REG => -- if decode_funct3 = "001" or decode_funct3 = "101" then decode_alu_a_res_sel <= '1'; end if;
+            when RV32I_OP_REG_IMM =>
+            when RV32I_OP_REG_REG =>
             when RV32I_OP_FENCE   =>
-            when RV32I_OP_SYS     =>
+            when RV32I_OP_SYS     => if G_EXTENSION_ZICSR = TRUE then decode_sys <= '1'; end if;
             when others =>
         end case;
     end process;
-
-    -- process (decode_opcode, decode_funct3, decode_funct7)
-    -- begin
-    --     decode_alu_a_res_sel <= "00";
-    --     decode_cmp_signed <= '1';
-    --     decode_alu_a_op <= ALU_OP_ADD;
-    --     decode_shifter_en <= '0';
-    --     case decode_opcode is
-    --         when RV32I_OP_LUI    =>
-    --         when RV32I_OP_AUIPC  =>
-    --         when RV32I_OP_JAL    =>
-    --         when RV32I_OP_JALR   =>
-    --         when RV32I_OP_BRANCH =>
-    --             case decode_funct3 is
-    --                 when RV32I_FN3_BLTU => decode_cmp_signed <= '0';
-    --                 when RV32I_FN3_BGEU => decode_cmp_signed <= '0';
-    --                 when others =>
-    --             end case;
-    --         when RV32I_OP_REG_IMM =>
-    --             case decode_funct3 is
-    --                 when RV32I_FN3_ADD  =>
-    --                 when RV32I_FN3_SL   => decode_alu_a_op <= ALU_OP_SL; decode_shifter_en <= '1';
-    --                 when RV32I_FN3_SLT  => decode_alu_a_op <= ALU_OP_SLT;
-    --                 when RV32I_FN3_SLTU => decode_alu_a_op <= ALU_OP_SLT; decode_cmp_signed <= '0';
-    --                 when RV32I_FN3_XOR  => decode_alu_a_op <= ALU_OP_XOR;
-    --                 when RV32I_FN3_SR   => decode_alu_a_op <= ALU_OP_SR;
-    --                 when RV32I_FN3_OR   => decode_alu_a_op <= ALU_OP_OR;
-    --                 when RV32I_FN3_AND  => decode_alu_a_op <= ALU_OP_AND;
-    --                 when others =>
-    --             end case;
-    --         when RV32I_OP_REG_REG =>
-    --             case decode_funct3 is
-    --                 when RV32I_FN3_ADD  => if decode_funct7(5) = '1' then decode_alu_a_op <= ALU_OP_SUB; end if;
-    --                 when RV32I_FN3_SL   => decode_alu_a_op <= ALU_OP_SL;
-    --                 when RV32I_FN3_SLT  => decode_alu_a_op <= ALU_OP_SLT;
-    --                 when RV32I_FN3_SLTU => decode_alu_a_op <= ALU_OP_SLT; decode_cmp_signed <= '0';
-    --                 when RV32I_FN3_XOR  => decode_alu_a_op <= ALU_OP_XOR;
-    --                 when RV32I_FN3_SR   => decode_alu_a_op <= ALU_OP_SR; decode_shifter_en <= '1';
-    --                 when RV32I_FN3_OR   => decode_alu_a_op <= ALU_OP_OR;
-    --                 when RV32I_FN3_AND  => decode_alu_a_op <= ALU_OP_AND;
-    --                 when others =>
-    --             end case;
-    --         when others =>
-    --     end case;
-    -- end process;
 
     process (decode_opcode, decode_funct3, decode_funct7)
     begin
@@ -397,7 +362,7 @@ begin
             when RV32I_OP_REG_IMM => decode_rs1_en <= '1'; decode_rs2_en <= '0'; decode_rd_we <= '1';
             when RV32I_OP_REG_REG => decode_rs1_en <= '1'; decode_rs2_en <= '1'; decode_rd_we <= '1';
             when RV32I_OP_FENCE   => decode_rs1_en <= '0'; decode_rs2_en <= '0'; decode_rd_we <= '1';
-            when RV32I_OP_SYS     => decode_rs1_en <= '1'; decode_rs2_en <= '0'; decode_rd_we <= '1';
+            when RV32I_OP_SYS     => if G_EXTENSION_ZICSR = TRUE then decode_rs1_en <= '1'; decode_rs2_en <= '0'; decode_rd_we <= '1'; end if;
             when others =>
         end case;
     end process;
@@ -439,6 +404,7 @@ begin
                 execute_load_q  <= decode_lsu_load;
                 execute_store_q <= decode_lsu_store;
                 execute_cmp_signed_q <= decode_cmp_signed;
+                execute_sys_q <= decode_sys;
             end if;
         end if;
     end process;
@@ -475,13 +441,10 @@ begin
         signal shifter_type : std_logic_vector(1 downto 0);
         signal shifter_data : std_logic_vector(31 downto 0);
     begin
-        -- shifter_shmt <= execute_alu_a_src2_q(4 downto 0);
-        -- shifter_type <= execute_funct3_q(2) & execute_funct7_q(5);
         gen_simple_shifter: if G_FULL_BARREL_SHIFTER = FALSE generate
             shifter_shmt <= decode_rs2_dat(4 downto 0) when decode_opcode(5) = '1' else decode_imm_i(4 downto 0);
-            -- shifter_shmt <= decode_alu_a_src2(4 downto 0);
             shifter_type <= decode_funct3(2) & decode_funct7(5);
-            shifter_vld  <= execute_enable and decode_valid_q;
+            shifter_vld  <= execute_enable and decode_valid_q and decode_alu_a_res_sel(2);
             shifter_data <= decode_rs1_dat;
         end generate gen_simple_shifter;
         gen_full_barrel_shifter: if G_FULL_BARREL_SHIFTER = TRUE generate
@@ -583,9 +546,15 @@ begin
                 memory_alu_a_res_q <= execute_alu_a_res;
                 memory_alu_b_res_q <= execute_alu_b_res;
                 memory_load_q <= execute_load_q;
+                memory_sys_q <= execute_sys_q;
             end if;
         end if;
     end process;
+
+    memory_alu_a_res <=
+        csr_read_data      when memory_rd_we_q = '1' and memory_sys_q = '1' else
+        memory_alu_a_res_q when memory_rd_we_q = '1' and memory_sys_q = '0' else
+        (others => '-');
 
     memory_mem_dat <= data_rsp_dat_i when memory_load_q = '1' else (others => '-');
 
@@ -609,7 +578,7 @@ begin
             if writeback_enable = '1' then
                 writeback_rd_adr_q <= memory_rd_adr_q;
                 writeback_funct3_q <= memory_funct3_q;
-                writeback_alu_a_res_q <= memory_alu_a_res_q;
+                writeback_alu_a_res_q <= memory_alu_a_res;
                 writeback_mem_dat_q <= memory_mem_dat;
                 writeback_mem_adr_q <= memory_alu_b_res_q(1 downto 0);
                 writeback_load_q <= memory_load_q;
@@ -618,55 +587,34 @@ begin
     end process;
 
     process (writeback_funct3_q, writeback_mem_adr_q, writeback_mem_dat_q)
-        variable writeback_mem_dat8  : std_logic_vector(7 downto 0);
-        variable writeback_mem_dat16 : std_logic_vector(15 downto 0);
+        variable writeback_mem_dat_var : std_logic_vector(31 downto 0);
     begin
-        writeback_mem_dat8  := (others => '-');
-        writeback_mem_dat16 := (others => '-');
+        writeback_mem_dat_var := writeback_mem_dat_q;
         case writeback_mem_adr_q is
-            when "00" => writeback_mem_dat8 := writeback_mem_dat_q(07 downto 00); writeback_mem_dat16 := writeback_mem_dat_q(15 downto 00);
-            when "01" => writeback_mem_dat8 := writeback_mem_dat_q(15 downto 08); writeback_mem_dat16 := writeback_mem_dat_q(15 downto 00);
-            when "10" => writeback_mem_dat8 := writeback_mem_dat_q(23 downto 16); writeback_mem_dat16 := writeback_mem_dat_q(31 downto 16);
-            when "11" => writeback_mem_dat8 := writeback_mem_dat_q(31 downto 24); writeback_mem_dat16 := writeback_mem_dat_q(31 downto 16);
+            when "01" => writeback_mem_dat_var(07 downto 0) := writeback_mem_dat_q(15 downto 8);
+            when "10" => writeback_mem_dat_var(15 downto 0) := writeback_mem_dat_q(31 downto 16);
+            when "11" => writeback_mem_dat_var(07 downto 0) := writeback_mem_dat_q(31 downto 24);
             when others =>
         end case;
         writeback_mem_dat <= (others => '-');
         case writeback_funct3_q(1 downto 0) is
-            when RV32I_FN3_LB => writeback_mem_dat <= (31 downto 8  => not writeback_funct3_q(2) and writeback_mem_dat8(7)) & writeback_mem_dat8;
-            when RV32I_FN3_LH => writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat16(15)) & writeback_mem_dat16;
-            when RV32I_FN3_LW => writeback_mem_dat <= writeback_mem_dat_q;
+            when RV32I_FN3_LB => writeback_mem_dat <= (31 downto 8  => not writeback_funct3_q(2) and writeback_mem_dat_var(07)) & writeback_mem_dat_var(07 downto 0);
+            when RV32I_FN3_LH => writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat_var(15)) & writeback_mem_dat_var(15 downto 0);
+            when RV32I_FN3_LW => writeback_mem_dat <= writeback_mem_dat_var;
             when others =>
         end case;
-        -- case writeback_funct3_q(1 downto 0) is
-        --     when RV32I_FN3_LB =>
-        --         case writeback_mem_adr_q is
-        --             when "00" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(07)) & writeback_mem_dat_q(07 downto 00);
-        --             when "01" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 08);
-        --             when "10" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(23)) & writeback_mem_dat_q(23 downto 16);
-        --             when "11" => writeback_mem_dat <= (31 downto 8 => not writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 24);
-        --             when others =>
-        --         end case;
-        --     when RV32I_FN3_LH =>
-        --         if writeback_mem_adr_q(1) = '0' then
-        --             writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat_q(15)) & writeback_mem_dat_q(15 downto 00);
-        --         else
-        --             writeback_mem_dat <= (31 downto 16 => not writeback_funct3_q(2) and writeback_mem_dat_q(31)) & writeback_mem_dat_q(31 downto 16);
-        --         end if;
-        --     when RV32I_FN3_LW =>
-        --         writeback_mem_dat <= writeback_mem_dat_q;
-        --     when others =>
-        -- end case;
     end process;
 
-    writeback_rd_dat <=-- writeback_mem_dat when writeback_load_q = '1' else writeback_alu_a_res_q;
+    writeback_rd_dat <=
         writeback_mem_dat when writeback_rd_we_q = '1' and writeback_load_q = '1' else
         writeback_alu_a_res_q when writeback_rd_we_q = '1' and writeback_load_q = '0' else
         (others => '-');
 
 -- Branch
-    branch_load_pc   <= memory_branch_q or not booted_q;
+    branch_load_pc   <= memory_branch_q or csr_load_pc or not booted_q;
     branch_target_pc <=
         G_BOOT_ADDRESS when booted_q = '0' else
+        csr_target_pc when csr_load_pc = '1' else
         memory_alu_b_res_q when memory_branch_q = '1' else
         (others => '-');
 
@@ -723,6 +671,8 @@ begin
     ctl_decode_regfile_rs1_hazard   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs1_match = '1' and G_REGFILE_BYPASS = FALSE else '0';
     ctl_decode_regfile_rs2_hazard   <= '1' when regfile_rd_we_q = '1' and ctl_decode_regfile_rs2_match = '1' and G_REGFILE_BYPASS = FALSE else '0';
 
+    ctl_decode_execute_csr_hazard    <= execute_valid_q and execute_sys_q;
+
     ctl_decode_execute_rs1_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs1_match = '1' and G_EXECUTE_BYPASS = TRUE else '0';
     ctl_decode_execute_rs2_forward   <= '1' when execute_rd_we_q = '1' and ctl_decode_execute_rs2_match = '1' and G_EXECUTE_BYPASS = TRUE else '0';
     ctl_decode_memory_rs1_forward    <= '1' when memory_rd_we_q = '1' and ctl_decode_memory_rs1_match = '1' and G_MEMORY_BYPASS = TRUE else '0';
@@ -756,8 +706,7 @@ begin
     ctl_decode_stall <=
         '1' when ctl_execute_stall = '1' else
         '1' when branch_load_pc = '0' and (ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1') else
-        -- '1' when decode_rs1_en = '1' and ((branch_load_pc = '0' and ctl_decode_execute_rs1_hazard = '1') or ctl_decode_memory_rs1_hazard = '1' or ctl_decode_writeback_rs1_hazard = '1' or ctl_decode_regfile_rs1_hazard = '1') else
-        -- '1' when decode_rs2_en = '1' and ((branch_load_pc = '0' and ctl_decode_execute_rs2_hazard = '1') or ctl_decode_memory_rs2_hazard = '1' or ctl_decode_writeback_rs2_hazard = '1' or ctl_decode_regfile_rs2_hazard = '1') else
+        '1' when ctl_decode_execute_csr_hazard = '1' else
         '0';
     ctl_execute_stall <=
         '1' when ctl_memory_stall = '1' else
@@ -770,47 +719,12 @@ begin
         '0';
     ctl_writeback_stall <= '0';
 
-    -- ctl_decode_stall  <= ctl_execute_stall or (not branch_load_pc and (ctl_decode_rs1_hazard or ctl_decode_rs2_hazard));
-    -- ctl_execute_stall <= ctl_memory_stall or not execute_shifter_rdy or (not branch_load_pc and execute_lsu_valid_q and not data_cmd_rdy_i);
-    -- ctl_memory_stall  <= memory_rd_we_q and memory_load_q and not data_rsp_vld_i;
-    
-    -- process (ctl_execute_stall, branch_load_pc, ctl_decode_rs1_hazard, ctl_decode_rs2_hazard)
-    -- begin
-    --     ctl_decode_stall <= '0';
-    --     if ctl_execute_stall = '1' then
-    --         ctl_decode_stall <= '1';
-    --     elsif branch_load_pc = '0' and (ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1') then
-    --         ctl_decode_stall <= '1';
-    --     end if;
-    -- end process;
-
-    -- process (ctl_memory_stall, execute_shifter_rdy, branch_load_pc, execute_lsu_valid_q, data_cmd_rdy_i)
-    -- begin
-    --     ctl_execute_stall <= '0';
-    --     if ctl_memory_stall = '1' then
-    --         ctl_execute_stall <= '1';
-    --     elsif execute_shifter_rdy = '0' then
-    --         ctl_execute_stall <= '1';
-    --     elsif branch_load_pc = '0' and execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' then
-    --         ctl_execute_stall <= '1';
-    --     end if;
-    -- end process;
-
-    -- process (memory_rd_we_q, memory_load_q, data_rsp_vld_i)
-    -- begin
-    --     ctl_memory_stall <= '0';
-    --     if memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' then
-    --         ctl_memory_stall <= '1';
-    --     end if;
-    -- end process;
-
     fetch_flush     <= srst_i or branch_load_pc;
     decode_flush    <= srst_i or branch_load_pc;
     execute_flush   <=
         '1' when srst_i = '1' or branch_load_pc = '1' else
         '1' when ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1' else
-        -- '1' when decode_rs1_en = '1' and (ctl_decode_execute_rs1_hazard = '1' or ctl_decode_memory_rs1_hazard = '1' or ctl_decode_writeback_rs1_hazard = '1' or ctl_decode_regfile_rs1_hazard = '1') else
-        -- '1' when decode_rs2_en = '1' and (ctl_decode_execute_rs2_hazard = '1' or ctl_decode_memory_rs2_hazard = '1' or ctl_decode_writeback_rs2_hazard = '1' or ctl_decode_regfile_rs2_hazard = '1') else
+        '1' when ctl_decode_execute_csr_hazard = '1' else
         '0';
     memory_flush    <=
         '1' when srst_i = '1' or branch_load_pc = '1' else
@@ -826,6 +740,245 @@ begin
     execute_enable   <= not ctl_execute_stall;
     memory_enable    <= not ctl_memory_stall;
     writeback_enable <= not ctl_writeback_stall;
+
+-- csr
+    gen_csr: if G_EXTENSION_ZICSR = TRUE generate
+        signal decode_csr_en, execute_csr_en_q, memory_csr_en_q : std_logic;
+        signal csr_read_en, csr_write_en : std_logic;
+        signal csr_read_addr, csr_write_addr, csr_write_addr_q : std_logic_vector(11 downto 0);
+        signal csr_read_data_q, csr_write_data, csr_write_alu, csr_write_data_q, memory_csr_read_data_q : std_logic_vector(31 downto 0);
+        signal csr_q : csr_registers_t;
+        signal csr_mscratch_we, csr_mie_we, csr_mstatus_we, csr_mtvec_we, csr_mepc_we, csr_mcause_we : std_logic;
+        signal decode_ecall, decode_ebreak, decode_mret : std_logic;
+        signal execute_ecall_q, execute_ebreak_q, execute_mret_q : std_logic;
+        signal execute_pc_q, memory_pc_q : std_logic_vector(31 downto 0);
+        signal execute_zimm_q : std_logic_vector(4 downto 0);
+        signal execute_pc_valid_q : std_logic;
+        signal external_interrupt_q, timer_interrupt_q : std_logic;
+        signal external_interrupt_en, timer_interrupt_en : std_logic;
+        signal ebreak_q, ecall_q, mret_q : std_logic;
+        signal exception, interrupt, interrut_en : std_logic;
+        signal epc : std_logic_vector(31 downto 0);
+    begin
+        decode_ecall  <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_ECALL else '0';
+        decode_ebreak <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_EBREAK else '0';
+        decode_mret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_MRET else '0';
+        decode_csr_en <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 /= "000" else '0';
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if execute_enable = '1' then
+                    execute_ecall_q  <= decode_ecall;
+                    execute_ebreak_q <= decode_ebreak;
+                    execute_mret_q   <= decode_mret;
+                    execute_zimm_q   <= decode_rs1_adr;
+                    execute_pc_q     <= decode_pc_q;
+                    execute_csr_en_q <= decode_csr_en and decode_valid_q;
+                end if;
+                if memory_enable = '1' then
+                    memory_pc_q <= execute_pc_q;
+                    memory_csr_read_data_q <= csr_read_data_q;
+                end if;
+            end if;
+        end process;
+
+        interrut_en <= csr_q.mstatus(CSR_MSTATUS_MIE);
+        external_interrupt_en <= csr_q.mie(CSR_MIE_MEIE);
+        timer_interrupt_en <= csr_q.mie(CSR_MIE_MTIE);
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                external_interrupt_q <= external_irq_i and external_interrupt_en;
+                timer_interrupt_q    <= timer_irq_i and timer_interrupt_en;
+                execute_pc_valid_q   <= '1';
+                if memory_branch_q = '1' or mret_q = '1' then
+                    execute_pc_valid_q <= '0';
+                end if;
+            end if;
+        end process;
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                ecall_q  <= '0';
+                ebreak_q <= '0';
+                mret_q   <= '0';
+                memory_csr_en_q <= '0';
+            elsif rising_edge(clk_i) then
+                if memory_enable = '1' then
+                    ecall_q  <= execute_ecall_q and execute_valid_q and not memory_flush;
+                    ebreak_q <= execute_ebreak_q and execute_valid_q and not memory_flush;
+                    mret_q   <= execute_mret_q and execute_valid_q and not memory_flush;
+                    memory_csr_en_q <= execute_csr_en_q and execute_valid_q and not memory_flush;
+                end if;
+            end if;
+        end process;
+
+        interrupt <= (external_interrupt_q or timer_interrupt_q) and interrut_en and execute_pc_valid_q;
+        exception <= ecall_q or ebreak_q;
+
+        epc <=
+            memory_alu_b_res_q when interrupt = '1' and memory_branch_q = '1' else
+            execute_pc_q       when interrupt = '1' and memory_branch_q = '0' else
+            memory_pc_q        when interrupt = '0' and exception = '1' else
+            (others => '-');
+
+        csr_load_pc   <= interrupt or exception or mret_q;
+        csr_target_pc <=
+            csr_q.mtvec when     (interrupt = '1' or exception = '1') and mret_q = '0' else
+            csr_q.mepc  when not (interrupt = '1' or exception = '1') and mret_q = '1' else
+            (others => '-');
+
+        csr_read_en   <= execute_enable and decode_valid_q;
+        csr_read_addr <= decode_imm_i(11 downto 0);
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if csr_read_en = '1' then
+                    csr_read_data_q <= (others => '0');
+                    case csr_read_addr is
+                        when CSR_MSCRATCH =>
+                        when CSR_MIE      => csr_read_data_q <= csr_q.mie;
+                        when CSR_MSTATUS  => csr_read_data_q <= csr_q.mstatus;
+                        when CSR_MTVEC    => csr_read_data_q <= csr_q.mtvec;
+                        when CSR_MEPC     => csr_read_data_q <= csr_q.mepc;
+                        when CSR_MCAUSE   => csr_read_data_q <= csr_q.mcause;
+                        when CSR_MTVAL    => csr_read_data_q <= csr_q.mtval;
+                        when CSR_DCSR     =>
+                        when CSR_DPC      =>
+                        when CSR_DM_DATA0 =>
+                        when others       =>
+                    end case;
+                end if;
+            end if;
+        end process;
+
+        csr_read_data <= memory_csr_read_data_q;
+
+        process (execute_funct3_q, execute_alu_a_src1_q, csr_read_data_q, execute_zimm_q)
+            variable csr_alu_op_a, csr_alu_op_b : std_logic_vector(31 downto 0);
+        begin
+            csr_alu_op_a := execute_alu_a_src1_q;
+            csr_alu_op_b := csr_read_data_q;
+            if execute_funct3_q(2) = '1' then
+                csr_alu_op_a := (31 downto 5 => '0') & execute_zimm_q;
+            end if;
+            case execute_funct3_q(1 downto 0) is
+                when "10"   => csr_write_alu <= csr_alu_op_a or      csr_alu_op_b;
+                when "11"   => csr_write_alu <= csr_alu_op_a and not csr_alu_op_b;
+                when others => csr_write_alu <= csr_alu_op_a;
+            end case;
+        end process;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if memory_enable = '1' then
+                    csr_write_addr_q <= execute_alu_a_src2_q(11 downto 0);
+                    csr_write_data_q <= csr_write_alu;
+                end if;
+            end if;
+        end process;
+
+        csr_write_addr <= csr_write_addr_q;
+        csr_write_data <= csr_write_data_q;
+        csr_write_en   <= memory_csr_en_q;
+
+        process (csr_write_addr)
+        begin
+            csr_mscratch_we <= '0';
+            csr_mie_we      <= '0';
+            csr_mstatus_we  <= '0';
+            csr_mtvec_we    <= '0';
+            csr_mepc_we     <= '0';
+            csr_mcause_we   <= '0';
+            case csr_write_addr is
+                when CSR_MSCRATCH =>
+                when CSR_MIE      => csr_mie_we     <= '1';
+                when CSR_MSTATUS  => csr_mstatus_we <= '1';
+                when CSR_MTVEC    => csr_mtvec_we   <= '1';
+                when CSR_MEPC     => csr_mepc_we    <= '1';
+                when CSR_MCAUSE   => csr_mcause_we  <= '1';
+                when CSR_MTVAL    =>
+                when CSR_DCSR     =>
+                when CSR_DPC      =>
+                when CSR_DM_DATA0 =>
+                when others       =>
+            end case;
+        end process;
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                csr_q.mtvec <= (others => '0');
+                csr_q.mie <= (others => '0');
+            elsif rising_edge(clk_i) then
+                if csr_mtvec_we = '1' and csr_write_en = '1' then
+                    csr_q.mtvec <= csr_write_data;
+                end if;
+                if csr_mie_we = '1' and csr_write_en = '1' then
+                    csr_q.mie <= csr_write_data;
+                end if;
+            end if;
+        end process;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if exception = '1' and ecall_q = '1' then
+                    csr_q.mcause <= CSR_MCAUSE_MACHINE_ECALL;
+                elsif exception = '1' and ebreak_q = '1' then
+                    csr_q.mcause <= CSR_MCAUSE_BREAKPOINT;
+                elsif interrupt = '1' and external_interrupt_q = '1' then
+                    csr_q.mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
+                elsif interrupt = '1' and timer_interrupt_q = '1' then
+                    csr_q.mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
+                elsif csr_mcause_we = '1' and csr_write_en = '1' then
+                    csr_q.mcause <= csr_write_data;
+                end if;
+                if exception = '1' or interrupt = '1' then
+                    csr_q.mepc <= epc;
+                elsif csr_mepc_we = '1' and csr_write_en = '1' then
+                    csr_q.mepc <= csr_write_data;
+                end if;
+                if csr_mscratch_we = '1' and csr_write_en = '1' then
+                    csr_q.mscratch <= csr_write_data;
+                end if;
+            end if;
+        end process;
+
+        process (clk_i, arst_i)
+        begin
+            if arst_i = '1' then
+                csr_q.mstatus <= (31 downto 13 => '0') & "11" & (10 downto 0 => '0');
+            elsif rising_edge(clk_i) then
+                if (interrupt = '1' or exception = '1') and mret_q = '0' then
+                    csr_q.mstatus(7) <= csr_q.mstatus(3);
+                    -- mstatus.mie = 0
+                    csr_q.mstatus(3) <= '0';
+                    -- mstatus.mpp = current privilege mode
+                    csr_q.mstatus(12 downto 11) <= "11";
+                elsif not (interrupt = '1' or exception = '1') and mret_q = '1' then
+                    -- privilege set to mstatus.mpp
+                    -- mstatus.mie = mstatus.mpie
+                    csr_q.mstatus(3) <= csr_q.mstatus(7);
+                    csr_q.mstatus(7) <= '1';
+                    csr_q.mstatus(12 downto 11) <= "11";
+                elsif csr_mstatus_we = '1' and csr_write_en = '1' then
+                    csr_q.mstatus <= csr_write_data;
+                end if;
+            end if;
+        end process;
+
+    end generate gen_csr;
+
+    gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
+        csr_read_data <= (others => '-');
+        csr_load_pc   <= '0';
+        csr_target_pc <= (others => '-');
+    end generate gen_no_csr;
 
 
 -- cpu checker
