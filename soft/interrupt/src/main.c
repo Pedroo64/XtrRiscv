@@ -6,14 +6,16 @@
 
 #define ECALL() __asm __volatile("ecall")
 
+volatile int interrupt_cnt = 0;
+
 extern void trap_entry();
 
 void interrupt_handler() {
     uint32_t mcause, mepc;
     mcause = csr_read(mcause);
     mepc = csr_read(mepc);
-    // printf("Trap! MEPC=%08lX", mepc);
     if (mcause & 0x80000000) {
+        interrupt_cnt++;
         switch (mcause & ~0x80000000)
         {
         case MCAUSE_MACHINE_EXTERNAL:
@@ -30,7 +32,7 @@ void interrupt_handler() {
     } else {
         switch (mcause & ~0x80000000)
         {
-        case MCAUSE_MACHILE_ECALL:
+        case MCAUSE_MACHINE_ECALL:
             uart_puts(UART0_BASE, "MCAUSE_ECALL\n\r");
             csr_write(mepc, mepc + 4);
             break;
@@ -45,7 +47,7 @@ void interrupt_handler() {
 }
 
 int main(int argc, char const *argv[]) {
-    csr_read_set(mtvec,   &trap_entry);
+    csr_write(mtvec, &trap_entry);
     csr_read_set(mstatus, MSTATUS_MIE);
     csr_read_set(mie,     MIE_MEIE);
 
@@ -57,6 +59,10 @@ int main(int argc, char const *argv[]) {
     for (char *c = str; *c != 0; c++) {
         uart_putc(UART0_BASE, *c);
     }
-    while (1);
+    while (1) {
+        if (interrupt_cnt >= 20) {
+            break;
+        }
+    }
     return 0;
 }
