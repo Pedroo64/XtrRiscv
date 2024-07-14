@@ -3,7 +3,7 @@
 
 #define CAUSE_ILLEGAL_INSTRUCTION       2
 #define CAUSE_MACHINE_TIMER             7
-#define MCAUSE_MACHILE_ECALL 			11
+#define MCAUSE_MACHINE_ECALL 			11
 #define MCAUSE_EBREAK 			        3
 
 #define MCAUSE_USER_SOFTWARE	        0
