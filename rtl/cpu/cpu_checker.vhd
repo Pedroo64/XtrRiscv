@@ -21,9 +21,9 @@ entity cpu_checker is
         decode_instr_compress_i : in std_logic;
         decode_rs1_dat_i : in std_logic_vector(31 downto 0);
         decode_rs2_dat_i : in std_logic_vector(31 downto 0);
+        decode_pc_i : in std_logic_vector(31 downto 0);
         execute_enable_i : in std_logic;
         execute_flush_i : in std_logic;
-        execute_current_pc_i : in std_logic_vector(31 downto 0);
         memory_enable_i : in std_logic;
         memory_flush_i : in std_logic;
         writeback_enable_i : in std_logic;
@@ -37,12 +37,11 @@ entity cpu_checker is
         fetch_enable_i : in std_logic;
         fetch_load_pc_i : in std_logic;
         fetch_target_pc_i : in std_logic_vector(31 downto 0);
-        csr_exception_entry_i : in std_logic;
-        csr_exception_exit_i : in std_logic;
-        csr_exception_sync_i : in std_logic;
-        csr_exception_async_i : in std_logic;
-        csr_mtvec_i : in std_logic_vector(31 downto 0);
-        csr_mepc_i : in std_logic_vector(31 downto 0);
+        trap_entry_i : in std_logic;
+        trap_exit_i : in std_logic;
+        trap_vect_i : in std_logic_vector(31 downto 0);
+        trap_exception_i : in std_logic;
+        trap_interrupt_i : in std_logic;
         regfile_rd_we_i : in std_logic;
         regfile_rd_dat_i : in std_logic_vector(31 downto 0);
         regfile_rd_adr_i : in std_logic_vector(4 downto 0)
@@ -104,8 +103,6 @@ architecture rtl of cpu_checker is
     signal ecall, ebreak, mret : std_logic;
     signal instruction_misaligned : std_logic;
     signal load_misaligned, store_misaligned : std_logic;
-    signal d_sync_exception_entry, d_async_exception_entry : std_logic;
-    signal d_exception_pc : std_logic_vector(31 downto 0);
 begin
     -- Pipeline
     process (clk_i, arst_i)
@@ -126,10 +123,12 @@ begin
             end if;
         end if;
     end process;
-    execute_current_pc <= execute_current_pc_i;
     process (clk_i)
     begin
         if rising_edge(clk_i) then
+            if execute_enable_i = '1' then
+                execute_current_pc <= decode_pc_i;
+            end if;
             if memory_enable_i = '1' then
                 memory_current_pc <= execute_current_pc;
             end if;
@@ -184,18 +183,18 @@ begin
         end if;
     end process;
 
-    process (execute_opcode, execute_immediate, execute_current_pc_i, execute_rs1_dat, execute_rs2_dat, execute_funct3, execute_funct7, execute_compressed)
+    process (execute_opcode, execute_immediate, execute_current_pc, execute_rs1_dat, execute_rs2_dat, execute_funct3, execute_funct7, execute_compressed)
     begin
         execute_alu <= (others => 'X');
         case execute_opcode is
             when RV32I_OP_LUI =>
                 execute_alu <= execute_immediate;
             when RV32I_OP_AUIPC =>
-                execute_alu <= std_logic_vector(unsigned(execute_current_pc_i) + unsigned(execute_immediate));
+                execute_alu <= std_logic_vector(unsigned(execute_current_pc) + unsigned(execute_immediate));
             when RV32I_OP_JAL | RV32I_OP_JALR =>
-                execute_alu <= std_logic_vector(unsigned(execute_current_pc_i) + 4);
+                execute_alu <= std_logic_vector(unsigned(execute_current_pc) + 4);
                 if execute_compressed = '1' then
-                    execute_alu <= std_logic_vector(unsigned(execute_current_pc_i) + 2);
+                    execute_alu <= std_logic_vector(unsigned(execute_current_pc) + 2);
                 end if;
             when RV32I_OP_REG_IMM =>
                 case execute_funct3 is
@@ -263,21 +262,21 @@ begin
         end case;
     end process;
 
-    process (execute_opcode, execute_current_pc_i, execute_immediate, execute_rs1_dat, execute_funct3, csr_mtvec_i, csr_mepc_i)
+    process (execute_opcode, execute_current_pc, execute_immediate, execute_rs1_dat, execute_funct3, trap_vect_i)
     begin
         execute_next_pc <= (others => 'X');
         case execute_opcode is
             when RV32I_OP_JAL | RV32I_OP_BRANCH =>
-                execute_next_pc <= std_logic_vector(unsigned(execute_current_pc_i) + unsigned(execute_immediate));
+                execute_next_pc <= std_logic_vector(unsigned(execute_current_pc) + unsigned(execute_immediate));
             when RV32I_OP_JALR =>
                 execute_next_pc <= std_logic_vector(unsigned(execute_rs1_dat) + unsigned(execute_immediate));
             when RV32I_OP_SYS =>
                 if execute_funct3 = "000" then
                     case execute_immediate(11 downto 0) is
                         when CSR_FN12_ECALL | CSR_FN12_EBREAK =>
-                            execute_next_pc <= csr_mtvec_i;
-                        when CSR_FN12_MRET =>
-                            execute_next_pc <= csr_mepc_i;
+                            execute_next_pc <= trap_vect_i;
+                        -- when CSR_FN12_MRET =>
+                        --     execute_next_pc <= csr_mepc_i;
                         when others =>
                     end case;
                 end if;
@@ -325,8 +324,8 @@ begin
             when RV32I_OP_SYS =>
                 if execute_funct3 = "000" then
                     case execute_immediate(11 downto 0) is
-                        when CSR_FN12_ECALL => execute_ecall <= '1'; 
-                        when CSR_FN12_EBREAK => execute_ebreak <= '1'; 
+                        when CSR_FN12_ECALL => execute_ecall <= '1';
+                        when CSR_FN12_EBREAK => execute_ebreak <= '1';
                         when CSR_FN12_MRET => execute_mret <= '1';
                         when others =>
                     end case;
@@ -471,10 +470,13 @@ begin
     regfile_rd_adr <= writeback_rd_adr;
 
     -- TODO fix exceptions entry/exit
-    load_pc <= (memory_load_pc and memory_valid) or csr_exception_entry_i;-- or sync_exception_entry or exception_exit;
+    load_pc <=
+        '0' when mret = '1' else
+        '1' when (memory_load_pc = '1' and memory_valid = '1') or trap_entry_i = '1' else
+        '0'; -- or sync_exception_entry or exception_exit;
     target_pc <=
-        csr_mtvec_i when csr_exception_entry_i = '1' else -- EXETERNAL INTERRUPTS
-        memory_next_pc; -- JAL, JALR, BRANCH, ECALL, EBREAK, MRET
+        trap_vect_i when trap_entry_i = '1' or ecall = '1' or ebreak = '1' else -- trap entry
+        memory_next_pc; -- JAL, JALR, BRANCH
 
     process (clk_i)
     begin
@@ -489,7 +491,6 @@ begin
 -- Memory asserts
     mem_cmd_adr <= execute_mem_adr;
     -- TODO
---    mem_cmd_vld <= '1' when execute_valid = '1' and fetch_load_pc_i = '0' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) else '0';
     mem_cmd_vld <= '1' when execute_valid = '1' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) and fetch_load_pc_i = '0' else '0';
     mem_cmd_we  <= '1' when execute_opcode = RV32I_OP_STORE else '0';
     mem_rsp_vld <= '1' when writeback_valid = '1' and writeback_opcode = RV32I_OP_LOAD else '0';
@@ -550,61 +551,23 @@ begin
     ecall <= memory_ecall;
     ebreak <= memory_ebreak;
     mret <= memory_mret;
-    instruction_misaligned <= 
+    instruction_misaligned <=
         '1' when memory_load_pc = '1' and memory_next_pc(1 downto 0) /= "00" and G_EXTENSION_ZICSR = TRUE and G_EXTENSION_C = FALSE else
         '1' when memory_load_pc = '1' and memory_next_pc(0) = '1' and G_EXTENSION_ZICSR = TRUE and G_EXTENSION_C = TRUE else
         '0';
 
-    load_misaligned <= 
+    load_misaligned <=
         '1' when memory_opcode = RV32I_OP_LOAD and (memory_funct3 = "001" or memory_funct3 = "101") and memory_mem_adr(0) = '1' and G_EXTENSION_ZICSR = TRUE else
         '1' when memory_opcode = RV32I_OP_LOAD and (memory_funct3 = "010" or memory_funct3 = "110") and memory_mem_adr(1 downto 0) /= "00" and G_EXTENSION_ZICSR = TRUE else
         '0';
-    store_misaligned <= 
+    store_misaligned <=
         '1' when memory_opcode = RV32I_OP_STORE and memory_funct3 = "001" and memory_mem_adr(0) = '1' and G_EXTENSION_ZICSR = TRUE else
         '1' when memory_opcode = RV32I_OP_STORE and memory_funct3 = "010" and memory_mem_adr(1 downto 0) /= "00" and G_EXTENSION_ZICSR = TRUE else
         '0';
 
-    process (clk_i, arst_i)
-    begin
-        if arst_i = '1' then
-            d_async_exception_entry <= '0';
-            d_sync_exception_entry <= '0';
-        elsif rising_edge(clk_i) then
-            d_async_exception_entry <= csr_exception_entry_i and csr_exception_async_i;
-            d_sync_exception_entry <= csr_exception_entry_i and csr_exception_sync_i;
-        end if;
-    end process;
-
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if csr_exception_entry_i = '1' and csr_exception_sync_i = '1' then
-                d_exception_pc <= memory_current_pc;
-            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' and memory_load_pc = '1' and memory_valid = '1' then
-                d_exception_pc <= memory_next_pc;
-            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' then
-                d_exception_pc <= execute_current_pc;
-            end if;
---            if csr_exception_entry_i = '1' and csr_exception_sync_i = '1' then
---                d_exception_pc <= memory_current_pc;
---            elsif csr_exception_entry_i = '1' and csr_exception_async_i = '1' then
---                d_exception_pc <= execute_current_pc;
---            end if;
---            if csr_exception_entry_i = '1' then
---                if ecall = '1' or ebreak = '1' or instruction_misaligned = '1' or load_misaligned = '1' or store_misaligned = '1' then
---                    d_exception_pc <= memory_current_pc;
---                else
---                    d_exception_pc <= execute_current_pc;
---                end if;
---            end if;
-        end if;
-    end process;
-
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            vhdl_assert(d_sync_exception_entry = '1' and not (d_exception_pc = csr_mepc_i), "Sync exception PC not correct");
---            vhdl_assert(d_async_exception_entry = '1' and d_sync_exception_entry = '0' and not ((std_logic_vector(unsigned(d_exception_pc))) = csr_mepc_i), "Async exception PC not correct");
             vhdl_assert(arst_i = '0' and fetch_enable_i = '1' and not (fetch_load_pc_i = '0' or fetch_load_pc_i = '1'), "fetch_load_pc_i = X");
         end if;
     end process;

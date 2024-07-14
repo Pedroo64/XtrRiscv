@@ -133,6 +133,9 @@ architecture rtl of cpu is
     signal csr_load_pc : std_logic;
     signal csr_target_pc : std_logic_vector(31 downto 0);
     signal csr_read_data : std_logic_vector(31 downto 0);
+    signal csr_trap_entry, csr_trap_exit : std_logic;
+    signal csr_trap_vect : std_logic_vector(31 downto 0);
+    signal trap_exception, trap_interrupt : std_logic;
 begin
 
 -- Fetch stage
@@ -743,11 +746,14 @@ begin
 
 -- csr
     gen_csr: if G_EXTENSION_ZICSR = TRUE generate
+        signal csr_mstatus_q : csr_mstatus_t;
+        signal csr_mie_q : csr_mie_t;
+        signal csr_q : csr_registers_t;
         signal decode_csr_en, execute_csr_en_q, memory_csr_en_q : std_logic;
         signal csr_read_en, csr_write_en : std_logic;
         signal csr_read_addr, csr_write_addr, csr_write_addr_q : std_logic_vector(11 downto 0);
-        signal csr_read_data_q, csr_write_data, csr_write_alu, csr_write_data_q, memory_csr_read_data_q : std_logic_vector(31 downto 0);
-        signal csr_q : csr_registers_t;
+        signal csr_read_data_q, csr_write_data, csr_write_alu, memory_csr_read_data_q : std_logic_vector(31 downto 0);
+        signal csr_write_src1_q : std_logic_vector(31 downto 0);
         signal csr_mscratch_we, csr_mie_we, csr_mstatus_we, csr_mtvec_we, csr_mepc_we, csr_mcause_we : std_logic;
         signal decode_ecall, decode_ebreak, decode_mret : std_logic;
         signal execute_ecall_q, execute_ebreak_q, execute_mret_q : std_logic;
@@ -827,12 +833,12 @@ begin
 
         csr_load_pc   <= interrupt or exception or mret_q;
         csr_target_pc <=
-            csr_q.mtvec when     (interrupt = '1' or exception = '1') and mret_q = '0' else
-            csr_q.mepc  when not (interrupt = '1' or exception = '1') and mret_q = '1' else
+            csr_q.mtvec(31 downto 2) & "00" when     (interrupt = '1' or exception = '1') and mret_q = '0' else
+            csr_q.mepc                      when not (interrupt = '1' or exception = '1') and mret_q = '1' else
             (others => '-');
 
-        csr_read_en   <= execute_enable and decode_valid_q;
-        csr_read_addr <= decode_imm_i(11 downto 0);
+        csr_read_en   <= memory_enable and execute_valid_q;
+        csr_read_addr <= execute_alu_a_src2_q(11 downto 0);
         process (clk_i)
         begin
             if rising_edge(clk_i) then
@@ -855,17 +861,26 @@ begin
             end if;
         end process;
 
-        csr_read_data <= memory_csr_read_data_q;
+        csr_read_data <= csr_read_data_q;
 
-        process (execute_funct3_q, execute_alu_a_src1_q, csr_read_data_q, execute_zimm_q)
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if memory_enable = '1' then
+                    csr_write_src1_q <= execute_alu_a_src1_q;
+                    if execute_funct3_q(2) = '1' then
+                        csr_write_src1_q <= (31 downto 5 => '0') & execute_zimm_q;
+                    end if;
+                end if;
+            end if;
+        end process;
+
+        process (memory_funct3_q, csr_write_src1_q, csr_read_data_q)
             variable csr_alu_op_a, csr_alu_op_b : std_logic_vector(31 downto 0);
         begin
-            csr_alu_op_a := execute_alu_a_src1_q;
+            csr_alu_op_a := csr_write_src1_q;
             csr_alu_op_b := csr_read_data_q;
-            if execute_funct3_q(2) = '1' then
-                csr_alu_op_a := (31 downto 5 => '0') & execute_zimm_q;
-            end if;
-            case execute_funct3_q(1 downto 0) is
+            case memory_funct3_q(1 downto 0) is
                 when "10"   => csr_write_alu <= csr_alu_op_a or      csr_alu_op_b;
                 when "11"   => csr_write_alu <= csr_alu_op_a and not csr_alu_op_b;
                 when others => csr_write_alu <= csr_alu_op_a;
@@ -877,13 +892,12 @@ begin
             if rising_edge(clk_i) then
                 if memory_enable = '1' then
                     csr_write_addr_q <= execute_alu_a_src2_q(11 downto 0);
-                    csr_write_data_q <= csr_write_alu;
                 end if;
             end if;
         end process;
 
         csr_write_addr <= csr_write_addr_q;
-        csr_write_data <= csr_write_data_q;
+        csr_write_data <= csr_write_alu;
         csr_write_en   <= memory_csr_en_q;
 
         process (csr_write_addr)
@@ -912,17 +926,16 @@ begin
         process (clk_i, arst_i)
         begin
             if arst_i = '1' then
-                csr_q.mtvec <= (others => '0');
-                csr_q.mie <= (others => '0');
+                csr_mie_q.meie <= '0';
+                csr_mie_q.mtie <= '0';
             elsif rising_edge(clk_i) then
-                if csr_mtvec_we = '1' and csr_write_en = '1' then
-                    csr_q.mtvec <= csr_write_data;
-                end if;
                 if csr_mie_we = '1' and csr_write_en = '1' then
-                    csr_q.mie <= csr_write_data;
+                    csr_mie_q.meie <= csr_write_data(11);
+                    csr_mie_q.mtie <= csr_write_data(7);
                 end if;
             end if;
         end process;
+        csr_q.mie <= (31 downto 12 => '0') & csr_mie_q.meie & (10 downto 8 => '0') & csr_mie_q.mtie & (6 downto 0 => '0');
 
         process (clk_i)
         begin
@@ -936,15 +949,24 @@ begin
                 elsif interrupt = '1' and timer_interrupt_q = '1' then
                     csr_q.mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
                 elsif csr_mcause_we = '1' and csr_write_en = '1' then
-                    csr_q.mcause <= csr_write_data;
+                    csr_q.mcause <= csr_write_data(31) & (30 downto 6 => '0') & csr_write_data(5 downto 0);
                 end if;
                 if exception = '1' or interrupt = '1' then
-                    csr_q.mepc <= epc;
+                    csr_q.mepc <= epc(31 downto 2) & "00";
+                    if G_EXTENSION_C = TRUE then
+                        csr_q.mepc(1) <= epc(1);
+                    end if;
                 elsif csr_mepc_we = '1' and csr_write_en = '1' then
-                    csr_q.mepc <= csr_write_data;
+                    csr_q.mepc <= csr_write_data(31 downto 2) & "00";
+                    if G_EXTENSION_C = TRUE then
+                        csr_q.mepc(1) <= csr_write_data(1);
+                    end if;
                 end if;
                 if csr_mscratch_we = '1' and csr_write_en = '1' then
                     csr_q.mscratch <= csr_write_data;
+                end if;
+                if csr_mtvec_we = '1' and csr_write_en = '1' then
+                    csr_q.mtvec <= csr_write_data;
                 end if;
             end if;
         end process;
@@ -952,26 +974,31 @@ begin
         process (clk_i, arst_i)
         begin
             if arst_i = '1' then
-                csr_q.mstatus <= (31 downto 13 => '0') & "11" & (10 downto 0 => '0');
+                csr_mstatus_q.mpie <= '0';
+                csr_mstatus_q.mie <= '0';
             elsif rising_edge(clk_i) then
                 if (interrupt = '1' or exception = '1') and mret_q = '0' then
-                    csr_q.mstatus(7) <= csr_q.mstatus(3);
+                    csr_mstatus_q.mpie <= csr_mstatus_q.mie;
                     -- mstatus.mie = 0
-                    csr_q.mstatus(3) <= '0';
-                    -- mstatus.mpp = current privilege mode
-                    csr_q.mstatus(12 downto 11) <= "11";
+                    csr_mstatus_q.mie  <= '0';
                 elsif not (interrupt = '1' or exception = '1') and mret_q = '1' then
-                    -- privilege set to mstatus.mpp
                     -- mstatus.mie = mstatus.mpie
-                    csr_q.mstatus(3) <= csr_q.mstatus(7);
-                    csr_q.mstatus(7) <= '1';
-                    csr_q.mstatus(12 downto 11) <= "11";
+                    csr_mstatus_q.mie  <= csr_mstatus_q.mpie;
+                    csr_mstatus_q.mpie <= '1';
                 elsif csr_mstatus_we = '1' and csr_write_en = '1' then
-                    csr_q.mstatus <= csr_write_data;
+                    csr_mstatus_q.mie  <= csr_write_data(3);
+                    csr_mstatus_q.mpie <= csr_write_data(7);
                 end if;
             end if;
         end process;
+        csr_mstatus_q.mpp <= "11";
+        csr_q.mstatus <= (31 downto 13 => '0') & csr_mstatus_q.mpp & (10 downto 8 => '0') & csr_mstatus_q.mpie & (6 downto 4 => '0') & csr_mstatus_q.mie & (2 downto 0 => '0');
 
+        csr_trap_entry <= interrupt or exception;
+        csr_trap_exit <= mret_q;
+        csr_trap_vect <= csr_q.mtvec;
+        trap_exception <= exception;
+        trap_interrupt <= interrupt;
     end generate gen_csr;
 
     gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
@@ -983,17 +1010,7 @@ begin
 
 -- cpu checker
     gen_verif: if G_VERIFICATION = TRUE generate
-        signal execute_pc_q : std_logic_vector(31 downto 0);
     begin
-        process (clk_i)
-        begin
-            if rising_edge(clk_i) then
-                if execute_enable = '1' then
-                    execute_pc_q <= decode_pc_q;
-                end if;
-            end if;
-        end process;
-
         u_cpu_checker : entity work.cpu_checker
             generic map (
                 G_EXTENSION_C => FALSE,
@@ -1007,9 +1024,9 @@ begin
                 decode_instr_compress_i => '0',
                 decode_rs1_dat_i => decode_rs1_dat,
                 decode_rs2_dat_i => decode_rs2_dat,
+                decode_pc_i => decode_pc_q,
                 execute_enable_i => execute_enable,
                 execute_flush_i => execute_flush,
-                execute_current_pc_i => execute_pc_q,
                 memory_enable_i => memory_enable,
                 memory_flush_i => memory_flush,
                 writeback_enable_i => writeback_enable,
@@ -1023,12 +1040,11 @@ begin
                 fetch_enable_i => fetch_enable,
                 fetch_load_pc_i => fetch_load_pc_en,
                 fetch_target_pc_i => fetch_target_pc,
-                csr_exception_entry_i => '0',
-                csr_exception_exit_i => '0',
-                csr_exception_sync_i => '0',
-                csr_exception_async_i => '0',
-                csr_mtvec_i => (others => '0'),
-                csr_mepc_i => (others => '0'),
+                trap_entry_i => csr_trap_entry,
+                trap_exit_i => csr_trap_exit,
+                trap_vect_i => csr_trap_vect,
+                trap_exception_i => trap_exception,
+                trap_interrupt_i => trap_interrupt,
                 regfile_rd_we_i => regfile_rd_we,
                 regfile_rd_dat_i => regfile_rd_dat,
                 regfile_rd_adr_i => regfile_rd_adr
