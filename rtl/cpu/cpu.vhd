@@ -689,17 +689,17 @@ begin
     ctl_decode_rs2_hazard <= '1' when decode_rs2_en = '1' and (ctl_decode_execute_rs2_hazard = '1' or ctl_decode_memory_rs2_hazard = '1' or ctl_decode_writeback_rs2_hazard = '1' or ctl_decode_regfile_rs2_hazard = '1') else '0';
 
     decode_rs1_dat <=
-        execute_alu_a_res     when ctl_decode_execute_rs1_forward   = '1' else
-        memory_alu_a_res_q    when ctl_decode_memory_rs1_forward    = '1' else
-        writeback_rd_dat      when ctl_decode_writeback_rs1_forward = '1' else
-        regfile_rd_dat_q      when ctl_decode_regfile_rs1_forward   = '1' else
+        execute_alu_a_res when ctl_decode_execute_rs1_forward   = '1' else
+        memory_alu_a_res  when ctl_decode_memory_rs1_forward    = '1' else
+        writeback_rd_dat  when ctl_decode_writeback_rs1_forward = '1' else
+        regfile_rd_dat_q  when ctl_decode_regfile_rs1_forward   = '1' else
         regfile_rs1_dat;
 
     decode_rs2_dat <=
-        execute_alu_a_res     when ctl_decode_execute_rs2_forward   = '1' else
-        memory_alu_a_res_q    when ctl_decode_memory_rs2_forward    = '1' else
-        writeback_rd_dat      when ctl_decode_writeback_rs2_forward = '1' else
-        regfile_rd_dat_q      when ctl_decode_regfile_rs2_forward   = '1' else
+        execute_alu_a_res when ctl_decode_execute_rs2_forward   = '1' else
+        memory_alu_a_res  when ctl_decode_memory_rs2_forward    = '1' else
+        writeback_rd_dat  when ctl_decode_writeback_rs2_forward = '1' else
+        regfile_rd_dat_q  when ctl_decode_regfile_rs2_forward   = '1' else
         regfile_rs2_dat;
 
 
@@ -707,14 +707,16 @@ begin
         '1' when ctl_decode_stall = '1' else
         '0';
     ctl_decode_stall <=
+        '0' when branch_load_pc = '1' else
         '1' when ctl_execute_stall = '1' else
-        '1' when branch_load_pc = '0' and (ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1') else
+        '1' when (ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1') else
         '1' when ctl_decode_execute_csr_hazard = '1' else
         '0';
     ctl_execute_stall <=
+        '0' when branch_load_pc = '1' else
         '1' when ctl_memory_stall = '1' else
         '1' when execute_shifter_rdy = '0' else
-        '1' when branch_load_pc = '0' and execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else -- j @; l/s @delayed_cmd
+        '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else -- j @; l/s @delayed_cmd
         '0';
 
     ctl_memory_stall <=
