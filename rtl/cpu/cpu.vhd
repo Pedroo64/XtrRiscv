@@ -19,6 +19,7 @@ entity cpu is
         G_EXTENSION_C : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
         G_DEBUG_MODULE : boolean := FALSE;
+        G_FAST_MUL : boolean := FALSE;
         G_VERIFICATION : boolean := FALSE
     );
     port (
@@ -68,7 +69,7 @@ architecture rtl of cpu is
     signal decode_opcode : std_logic_vector(6 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
-    signal decode_jump, decode_branch, decode_sys : std_logic;
+    signal decode_jump, decode_branch, decode_sys, decode_muldiv : std_logic;
     signal decode_rs1_en, decode_rs2_en, decode_rd_we, decode_rd_is_zero : std_logic;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
     signal decode_rs1_dat, decode_rs2_dat : std_logic_vector(31 downto 0);
@@ -85,7 +86,7 @@ architecture rtl of cpu is
     signal execute_rd_adr_q : std_logic_vector(4 downto 0);
     signal execute_funct3_q : std_logic_vector(2 downto 0);
     signal execute_funct7_q : std_logic_vector(6 downto 0);
-    signal execute_jump_q, execute_branch_q, execute_branch, execute_sys_q : std_logic;
+    signal execute_jump_q, execute_branch_q, execute_branch, execute_sys_q, execute_muldiv_q : std_logic;
     signal execute_alu_a_src1_q, execute_alu_a_src2_q, execute_alu_a_r, execute_alu_a_res : std_logic_vector(31 downto 0);
     signal execute_alu_a_op_q : std_logic_vector(1 downto 0);
     signal execute_alu_a_arith_q : std_logic;
@@ -99,14 +100,14 @@ architecture rtl of cpu is
     signal memory_funct3_q : std_logic_vector(2 downto 0);
     signal memory_rd_adr_q : std_logic_vector(4 downto 0);
     signal memory_alu_a_res_q, memory_alu_b_res_q, memory_alu_a_res : std_logic_vector(31 downto 0);
-    signal memory_branch_q, memory_load_q, memory_sys_q : std_logic;
+    signal memory_branch_q, memory_load_q, memory_sys_q, memory_muldiv_q : std_logic;
     signal memory_mem_dat : std_logic_vector(31 downto 0);
     -- writeback
-    signal writeback_enable, writeback_flush, writeback_valid_q, writeback_rd_we_q : std_logic;
+    signal writeback_enable, writeback_flush, writeback_valid_q, writeback_rd_we_q, writeback_rd_we : std_logic;
     signal writeback_funct3_q : std_logic_vector(2 downto 0);
     signal writeback_rd_adr_q : std_logic_vector(4 downto 0);
     signal writeback_alu_a_res_q, writeback_mem_dat_q, writeback_mem_dat, writeback_rd_dat : std_logic_vector(31 downto 0);
-    signal writeback_load_q : std_logic;
+    signal writeback_load_q, writeback_muldiv_q : std_logic;
     signal writeback_mem_adr_q : std_logic_vector(1 downto 0);
     -- branch
     signal branch_load_pc : std_logic;
@@ -136,6 +137,9 @@ architecture rtl of cpu is
     signal csr_trap_entry, csr_trap_exit : std_logic;
     signal csr_trap_vect : std_logic_vector(31 downto 0);
     signal trap_exception, trap_interrupt : std_logic;
+    -- muldiv
+    signal muldiv_rdy : std_logic;
+    signal muldiv_res : std_logic_vector(31 downto 0);
 begin
 
 -- Fetch stage
@@ -223,11 +227,6 @@ begin
 
     decode_nxt_pc  <= std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr and (31 downto 0 => decode_valid_q)));
 
-    -- decode_nxt_pc <=
-    --     branch_target_pc when branch_load_pc = '1' else
-    --     std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr)) when decode_valid_q = '1' else
-    --     decode_pc_q;
-
     decode_opcode <= decode_instr_dat_q(06 downto 02) & "11";
     decode_funct3 <= decode_instr_dat_q(14 downto 12);
     decode_funct7 <= decode_instr_dat_q(31 downto 25);
@@ -310,6 +309,7 @@ begin
         decode_cmp_signed <= '1';
         decode_alu_a_op <= "00";
         decode_alu_a_arith <= '0';
+        decode_muldiv <= '0';
         case decode_opcode is
             when RV32I_OP_LUI    =>
             when RV32I_OP_AUIPC  =>
@@ -334,6 +334,9 @@ begin
                     when others =>
                 end case;
             when RV32I_OP_REG_REG =>
+                if G_EXTENSION_M = TRUE and decode_funct7(0) = '1' then
+                    decode_muldiv <= '1';
+                end if;
                 case decode_funct3 is
                     when RV32I_FN3_ADD  => if decode_funct7(5) = '1' then decode_alu_a_arith <= '1'; end if;
                     when RV32I_FN3_SL   => decode_alu_a_res_sel <= "1--";
@@ -381,9 +384,15 @@ begin
             execute_lsu_valid_q <= '0';
         elsif rising_edge(clk_i) then
             if execute_enable = '1' then
-                execute_valid_q <= decode_valid_q and not execute_flush;
-                execute_rd_we_q <= decode_valid_q and decode_rd_we and not decode_rd_is_zero and not execute_flush;
-                execute_lsu_valid_q <= decode_valid_q and decode_lsu_valid and not execute_flush;
+                if execute_flush = '1' then
+                    execute_valid_q     <= '0';
+                    execute_rd_we_q     <= '0';
+                    execute_lsu_valid_q <= '0';
+                else
+                    execute_valid_q <= decode_valid_q;
+                    execute_rd_we_q <= decode_valid_q and decode_rd_we and not decode_rd_is_zero;
+                    execute_lsu_valid_q <= decode_valid_q and decode_lsu_valid;
+                end if;
             end if;
         end if;
     end process;
@@ -408,6 +417,7 @@ begin
                 execute_store_q <= decode_lsu_store;
                 execute_cmp_signed_q <= decode_cmp_signed;
                 execute_sys_q <= decode_sys;
+                execute_muldiv_q <= decode_muldiv;
             end if;
         end if;
     end process;
@@ -513,7 +523,6 @@ begin
         end case;
     end process;
 
-
     data_cmd_vld <= execute_lsu_valid_q and memory_enable and not branch_load_pc;
     data_cmd_we  <= execute_store_q;
     data_cmd_siz <= execute_funct3_q(1 downto 0);
@@ -523,6 +532,38 @@ begin
     data_cmd_we_o <= data_cmd_we;
     data_cmd_dat_o <= data_cmd_dat;
     data_cmd_siz_o <= data_cmd_siz;
+
+    gen_muldiv: if G_EXTENSION_M = TRUE generate
+        signal muldiv_en, muldiv_flush : std_logic;
+    begin
+        muldiv_en <= decode_muldiv and decode_valid_q and execute_enable;
+        muldiv_flush <= '1' when branch_load_pc = '1' and (memory_muldiv_q = '0' and writeback_muldiv_q = '0') else '0';
+
+        u_muldiv : entity work.muldiv
+            generic map (
+                G_FAST_MUL => G_FAST_MUL
+            )
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                enable_i => muldiv_en,
+                flush_i => muldiv_flush,
+                funct3_i => decode_funct3,
+                rs1_dat_i => decode_rs1_dat,
+                rs2_dat_i => decode_rs2_dat,
+                result_o => muldiv_res,
+                ready_o => muldiv_rdy
+            );
+    end generate gen_muldiv;
+
+    gen_no_muldiv: if G_EXTENSION_M = FALSE generate
+        muldiv_rdy <= '1';
+        muldiv_res <= (others => '-');
+    end generate gen_no_muldiv;
+
+    block_muldiv : block
+    begin
+    end block;
 
 -- Memory stage
     process (clk_i, arst_i)
@@ -550,13 +591,14 @@ begin
                 memory_alu_b_res_q <= execute_alu_b_res;
                 memory_load_q <= execute_load_q;
                 memory_sys_q <= execute_sys_q;
+                memory_muldiv_q <= execute_muldiv_q;
             end if;
         end if;
     end process;
 
     memory_alu_a_res <=
-        csr_read_data      when memory_rd_we_q = '1' and memory_sys_q = '1' else
-        memory_alu_a_res_q when memory_rd_we_q = '1' and memory_sys_q = '0' else
+        csr_read_data      when memory_rd_we_q = '1' and  memory_sys_q = '1' and G_EXTENSION_ZICSR = TRUE   else
+        memory_alu_a_res_q when memory_rd_we_q = '1' and (memory_sys_q = '0' or  G_EXTENSION_ZICSR = FALSE) else
         (others => '-');
 
     memory_mem_dat <= data_rsp_dat_i when memory_load_q = '1' else (others => '-');
@@ -585,6 +627,7 @@ begin
                 writeback_mem_dat_q <= memory_mem_dat;
                 writeback_mem_adr_q <= memory_alu_b_res_q(1 downto 0);
                 writeback_load_q <= memory_load_q;
+                writeback_muldiv_q <= memory_muldiv_q;
             end if;
         end if;
     end process;
@@ -609,9 +652,15 @@ begin
     end process;
 
     writeback_rd_dat <=
-        writeback_mem_dat when writeback_rd_we_q = '1' and writeback_load_q = '1' else
-        writeback_alu_a_res_q when writeback_rd_we_q = '1' and writeback_load_q = '0' else
+        muldiv_res when writeback_rd_we_q = '1' and writeback_load_q = '0' and writeback_muldiv_q = '1' and G_EXTENSION_M = TRUE else
+        writeback_mem_dat when writeback_rd_we_q = '1' and writeback_load_q = '1' and (writeback_muldiv_q = '0' or G_EXTENSION_M = FALSE) else
+        writeback_alu_a_res_q when writeback_rd_we_q = '1' and writeback_load_q = '0' and (writeback_muldiv_q = '0' or G_EXTENSION_M = FALSE) else
         (others => '-');
+
+    writeback_rd_we <=
+        '1' when writeback_rd_we_q = '1' and  writeback_muldiv_q = '1' and muldiv_rdy = '1' and G_EXTENSION_M = TRUE else
+        '1' when writeback_rd_we_q = '1' and (writeback_muldiv_q = '0' or G_EXTENSION_M = FALSE) else
+        '0';
 
 -- Branch
     branch_load_pc   <= memory_branch_q or csr_load_pc or not booted_q;
@@ -628,7 +677,7 @@ begin
     regfile_rs2_en  <= '1';
     regfile_rd_adr <= writeback_rd_adr_q;
     regfile_rd_dat <= writeback_rd_dat;
-    regfile_rd_we  <= writeback_rd_we_q;
+    regfile_rd_we  <= writeback_rd_we;
 
     u_regfile : entity work.regfile
         port map (
@@ -708,35 +757,39 @@ begin
         '0';
     ctl_decode_stall <=
         '0' when branch_load_pc = '1' else
+        '1' when muldiv_rdy = '0' and G_EXTENSION_M = TRUE else
         '1' when ctl_execute_stall = '1' else
         '1' when (ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1') else
-        '1' when ctl_decode_execute_csr_hazard = '1' else
+        '1' when ctl_decode_execute_csr_hazard = '1' and G_EXTENSION_ZICSR = TRUE else
         '0';
     ctl_execute_stall <=
         '0' when branch_load_pc = '1' else
         '1' when ctl_memory_stall = '1' else
-        '1' when execute_shifter_rdy = '0' else
+        '1' when execute_shifter_rdy = '0' and G_FULL_BARREL_SHIFTER = FALSE else
         '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else -- j @; l/s @delayed_cmd
         '0';
 
     ctl_memory_stall <=
         '1' when memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' else
         '0';
-    ctl_writeback_stall <= '0';
+    ctl_writeback_stall <=
+        '1' when writeback_rd_we_q = '1' and writeback_muldiv_q = '1' and muldiv_rdy = '0' and G_EXTENSION_M = TRUE else
+        '0';
 
-    fetch_flush     <= srst_i or branch_load_pc;
-    decode_flush    <= srst_i or branch_load_pc;
+    fetch_flush     <= branch_load_pc;
+    decode_flush    <= branch_load_pc;
     execute_flush   <=
-        '1' when srst_i = '1' or branch_load_pc = '1' else
+        '1' when branch_load_pc = '1' else
+        '1' when muldiv_rdy = '0' and G_EXTENSION_M = TRUE else
         '1' when ctl_decode_rs1_hazard = '1' or ctl_decode_rs2_hazard = '1' else
-        '1' when ctl_decode_execute_csr_hazard = '1' else
+        '1' when ctl_decode_execute_csr_hazard = '1' and G_EXTENSION_ZICSR = TRUE else
         '0';
     memory_flush    <=
-        '1' when srst_i = '1' or branch_load_pc = '1' else
+        '1' when branch_load_pc = '1' else
         '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else
         '0';
     writeback_flush <=
-        '1' when srst_i = '1' else
+        '1' when booted_q = '0' else
         '1' when memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' else
         '0';
 
