@@ -52,9 +52,7 @@ entity cpu is
 end entity cpu;
 
 architecture rtl of cpu is
-    -- types
-    -- type alu_a_op_t is (ALU_OP_ADD, ALU_OP_AND, ALU_OP_OR, ALU_OP_XOR);
-    -- type alu_a_op_t is (ALU_OP_ADD, ALU_OP_SUB, ALU_OP_AND, ALU_OP_OR, ALU_OP_XOR, ALU_OP_SL, ALU_OP_SR, ALU_OP_SLT);
+    constant C_CATCH_ILLEGAL : boolean := FALSE;
     -- global
     signal booted_q : std_logic;
     -- fetch
@@ -373,7 +371,6 @@ begin
         end case;
     end process;
     decode_rd_is_zero <= '1' when unsigned(decode_rd_adr) = 0 else '0';
-
 
 -- Execute stage
     process (clk_i, arst_i)
@@ -814,13 +811,58 @@ begin
         signal execute_ecall_q, execute_ebreak_q, execute_mret_q : std_logic;
         signal execute_pc_q, memory_pc_q : std_logic_vector(31 downto 0);
         signal execute_zimm_q : std_logic_vector(4 downto 0);
-        signal execute_pc_valid_q : std_logic;
-        signal external_interrupt_q, timer_interrupt_q : std_logic;
+        signal external_interrupt, external_interrupt_q, timer_interrupt, timer_interrupt_q : std_logic;
         signal external_interrupt_en, timer_interrupt_en : std_logic;
         signal ebreak_q, ecall_q, mret_q : std_logic;
-        signal exception, interrupt, interrut_en : std_logic;
+        signal exception, exception_q, interrupt, interrupt_q, interrut_en : std_logic;
+        signal trap_entry, trap_exit : std_logic;
         signal epc : std_logic_vector(31 downto 0);
+        signal decode_illegal_opcode, execute_illegal_opcode_q : std_logic;
+        signal execute_instr_dat_q, instr_dat_q : std_logic_vector(31 downto 0);
+        signal illegal_instr_q : std_logic;
     begin
+        gen_catch_illegal_instr: if C_CATCH_ILLEGAL = TRUE generate
+        begin
+            process (decode_opcode, decode_funct3, decode_funct7)
+            begin
+                decode_illegal_opcode <= '0';
+                case decode_opcode is
+                    when RV32I_OP_LUI     =>
+                    when RV32I_OP_AUIPC   =>
+                    when RV32I_OP_JAL     =>
+                    when RV32I_OP_JALR    => if decode_funct3 /= "000" then decode_illegal_opcode <= '1'; end if;
+                    when RV32I_OP_BRANCH  =>
+                        case decode_funct3 is
+                            when RV32I_FN3_BEQ | RV32I_FN3_BNE | RV32I_FN3_BLT | RV32I_FN3_BGE | RV32I_FN3_BLTU | RV32I_FN3_BGEU =>
+                            when others => decode_illegal_opcode <= '1';
+                        end case;
+                    when RV32I_OP_LOAD    =>
+                        case decode_funct3 is
+                            when "000" | "001" | "010" | "011" | "100" | "101" =>
+                            when others => decode_illegal_opcode <= '1';
+                        end case;
+                    when RV32I_OP_STORE   =>
+                        case decode_funct3 is
+                            when "000" | "001" | "010" =>
+                            when others => decode_illegal_opcode <= '1';
+                        end case;
+                    when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
+                        case decode_funct3 is
+                            when RV32I_FN3_SL => if decode_funct7 /= "0000000" then decode_illegal_opcode <= '1'; end if;
+                            when RV32I_FN3_SR => if decode_funct7 /= "0000000" and decode_funct7 /= "0100000" then decode_illegal_opcode <= '1'; end if;
+                            when others =>
+                        end case;
+                    when RV32I_OP_FENCE   =>
+                    when RV32I_OP_SYS     =>
+                    when others           =>
+                end case;
+            end process;
+        end generate gen_catch_illegal_instr;
+
+        gen_no_illegal_instr_catch: if C_CATCH_ILLEGAL = FALSE generate
+            decode_illegal_opcode <= '0';
+        end generate gen_no_illegal_instr_catch;
+
         decode_ecall  <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_ECALL else '0';
         decode_ebreak <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_EBREAK else '0';
         decode_mret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_MRET else '0';
@@ -836,10 +878,16 @@ begin
                     execute_zimm_q   <= decode_rs1_adr;
                     execute_pc_q     <= decode_pc_q;
                     execute_csr_en_q <= decode_csr_en and decode_valid_q;
+                    execute_illegal_opcode_q <= decode_illegal_opcode and decode_valid_q;
+                    execute_instr_dat_q <= decode_instr_dat_q;
                 end if;
                 if memory_enable = '1' then
                     memory_pc_q <= execute_pc_q;
                     memory_csr_read_data_q <= csr_read_data_q;
+                    instr_dat_q <= execute_instr_dat_q;
+                    ecall_q <= execute_ecall_q;
+                    ebreak_q <= execute_ebreak_q;
+                    illegal_instr_q <= execute_illegal_opcode_q;
                 end if;
             end if;
         end process;
@@ -848,48 +896,50 @@ begin
         external_interrupt_en <= csr_q.mie(CSR_MIE_MEIE);
         timer_interrupt_en <= csr_q.mie(CSR_MIE_MTIE);
 
+        external_interrupt <= external_irq_i and external_interrupt_en;
+        timer_interrupt    <= timer_irq_i and timer_interrupt_en;
+
+        exception <= '1' when execute_ecall_q = '1' or execute_ebreak_q = '1' or execute_illegal_opcode_q = '1' else '0';
+        interrupt <= '1' when (external_interrupt = '1' or timer_interrupt = '1') and interrut_en = '1' else '0';
+
         process (clk_i)
         begin
             if rising_edge(clk_i) then
-                external_interrupt_q <= external_irq_i and external_interrupt_en;
-                timer_interrupt_q    <= timer_irq_i and timer_interrupt_en;
-                execute_pc_valid_q   <= '1';
-                if memory_branch_q = '1' or mret_q = '1' then
-                    execute_pc_valid_q <= '0';
-                end if;
+                external_interrupt_q <= external_interrupt;
+                timer_interrupt_q    <= timer_interrupt;
             end if;
         end process;
 
         process (clk_i, arst_i)
         begin
             if arst_i = '1' then
-                ecall_q  <= '0';
-                ebreak_q <= '0';
-                mret_q   <= '0';
                 memory_csr_en_q <= '0';
+                interrupt_q     <= '0';
+                exception_q     <= '0';
+                mret_q          <= '0';
             elsif rising_edge(clk_i) then
                 if memory_enable = '1' then
-                    ecall_q  <= execute_ecall_q and execute_valid_q and not memory_flush;
-                    ebreak_q <= execute_ebreak_q and execute_valid_q and not memory_flush;
-                    mret_q   <= execute_mret_q and execute_valid_q and not memory_flush;
                     memory_csr_en_q <= execute_csr_en_q and execute_valid_q and not memory_flush;
+                    exception_q     <= exception and execute_valid_q and not memory_flush;
+                    interrupt_q     <= interrupt and not memory_flush;
+                    mret_q          <= execute_mret_q and execute_valid_q and not memory_flush;
                 end if;
             end if;
         end process;
 
-        interrupt <= (external_interrupt_q or timer_interrupt_q) and interrut_en and execute_pc_valid_q;
-        exception <= ecall_q or ebreak_q;
+        trap_entry <= exception_q or interrupt_q;
+        trap_exit  <= mret_q;
 
         epc <=
-            memory_alu_b_res_q when interrupt = '1' and memory_branch_q = '1' else
-            execute_pc_q       when interrupt = '1' and memory_branch_q = '0' else
-            memory_pc_q        when interrupt = '0' and exception = '1' else
+            memory_pc_q        when exception_q = '1' else
+            memory_alu_b_res_q when interrupt_q = '1' and memory_branch_q = '1' else
+            execute_pc_q       when interrupt_q = '1' and memory_branch_q = '0' else
             (others => '-');
 
-        csr_load_pc   <= interrupt or exception or mret_q;
+        csr_load_pc   <= interrupt_q or exception_q or mret_q;
         csr_target_pc <=
-            csr_q.mtvec(31 downto 2) & "00" when     (interrupt = '1' or exception = '1') and mret_q = '0' else
-            csr_q.mepc                      when not (interrupt = '1' or exception = '1') and mret_q = '1' else
+            csr_q.mtvec(31 downto 2) & "00" when trap_entry = '1' and trap_exit = '0' else
+            csr_q.mepc                      when trap_entry = '0' and trap_exit = '1' else
             (others => '-');
 
         csr_read_en   <= memory_enable and execute_valid_q;
@@ -995,18 +1045,20 @@ begin
         process (clk_i)
         begin
             if rising_edge(clk_i) then
-                if exception = '1' and ecall_q = '1' then
+                if exception_q = '1' and illegal_instr_q = '1' then
+                    csr_q.mcause <= CSR_MCAUSE_ILLEGAL_INSTRUCTION;
+                elsif exception_q = '1' and ecall_q = '1' then
                     csr_q.mcause <= CSR_MCAUSE_MACHINE_ECALL;
-                elsif exception = '1' and ebreak_q = '1' then
+                elsif exception_q = '1' and ebreak_q = '1' then
                     csr_q.mcause <= CSR_MCAUSE_BREAKPOINT;
-                elsif interrupt = '1' and external_interrupt_q = '1' then
+                elsif interrupt_q = '1' and external_interrupt_q = '1' then
                     csr_q.mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
-                elsif interrupt = '1' and timer_interrupt_q = '1' then
+                elsif interrupt_q = '1' and timer_interrupt_q = '1' then
                     csr_q.mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
                 elsif csr_mcause_we = '1' and csr_write_en = '1' then
                     csr_q.mcause <= csr_write_data(31) & (30 downto 6 => '0') & csr_write_data(5 downto 0);
                 end if;
-                if exception = '1' or interrupt = '1' then
+                if exception_q = '1' or interrupt_q = '1' then
                     csr_q.mepc <= epc(31 downto 2) & "00";
                     if G_EXTENSION_C = TRUE then
                         csr_q.mepc(1) <= epc(1);
@@ -1032,11 +1084,11 @@ begin
                 csr_mstatus_q.mpie <= '0';
                 csr_mstatus_q.mie <= '0';
             elsif rising_edge(clk_i) then
-                if (interrupt = '1' or exception = '1') and mret_q = '0' then
+                if trap_entry = '1' and trap_exit = '0' then
                     csr_mstatus_q.mpie <= csr_mstatus_q.mie;
                     -- mstatus.mie = 0
                     csr_mstatus_q.mie  <= '0';
-                elsif not (interrupt = '1' or exception = '1') and mret_q = '1' then
+                elsif trap_entry = '0' and trap_exit = '1' then
                     -- mstatus.mie = mstatus.mpie
                     csr_mstatus_q.mie  <= csr_mstatus_q.mpie;
                     csr_mstatus_q.mpie <= '1';
@@ -1049,11 +1101,28 @@ begin
         csr_mstatus_q.mpp <= "11";
         csr_q.mstatus <= (31 downto 13 => '0') & csr_mstatus_q.mpp & (10 downto 8 => '0') & csr_mstatus_q.mpie & (6 downto 4 => '0') & csr_mstatus_q.mie & (2 downto 0 => '0');
 
-        csr_trap_entry <= interrupt or exception;
-        csr_trap_exit <= mret_q;
+        gen_mtval: if C_CATCH_ILLEGAL = TRUE generate
+            process (clk_i)
+            begin
+                if rising_edge(clk_i) then
+                    if exception_q = '1' and illegal_instr_q = '1' then
+                        csr_q.mtval <= instr_dat_q;
+                    elsif exception_q = '1' or interrupt_q = '1' then
+                        csr_q.mtval <= (others => '0');
+                    end if;
+                end if;
+            end process;
+        end generate gen_mtval;
+
+        gen_no_mtval: if not (C_CATCH_ILLEGAL = TRUE) generate
+            csr_q.mtval <= (others => '0');
+        end generate gen_no_mtval;
+
+        csr_trap_entry <= trap_entry;
+        csr_trap_exit <= trap_exit;
         csr_trap_vect <= csr_q.mtvec;
-        trap_exception <= exception;
-        trap_interrupt <= interrupt;
+        trap_exception <= exception_q;
+        trap_interrupt <= interrupt_q;
     end generate gen_csr;
 
     gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
