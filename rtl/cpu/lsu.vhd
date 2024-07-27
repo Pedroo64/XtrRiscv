@@ -3,6 +3,9 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
 entity lsu is
+    generic (
+        G_TWO_CYCLES_READ : boolean := FALSE
+    );
     port (
         arst_i : in std_logic;
         clk_i : in std_logic;
@@ -28,34 +31,26 @@ entity lsu is
 end entity lsu;
 
 architecture rtl of lsu is
-    signal cmd_vld : std_logic;
-    signal load : std_logic;
-    signal cmd_rdy, rsp_rdy : std_logic;
 begin
-    process (clk_i, arst_i)
+    
+    gen_one_cycle_read: if G_TWO_CYCLES_READ = FALSE generate
     begin
-        if arst_i = '1' then
-            load <= '0';
-        elsif rising_edge(clk_i) then
-            if rsp_rdy = '1' then
-                load <= valid_i and load_i and not flush_i;
-            end if;
-        end if;
-    end process;
+    
+        cmd_vld <= valid_i and not flush_i;
+        cmd_rdy <= '0' when cmd_vld = '1' and cmd_rdy_i = '0' else '1';
+        rsp_rdy <= '0' when load = '1' and rsp_vld_i = '0' else '1';
+    
+        cmd_rdy_o <= cmd_rdy;
+        rsp_rdy_o <= rsp_rdy;
+    
+        -- bus interface
+        cmd_adr_o <= address_i;
+        cmd_dat_o <= data_i;
+        cmd_siz_o <= size_i;
+        cmd_vld_o <= cmd_vld;
+        cmd_we_o <= store_i;
+        data_o <= rsp_dat_i;
+    end generate gen_one_cycle_read;
 
-    cmd_vld <= valid_i and not flush_i;
-    cmd_rdy <= '0' when cmd_vld = '1' and cmd_rdy_i = '0' else '1';
-    rsp_rdy <= '0' when load = '1' and rsp_vld_i = '0' else '1';
-
-    cmd_rdy_o <= cmd_rdy;
-    rsp_rdy_o <= rsp_rdy;
-
-    -- bus interface
-    cmd_adr_o <= address_i;
-    cmd_dat_o <= data_i;
-    cmd_siz_o <= size_i;
-    cmd_vld_o <= cmd_vld;
-    cmd_we_o <= store_i;
-    data_o <= rsp_dat_i;
 
 end architecture rtl;
