@@ -15,7 +15,7 @@ entity tb_xtr_soc is
         G_EXTENSION_M : boolean := FALSE;
         G_EXTENSION_C : boolean := FALSE;
         G_EXTENSION_ZICSR : boolean := FALSE;
-        G_DEBUG_MODULE : boolean := FALSE,
+        G_DEBUG_MODULE : boolean := FALSE;
         G_FAST_MUL : boolean := FALSE
     );
 end entity tb_xtr_soc;

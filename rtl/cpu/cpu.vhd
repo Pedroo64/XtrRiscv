@@ -53,6 +53,7 @@ end entity cpu;
 
 architecture rtl of cpu is
     constant C_CATCH_ILLEGAL : boolean := FALSE;
+    constant C_TWO_CYCLES_READ : boolean := FALSE;
     -- global
     signal booted_q : std_logic;
     -- fetch
@@ -93,6 +94,7 @@ architecture rtl of cpu is
     signal execute_shifter_res : std_logic_vector(31 downto 0);
     signal execute_shifter_rdy : std_logic;
     signal execute_cmp_signed_q, execute_cmp_lt, execute_cmp_eq : std_logic;
+    signal execute_mem_data : std_logic_vector(31 downto 0);
     -- memory
     signal memory_enable, memory_flush, memory_valid_q, memory_rd_we_q : std_logic;
     signal memory_funct3_q : std_logic_vector(2 downto 0);
@@ -110,6 +112,8 @@ architecture rtl of cpu is
     -- branch
     signal branch_load_pc : std_logic;
     signal branch_target_pc : std_logic_vector(31 downto 0);
+    -- lsu
+    signal lsu_flush, lsu_cmd_rdy, lsu_rsp_rdy : std_logic;
     -- ctl
     signal ctl_fetch_stall, ctl_decode_stall, ctl_execute_stall, ctl_memory_stall, ctl_writeback_stall : std_logic;
     signal ctl_decode_execute_rs1_match, ctl_decode_memory_rs1_match, ctl_decode_writeback_rs1_match, ctl_decode_regfile_rs1_match : std_logic;
@@ -509,26 +513,15 @@ begin
         end if;
     end process;
 
-    data_cmd_adr <= execute_alu_b_res;
     process (execute_funct3_q, execute_alu_a_src2_q)
     begin
         case execute_funct3_q(1 downto 0) is
-            when RV32I_FN3_SB => data_cmd_dat <= execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0);
-            when RV32I_FN3_SH => data_cmd_dat <= execute_alu_a_src2_q(15 downto 0) & execute_alu_a_src2_q(15 downto 0);
-            when RV32I_FN3_SW => data_cmd_dat <= execute_alu_a_src2_q;
-            when others => data_cmd_dat <= (others => '-');
+            when RV32I_FN3_SB => execute_mem_data <= execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0) & execute_alu_a_src2_q(7 downto 0);
+            when RV32I_FN3_SH => execute_mem_data <= execute_alu_a_src2_q(15 downto 0) & execute_alu_a_src2_q(15 downto 0);
+            when RV32I_FN3_SW => execute_mem_data <= execute_alu_a_src2_q;
+            when others => execute_mem_data <= (others => '-');
         end case;
     end process;
-
-    data_cmd_vld <= execute_lsu_valid_q and memory_enable and not branch_load_pc;
-    data_cmd_we  <= execute_store_q;
-    data_cmd_siz <= execute_funct3_q(1 downto 0);
-
-    data_cmd_adr_o <= data_cmd_adr;
-    data_cmd_vld_o <= data_cmd_vld;
-    data_cmd_we_o <= data_cmd_we;
-    data_cmd_dat_o <= data_cmd_dat;
-    data_cmd_siz_o <= data_cmd_siz;
 
     gen_muldiv: if G_EXTENSION_M = TRUE generate
         signal muldiv_en, muldiv_flush : std_logic;
@@ -557,10 +550,6 @@ begin
         muldiv_rdy <= '1';
         muldiv_res <= (others => '-');
     end generate gen_no_muldiv;
-
-    block_muldiv : block
-    begin
-    end block;
 
 -- Memory stage
     process (clk_i, arst_i)
@@ -597,8 +586,6 @@ begin
         csr_read_data      when memory_rd_we_q = '1' and  memory_sys_q = '1' and G_EXTENSION_ZICSR = TRUE   else
         memory_alu_a_res_q when memory_rd_we_q = '1' and (memory_sys_q = '0' or  G_EXTENSION_ZICSR = FALSE) else
         (others => '-');
-
-    memory_mem_dat <= data_rsp_dat_i when memory_load_q = '1' else (others => '-');
 
 -- Writeback stage
     process (clk_i, arst_i)
@@ -658,6 +645,43 @@ begin
         '1' when writeback_rd_we_q = '1' and  writeback_muldiv_q = '1' and muldiv_rdy = '1' and G_EXTENSION_M = TRUE else
         '1' when writeback_rd_we_q = '1' and (writeback_muldiv_q = '0' or G_EXTENSION_M = FALSE) else
         '0';
+
+-- LSU
+    lsu_flush <= branch_load_pc;
+
+    u_lsu : entity work.lsu
+        generic map (
+            G_TWO_CYCLES_READ => C_TWO_CYCLES_READ
+        )
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            enable_i => memory_enable,
+            valid_i => execute_lsu_valid_q,
+            flush_i => lsu_flush,
+            address_i => execute_alu_b_res,
+            data_i => execute_mem_data,
+            load_i => execute_load_q,
+            store_i => execute_store_q,
+            size_i => execute_funct3_q,
+            data_o => memory_mem_dat,
+            cmd_adr_o => data_cmd_adr,
+            cmd_dat_o => data_cmd_dat,
+            cmd_siz_o => data_cmd_siz,
+            cmd_vld_o => data_cmd_vld,
+            cmd_we_o => data_cmd_we,
+            cmd_rdy_i => data_cmd_rdy_i,
+            rsp_dat_i => data_rsp_dat_i,
+            rsp_vld_i => data_rsp_vld_i,
+            cmd_rdy_o => lsu_cmd_rdy,
+            rsp_rdy_o => lsu_rsp_rdy
+        );
+
+    data_cmd_adr_o <= data_cmd_adr;
+    data_cmd_vld_o <= data_cmd_vld;
+    data_cmd_we_o <= data_cmd_we;
+    data_cmd_dat_o <= data_cmd_dat;
+    data_cmd_siz_o <= data_cmd_siz;
 
 -- Branch
     branch_load_pc   <= memory_branch_q or csr_load_pc or not booted_q;
@@ -763,11 +787,11 @@ begin
         '0' when branch_load_pc = '1' else
         '1' when ctl_memory_stall = '1' else
         '1' when execute_shifter_rdy = '0' and G_FULL_BARREL_SHIFTER = FALSE else
-        '1' when execute_lsu_valid_q = '1' and data_cmd_rdy_i = '0' else -- j @; l/s @delayed_cmd
+        '1' when lsu_cmd_rdy = '0' else
         '0';
 
     ctl_memory_stall <=
-        '1' when memory_rd_we_q = '1' and memory_load_q = '1' and data_rsp_vld_i = '0' else
+        '1' when lsu_rsp_rdy = '0' else
         '0';
     ctl_writeback_stall <=
         '1' when writeback_rd_we_q = '1' and writeback_muldiv_q = '1' and muldiv_rdy = '0' and G_EXTENSION_M = TRUE else
