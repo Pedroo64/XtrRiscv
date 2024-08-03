@@ -137,8 +137,8 @@ architecture rtl of cpu is
     signal csr_target_pc : std_logic_vector(31 downto 0);
     signal csr_read_data : std_logic_vector(31 downto 0);
     signal csr_trap_entry, csr_trap_exit : std_logic;
-    signal csr_trap_vect : std_logic_vector(31 downto 0);
-    signal trap_exception, trap_interrupt : std_logic;
+    signal csr_trap_entry_vect, csr_trap_exit_vect, csr_trap_exception_pc : std_logic_vector(31 downto 0);
+    signal csr_trap_exception, csr_trap_interrupt : std_logic;
     -- muldiv
     signal muldiv_rdy : std_logic;
     signal muldiv_res : std_logic_vector(31 downto 0);
@@ -1144,15 +1144,19 @@ begin
 
         csr_trap_entry <= trap_entry;
         csr_trap_exit <= trap_exit;
-        csr_trap_vect <= csr_q.mtvec;
-        trap_exception <= exception_q;
-        trap_interrupt <= interrupt_q;
+        csr_trap_entry_vect <= csr_q.mtvec;
+        csr_trap_exit_vect <= csr_q.mepc;
+        csr_trap_exception <= exception_q;
+        csr_trap_interrupt <= interrupt_q;
+        csr_trap_exception_pc <= epc;
     end generate gen_csr;
 
     gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
         csr_read_data <= (others => '-');
         csr_load_pc   <= '0';
         csr_target_pc <= (others => '-');
+        csr_trap_entry <= '0';
+        csr_trap_exit  <= '0';
     end generate gen_no_csr;
 
 
@@ -1190,9 +1194,11 @@ begin
                 fetch_target_pc_i => fetch_target_pc,
                 trap_entry_i => csr_trap_entry,
                 trap_exit_i => csr_trap_exit,
-                trap_vect_i => csr_trap_vect,
-                trap_exception_i => trap_exception,
-                trap_interrupt_i => trap_interrupt,
+                trap_entry_vect_i => csr_trap_entry_vect,
+                trap_exit_vect_i => csr_trap_exit_vect,
+                trap_exception_i => csr_trap_exception,
+                trap_interrupt_i => csr_trap_interrupt,
+                trap_exception_pc_i => csr_trap_exception_pc,
                 regfile_rd_we_i => regfile_rd_we,
                 regfile_rd_dat_i => regfile_rd_dat,
                 regfile_rd_adr_i => regfile_rd_adr

@@ -39,9 +39,11 @@ entity cpu_checker is
         fetch_target_pc_i : in std_logic_vector(31 downto 0);
         trap_entry_i : in std_logic;
         trap_exit_i : in std_logic;
-        trap_vect_i : in std_logic_vector(31 downto 0);
+        trap_entry_vect_i : in std_logic_vector(31 downto 0);
+        trap_exit_vect_i : in std_logic_vector(31 downto 0);
         trap_exception_i : in std_logic;
         trap_interrupt_i : in std_logic;
+        trap_exception_pc_i : in std_logic_vector(31 downto 0);
         regfile_rd_we_i : in std_logic;
         regfile_rd_dat_i : in std_logic_vector(31 downto 0);
         regfile_rd_adr_i : in std_logic_vector(4 downto 0)
@@ -103,6 +105,7 @@ architecture rtl of cpu_checker is
     signal ecall, ebreak, mret : std_logic;
     signal instruction_misaligned : std_logic;
     signal load_misaligned, store_misaligned : std_logic;
+    signal trap_interrupt_pc : std_logic_vector(31 downto 0);
 begin
     -- Pipeline
     process (clk_i, arst_i)
@@ -262,7 +265,7 @@ begin
         end case;
     end process;
 
-    process (execute_opcode, execute_current_pc, execute_immediate, execute_rs1_dat, execute_funct3, trap_vect_i)
+    process (execute_opcode, execute_current_pc, execute_immediate, execute_rs1_dat, execute_funct3, trap_entry_vect_i, trap_exit_vect_i)
     begin
         execute_next_pc <= (others => 'X');
         case execute_opcode is
@@ -274,9 +277,9 @@ begin
                 if execute_funct3 = "000" then
                     case execute_immediate(11 downto 0) is
                         when CSR_FN12_ECALL | CSR_FN12_EBREAK =>
-                            execute_next_pc <= trap_vect_i;
-                        -- when CSR_FN12_MRET =>
-                        --     execute_next_pc <= csr_mepc_i;
+                            execute_next_pc <= trap_entry_vect_i;
+                        when CSR_FN12_MRET =>
+                            execute_next_pc <= trap_exit_vect_i;
                         when others =>
                     end case;
                 end if;
@@ -469,14 +472,11 @@ begin
     regfile_rd_we <= writeback_rd_we and writeback_valid;
     regfile_rd_adr <= writeback_rd_adr;
 
-    -- TODO fix exceptions entry/exit
-    load_pc <=
-        '0' when mret = '1' else
-        '1' when (memory_load_pc = '1' and memory_valid = '1') or trap_entry_i = '1' else
-        '0'; -- or sync_exception_entry or exception_exit;
+    load_pc <= '1' when (memory_load_pc = '1' and memory_valid = '1') or trap_entry_i = '1' or trap_exit_i = '1' else '0';
     target_pc <=
-        trap_vect_i when trap_entry_i = '1' or ecall = '1' or ebreak = '1' else -- trap entry
-        memory_next_pc; -- JAL, JALR, BRANCH
+        trap_entry_vect_i when trap_entry_i = '1' else
+        trap_exit_vect_i  when trap_exit_i  = '1' else
+        memory_next_pc;
 
     process (clk_i)
     begin
@@ -498,12 +498,9 @@ begin
     begin
         mem_cmd_dat <= (others => 'X');
         case execute_funct3 is
-            when "000" =>
-                mem_cmd_dat <= execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0);
-            when "001" =>
-                mem_cmd_dat <= execute_mem_dat(15 downto 0) & execute_mem_dat(15 downto 0);
-            when "010" =>
-                mem_cmd_dat <= execute_mem_dat;
+            when "000" => mem_cmd_dat <= execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0) & execute_mem_dat(7 downto 0);
+            when "001" => mem_cmd_dat <= execute_mem_dat(15 downto 0) & execute_mem_dat(15 downto 0);
+            when "010" => mem_cmd_dat <= execute_mem_dat;
             when others =>
         end case;
     end process;
@@ -565,9 +562,15 @@ begin
         '1' when memory_opcode = RV32I_OP_STORE and memory_funct3 = "010" and memory_mem_adr(1 downto 0) /= "00" and G_EXTENSION_ZICSR = TRUE else
         '0';
 
+    trap_interrupt_pc <= 
+        memory_next_pc when memory_load_pc = '1' and memory_valid = '1' else
+        std_logic_vector((unsigned(memory_current_pc) + 4));
+
     process (clk_i)
     begin
         if rising_edge(clk_i) then
+            vhdl_assert(trap_entry_i = '1' and trap_interrupt_i = '1' and trap_exception_i = '0' and not (trap_exception_pc_i = trap_interrupt_pc), "Interrupt wrong exception PC. model: " & to_hex_str(trap_interrupt_pc) & " impl: " & to_hex_str(trap_exception_pc_i));
+            vhdl_assert(trap_entry_i = '1' and trap_exception_i = '1' and not (trap_exception_pc_i = memory_current_pc), "Exception wrong exception PC model: " & to_hex_str(memory_current_pc) & " impl: " & to_hex_str(trap_exception_pc_i));
             vhdl_assert(arst_i = '0' and fetch_enable_i = '1' and not (fetch_load_pc_i = '0' or fetch_load_pc_i = '1'), "fetch_load_pc_i = X");
         end if;
     end process;
