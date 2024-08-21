@@ -57,7 +57,7 @@ begin
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if instr_vld_i = '1' then
+            if enable_i = '1' and instr_vld_i = '1' then
                 instr_dat_q <= instr_dat_i(31 downto 16);                
             end if;
         end if;

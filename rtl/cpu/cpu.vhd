@@ -643,7 +643,7 @@ begin
     gen_muldiv: if G_EXTENSION_M = TRUE generate
         signal muldiv_en, muldiv_flush : std_logic;
     begin
-        muldiv_en <= decode_muldiv and decode_valid_q and execute_enable;
+        muldiv_en <= decode_muldiv and decode_valid_q and execute_enable and not (ctl_decode_rs1_hazard or ctl_decode_rs2_hazard or ctl_decode_execute_csr_hazard);
         muldiv_flush <= '1' when branch_load_pc = '1' and (memory_muldiv_q = '0' and writeback_muldiv_q = '0') else '0';
 
         u_muldiv : entity work.muldiv
