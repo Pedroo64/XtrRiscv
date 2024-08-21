@@ -1,6 +1,7 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
+use IEEE.math_real.all;
 
 use work.rv32i_pkg.all;
 use work.vhdl_utils.all;
@@ -52,22 +53,38 @@ entity cpu is
 end entity cpu;
 
 architecture rtl of cpu is
-    constant C_CATCH_ILLEGAL : boolean := FALSE;
+    constant C_CATCH_ILLEGAL : boolean := FALSE and G_EXTENSION_ZICSR;
     constant C_TWO_CYCLES_READ : boolean := FALSE;
+    constant C_FETCH_FIFO_DEPTH : integer := 1;
+    constant C_FETCH_CNT_WIDTH : integer := integer(ceil(log2(real(C_FETCH_FIFO_DEPTH))));
     -- global
     signal booted_q : std_logic;
     -- fetch
-    signal fetch_enable, fetch_flush, fetch_pc_en, fetch_load_pc_en : std_logic;
+    signal fetch_enable, fetch_flush, fetch_pc_en, fetch_load_pc_en, fetch_stall, fetch_flush_q : std_logic;
     signal fetch_pc_q, fetch_nxt_pc, fetch_target_pc : std_logic_vector(31 downto 0);
-    signal fetch_instr_dat_q, fetch_instr_dat : std_logic_vector(31 downto 0);
-    signal fetch_valid_q : std_logic;
+    signal fetch_instr_cmd_vld, fetch_instr_raw_vld : std_logic;
+    signal fetch_instr_raw_dat : std_logic_vector(31 downto 0);
+    signal fetch_instr_dat_align, fetch_instr_dat : std_logic_vector(31 downto 0);
+    signal fetch_instr_vld_align, fetch_instr_vld : std_logic;
     signal fetch_rs1_adr, fetch_rs2_adr : std_logic_vector(4 downto 0);
+    signal fetch_instr_rvc : std_logic;
+    signal fetch_fifo_clr : std_logic;
+    signal fetch_fifo_wdat, fetch_fifo_rdat : std_logic_vector(31 downto 0);
+    signal fetch_fifo_we, fetch_fifo_re : std_logic;
+    signal fetch_fifo_ef, fetch_fifo_ff : std_logic;
+    signal fetch_command_cnt_q, fetch_pending_cnt_q : unsigned(C_FETCH_CNT_WIDTH downto 0);
+    signal fetch_pending_inc, fetch_pending_dec, fetch_pending_empty, fetch_pending_full : std_logic;
+    signal fetch_command_inc, fetch_command_dec, fetch_command_empty, fetch_command_full : std_logic;
+    -- pre-decode
+    signal fetch_instr_dat_decompressed : std_logic_vector(31 downto 0);
+    signal fetch_instr_rs1_adr_decompressed, fetch_instr_rs2_adr_decompressed : std_logic_vector(4 downto 0);
     -- decode
     signal decode_enable, decode_flush, decode_valid_q : std_logic;
     signal decode_instr_dat_q, decode_pc_q, decode_nxt_pc, decode_pc_incr : std_logic_vector(31 downto 0);
     signal decode_opcode : std_logic_vector(6 downto 0);
     signal decode_funct3 : std_logic_vector(2 downto 0);
     signal decode_funct7 : std_logic_vector(6 downto 0);
+    signal decode_instr_rvc_q : std_logic;
     signal decode_jump, decode_branch, decode_sys, decode_muldiv : std_logic;
     signal decode_rs1_en, decode_rs2_en, decode_rd_we, decode_rd_is_zero : std_logic;
     signal decode_rs1_adr, decode_rs2_adr, decode_rd_adr : std_logic_vector(4 downto 0);
@@ -144,10 +161,6 @@ architecture rtl of cpu is
     signal muldiv_res : std_logic_vector(31 downto 0);
 begin
 
--- Fetch stage
-    fetch_load_pc_en <= branch_load_pc;
-    fetch_target_pc  <= branch_target_pc;
-
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -157,11 +170,17 @@ begin
         end if;
     end process;
 
+-- Fetch stage
+    fetch_load_pc_en <= branch_load_pc;
+    fetch_target_pc  <= branch_target_pc;
+
+    fetch_instr_cmd_vld <= booted_q and not fetch_stall and not fetch_command_full and not fetch_flush_q;
+
     fetch_nxt_pc <=
         fetch_target_pc when fetch_load_pc_en = '1' else
         std_logic_vector(unsigned(fetch_pc_q) + 4);
 
-    fetch_pc_en <= fetch_enable and (fetch_load_pc_en or instr_cmd_rdy_i);
+    fetch_pc_en <= (fetch_load_pc_en or (instr_cmd_rdy_i and not fetch_stall and not fetch_command_full and not fetch_flush_q));
 
     process (clk_i)
     begin
@@ -172,32 +191,127 @@ begin
         end if;
     end process;
 
-    process (clk_i)
-    begin
-        if rising_edge(clk_i) then
-            if instr_rsp_vld_i = '1' then
-                fetch_instr_dat_q <= instr_rsp_dat_i;
-            end if;
-        end if;
-    end process;
+    fetch_fifo_clr  <= fetch_flush;
+    fetch_fifo_we   <= (not fetch_enable or not fetch_fifo_ef) and instr_rsp_vld_i;
+    fetch_fifo_wdat <= instr_rsp_dat_i;
+    fetch_fifo_re   <= fetch_enable and not fetch_fifo_ef;
 
-    fetch_instr_dat <= instr_rsp_dat_i when instr_rsp_vld_i = '1' else fetch_instr_dat_q;
-    fetch_rs1_adr <= fetch_instr_dat(19 downto 15);
-    fetch_rs2_adr <= fetch_instr_dat(24 downto 20);
+    u_fetch_fifo : entity work.cpu_fifo
+        generic map (
+            G_FIFO_DEPTH => C_FETCH_FIFO_DEPTH,
+            G_FIFO_WIDTH => 32
+        )
+        port map (
+            arst_i => arst_i,
+            clk_i => clk_i,
+            srst_i => fetch_fifo_clr,
+            we_i => fetch_fifo_we,
+            wdata_i => fetch_fifo_wdat,
+            re_i => fetch_fifo_re,
+            rdata_o => fetch_fifo_rdat,
+            empty_o => fetch_fifo_ef,
+            full_o => fetch_fifo_ff
+        );
+
+    fetch_instr_raw_dat <= instr_rsp_dat_i when fetch_fifo_ef = '1' else fetch_fifo_rdat;
+    fetch_instr_raw_vld <= ((instr_rsp_vld_i and fetch_fifo_ef) or not fetch_fifo_ef) and not fetch_flush_q;
+
+    fetch_pending_inc <= fetch_instr_cmd_vld and instr_cmd_rdy_i;
+    fetch_pending_dec <= instr_rsp_vld_i;
+    fetch_command_inc <= fetch_pending_inc;
+    fetch_command_dec <= decode_enable and fetch_instr_raw_vld;
 
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
-            fetch_valid_q <= '0';
+            fetch_pending_cnt_q <= (others => '0');
         elsif rising_edge(clk_i) then
-            if fetch_enable = '1' then
-                fetch_valid_q <= not fetch_flush and booted_q;
+            if fetch_pending_inc = '1' and fetch_pending_dec = '0' then
+                fetch_pending_cnt_q <= fetch_pending_cnt_q + 1;
+            elsif fetch_pending_inc = '0' and fetch_pending_dec = '1' then
+                fetch_pending_cnt_q <= fetch_pending_cnt_q - 1;
             end if;
         end if;
     end process;
 
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if fetch_flush = '1' or fetch_flush_q = '1' then
+                fetch_command_cnt_q <= (others => '0');
+            elsif fetch_command_inc = '1' and fetch_command_dec = '0' then
+                fetch_command_cnt_q <= fetch_command_cnt_q + 1;
+            elsif fetch_command_inc = '0' and fetch_command_dec = '1' then
+                fetch_command_cnt_q <= fetch_command_cnt_q - 1;
+            end if;
+        end if;
+    end process;
+
+    fetch_pending_empty <= '1' when fetch_pending_cnt_q = 0 and fetch_pending_inc = '0' else '0';
+    fetch_pending_full  <= fetch_pending_cnt_q(fetch_pending_cnt_q'left) and not fetch_pending_dec;
+    fetch_command_empty <= '1' when fetch_command_cnt_q = 0 and fetch_command_inc = '0' else '0';
+    fetch_command_full  <= fetch_command_cnt_q(fetch_command_cnt_q'left) and not fetch_command_dec;
+
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if fetch_flush = '1' or fetch_pending_empty = '1' then
+                fetch_flush_q <= not fetch_pending_empty;
+            end if;
+        end if;
+    end process;
+
+    gen_aligner: if G_EXTENSION_C = TRUE generate
+        u_instr_align : entity work.instruction_aligner
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                enable_i => fetch_enable,
+                load_pc_i => fetch_load_pc_en,
+                target_pc_i => fetch_target_pc,
+                instr_vld_i => fetch_instr_raw_vld,
+                instr_dat_i => fetch_instr_raw_dat,
+                instr_vld_o => fetch_instr_vld_align,
+                instr_dat_o => fetch_instr_dat_align,
+                instr_rvc_o => fetch_instr_rvc,
+                stall_o => fetch_stall
+            );
+    end generate gen_aligner;
+
+    gen_no_aligner: if G_EXTENSION_C = FALSE generate
+        fetch_instr_vld_align <= fetch_instr_raw_vld;
+        fetch_instr_dat_align <= fetch_instr_raw_dat;
+        fetch_instr_rvc       <= '0';
+        fetch_stall           <= '0';
+    end generate gen_no_aligner;
+
+
     instr_cmd_adr_o <= fetch_pc_q;
-    instr_cmd_vld_o <= booted_q and fetch_enable;
+    instr_cmd_vld_o <= fetch_instr_cmd_vld;
+
+-- Pre-decode
+    gen_decompressor: if G_EXTENSION_C = TRUE generate
+        u_decompressor : entity work.decompressor
+            generic map (
+                G_CATCH_ILLEGAL => C_CATCH_ILLEGAL
+            )
+            port map (
+                instr_i => fetch_instr_dat_align(15 downto 0),
+                instr_o => fetch_instr_dat_decompressed,
+                rs1_adr_o => fetch_instr_rs1_adr_decompressed,
+                rs2_adr_o => fetch_instr_rs2_adr_decompressed
+            );
+    end generate gen_decompressor;
+    gen_no_decompressor: if G_EXTENSION_C = FALSE generate
+        fetch_instr_rs1_adr_decompressed <= (others => '-');
+        fetch_instr_rs2_adr_decompressed <= (others => '-');
+        fetch_instr_dat_decompressed     <= (others => '-');
+    end generate gen_no_decompressor;
+
+    fetch_rs1_adr   <= fetch_instr_rs1_adr_decompressed when fetch_instr_rvc = '1' else fetch_instr_dat_align(19 downto 15);
+    fetch_rs2_adr   <= fetch_instr_rs2_adr_decompressed when fetch_instr_rvc = '1' else fetch_instr_dat_align(24 downto 20);
+    fetch_instr_dat <= fetch_instr_dat_decompressed     when fetch_instr_rvc = '1' else fetch_instr_dat_align;
+    fetch_instr_vld <= fetch_instr_vld_align;
 
 -- Decode stage
     process (clk_i, arst_i)
@@ -206,7 +320,7 @@ begin
             decode_valid_q <= '0';
         elsif rising_edge(clk_i) then
             if decode_enable = '1' then
-                decode_valid_q <= fetch_valid_q and not decode_flush;
+                decode_valid_q <= fetch_instr_vld and not decode_flush;
             end if;
         end if;
     end process;
@@ -216,6 +330,7 @@ begin
         if rising_edge(clk_i) then
             if decode_enable = '1' then
                 decode_instr_dat_q <= fetch_instr_dat;
+                decode_instr_rvc_q <= fetch_instr_rvc;
                 if branch_load_pc = '1' then
                     decode_pc_q <= branch_target_pc;
                 else
@@ -225,7 +340,9 @@ begin
         end if;
     end process;
 
-    decode_pc_incr <= std_logic_vector(to_unsigned(4, decode_pc_incr'length));
+    decode_pc_incr <=
+        std_logic_vector(to_unsigned(2, decode_pc_incr'length)) when decode_instr_rvc_q = '1' and G_EXTENSION_C = TRUE else
+        std_logic_vector(to_unsigned(4, decode_pc_incr'length));
 
     decode_nxt_pc  <= std_logic_vector(unsigned(decode_pc_q) + unsigned(decode_pc_incr and (31 downto 0 => decode_valid_q)));
 
@@ -1173,7 +1290,7 @@ begin
                 clk_i => clk_i,
                 decode_valid_i => decode_valid_q,
                 decode_instr_i => decode_instr_dat_q,
-                decode_instr_compress_i => '0',
+                decode_instr_compress_i => decode_instr_rvc_q,
                 decode_rs1_dat_i => decode_rs1_dat,
                 decode_rs2_dat_i => decode_rs2_dat,
                 decode_pc_i => decode_pc_q,

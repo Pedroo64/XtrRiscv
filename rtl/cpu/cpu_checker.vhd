@@ -563,8 +563,9 @@ begin
         '0';
 
     trap_interrupt_pc <= 
-        memory_next_pc when memory_load_pc = '1' and memory_valid = '1' else
-        std_logic_vector((unsigned(memory_current_pc) + 4));
+        memory_next_pc                                      when memory_load_pc = '1' and memory_valid = '1' else
+        std_logic_vector((unsigned(memory_current_pc) + 4)) when                          memory_valid = '1' else
+        memory_current_pc;
 
     process (clk_i)
     begin

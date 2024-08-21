@@ -28,6 +28,7 @@ VHDL_SOURCES += $(RTL_DIR)/cpu/utils/cpu_fifo.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/comparator.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/alu.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/c_extension/decompressor.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/c_extension/instruction_aligner.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/mul.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/div.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/m_extension/muldiv.vhd
