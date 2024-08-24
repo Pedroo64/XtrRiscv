@@ -1308,7 +1308,7 @@ begin
             end process;
         end generate gen_mtval;
 
-        gen_no_mtval: if not (C_CATCH_ILLEGAL = TRUE) and FALSE generate
+        gen_no_mtval: if not (C_IMPL_EBREAK = TRUE or C_CATCH_ILLEGAL = TRUE or C_CATCH_MISALIGNED_INSTRUCTION = TRUE or C_CATCH_MISALIGNED_LOAD_STORE = TRUE) generate
             csr_q.mtval <= (others => '0');
         end generate gen_no_mtval;
 
