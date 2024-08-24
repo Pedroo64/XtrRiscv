@@ -54,6 +54,10 @@ end entity cpu;
 
 architecture rtl of cpu is
     constant C_CATCH_ILLEGAL : boolean := FALSE and G_EXTENSION_ZICSR;
+    constant C_CATCH_MISALIGNED_INSTRUCTION : boolean := FALSE and G_EXTENSION_ZICSR;
+    constant C_CATCH_MISALIGNED_LOAD_STORE : boolean := FALSE and G_EXTENSION_ZICSR;
+    constant C_IMPL_ECALL : boolean := TRUE and G_EXTENSION_ZICSR;
+    constant C_IMPL_EBREAK : boolean := TRUE and G_EXTENSION_ZICSR;
     constant C_TWO_CYCLES_READ : boolean := FALSE;
     constant C_FETCH_FIFO_DEPTH : integer := 1;
     constant C_FETCH_CNT_WIDTH : integer := integer(ceil(log2(real(C_FETCH_FIFO_DEPTH))));
@@ -131,6 +135,7 @@ architecture rtl of cpu is
     signal branch_target_pc : std_logic_vector(31 downto 0);
     -- lsu
     signal lsu_flush, lsu_cmd_rdy, lsu_rsp_rdy : std_logic;
+    signal lsu_misaligned_store, lsu_misaligned_load : std_logic;
     -- ctl
     signal ctl_fetch_stall, ctl_decode_stall, ctl_execute_stall, ctl_memory_stall, ctl_writeback_stall : std_logic;
     signal ctl_decode_execute_rs1_match, ctl_decode_memory_rs1_match, ctl_decode_writeback_rs1_match, ctl_decode_regfile_rs1_match : std_logic;
@@ -768,7 +773,8 @@ begin
 
     u_lsu : entity work.lsu
         generic map (
-            G_TWO_CYCLES_READ => C_TWO_CYCLES_READ
+            G_TWO_CYCLES_READ => C_TWO_CYCLES_READ,
+            G_CATCH_MISALIGNED => C_CATCH_MISALIGNED_LOAD_STORE
         )
         port map (
             arst_i => arst_i,
@@ -791,7 +797,9 @@ begin
             rsp_dat_i => data_rsp_dat_i,
             rsp_vld_i => data_rsp_vld_i,
             cmd_rdy_o => lsu_cmd_rdy,
-            rsp_rdy_o => lsu_rsp_rdy
+            rsp_rdy_o => lsu_rsp_rdy,
+            load_misaligned_o => lsu_misaligned_load,
+            store_misaligned_o => lsu_misaligned_store
         );
 
     data_cmd_adr_o <= data_cmd_adr;
@@ -939,6 +947,7 @@ begin
 
 -- csr
     gen_csr: if G_EXTENSION_ZICSR = TRUE generate
+        constant C_IMPL_MRET : boolean := TRUE;
         signal csr_mstatus_q : csr_mstatus_t;
         signal csr_mie_q : csr_mie_t;
         signal csr_q : csr_registers_t;
@@ -961,13 +970,16 @@ begin
         signal decode_illegal_opcode, execute_illegal_opcode_q : std_logic;
         signal execute_instr_dat_q, instr_dat_q : std_logic_vector(31 downto 0);
         signal illegal_instr_q : std_logic;
+        signal misaligned_store_q, misaligned_load_q : std_logic;
+        signal execute_misaligned_instruction, misaligned_instruction_q : std_logic;
+        signal mcause_nxt : std_logic_vector(31 downto 0);
     begin
         gen_catch_illegal_instr: if C_CATCH_ILLEGAL = TRUE generate
         begin
-            process (decode_opcode, decode_funct3, decode_funct7)
+            process (decode_instr_dat_q, decode_funct3, decode_funct7)
             begin
                 decode_illegal_opcode <= '0';
-                case decode_opcode is
+                case decode_instr_dat_q(6 downto 0) is
                     when RV32I_OP_LUI     =>
                     when RV32I_OP_AUIPC   =>
                     when RV32I_OP_JAL     =>
@@ -987,15 +999,27 @@ begin
                             when "000" | "001" | "010" =>
                             when others => decode_illegal_opcode <= '1';
                         end case;
-                    when RV32I_OP_REG_IMM | RV32I_OP_REG_REG =>
+                    when RV32I_OP_REG_IMM =>
                         case decode_funct3 is
                             when RV32I_FN3_SL => if decode_funct7 /= "0000000" then decode_illegal_opcode <= '1'; end if;
                             when RV32I_FN3_SR => if decode_funct7 /= "0000000" and decode_funct7 /= "0100000" then decode_illegal_opcode <= '1'; end if;
                             when others =>
                         end case;
+                    when RV32I_OP_REG_REG =>
+                        case decode_funct7 is
+                            when "0000000" =>
+                            when "0000001" => if G_EXTENSION_M = FALSE then decode_illegal_opcode <= '1'; end if;
+                            when "0100000" =>
+                                case decode_funct3 is
+                                    when RV32I_FN3_ADD =>
+                                    when RV32I_FN3_SR  =>
+                                    when others        => decode_illegal_opcode <= '1';
+                                end case;
+                            when others    => decode_illegal_opcode <= '1';
+                        end case;
                     when RV32I_OP_FENCE   =>
                     when RV32I_OP_SYS     =>
-                    when others           =>
+                    when others           => decode_illegal_opcode <= '1';
                 end case;
             end process;
         end generate gen_catch_illegal_instr;
@@ -1004,10 +1028,16 @@ begin
             decode_illegal_opcode <= '0';
         end generate gen_no_illegal_instr_catch;
 
-        decode_ecall  <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_ECALL else '0';
-        decode_ebreak <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_EBREAK else '0';
-        decode_mret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_MRET else '0';
+        decode_ecall  <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_ECALL and C_IMPL_ECALL = TRUE else '0';
+        decode_ebreak <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_EBREAK and C_IMPL_EBREAK = TRUE else '0';
+        decode_mret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_MRET and C_IMPL_MRET = TRUE else '0';
         decode_csr_en <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 /= "000" else '0';
+
+        execute_misaligned_instruction <=
+            '0' when C_CATCH_MISALIGNED_INSTRUCTION = FALSE else
+            '1' when unsigned(execute_alu_b_res(1 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = FALSE else
+            '1' when unsigned(execute_alu_b_res(0 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = TRUE  else
+            '0';
 
         process (clk_i)
         begin
@@ -1029,6 +1059,9 @@ begin
                     ecall_q <= execute_ecall_q;
                     ebreak_q <= execute_ebreak_q;
                     illegal_instr_q <= execute_illegal_opcode_q;
+                    misaligned_load_q <= lsu_misaligned_load;
+                    misaligned_store_q <= lsu_misaligned_store;
+                    misaligned_instruction_q <= execute_misaligned_instruction;
                 end if;
             end if;
         end process;
@@ -1040,7 +1073,15 @@ begin
         external_interrupt <= external_irq_i and external_interrupt_en;
         timer_interrupt    <= timer_irq_i and timer_interrupt_en;
 
-        exception <= '1' when execute_ecall_q = '1' or execute_ebreak_q = '1' or execute_illegal_opcode_q = '1' else '0';
+        exception <=
+            '1' when execute_ecall_q = '1'
+                  or execute_ebreak_q = '1'
+                  or execute_illegal_opcode_q = '1'
+                  or lsu_misaligned_load = '1'
+                  or lsu_misaligned_store = '1'
+                  or execute_misaligned_instruction = '1'
+                else
+            '0';
         interrupt <= '1' when (external_interrupt = '1' or timer_interrupt = '1') and interrut_en = '1' else '0';
 
         process (clk_i)
@@ -1091,7 +1132,7 @@ begin
                 if csr_read_en = '1' then
                     csr_read_data_q <= (others => '0');
                     case csr_read_addr is
-                        when CSR_MSCRATCH =>
+                        when CSR_MSCRATCH => csr_read_data_q <= csr_q.mscratch;
                         when CSR_MIE      => csr_read_data_q <= csr_q.mie;
                         when CSR_MSTATUS  => csr_read_data_q <= csr_q.mstatus;
                         when CSR_MTVEC    => csr_read_data_q <= csr_q.mtvec;
@@ -1155,12 +1196,12 @@ begin
             csr_mepc_we     <= '0';
             csr_mcause_we   <= '0';
             case csr_write_addr is
-                when CSR_MSCRATCH =>
-                when CSR_MIE      => csr_mie_we     <= '1';
-                when CSR_MSTATUS  => csr_mstatus_we <= '1';
-                when CSR_MTVEC    => csr_mtvec_we   <= '1';
-                when CSR_MEPC     => csr_mepc_we    <= '1';
-                when CSR_MCAUSE   => csr_mcause_we  <= '1';
+                when CSR_MSCRATCH => csr_mscratch_we <= '1';
+                when CSR_MIE      => csr_mie_we      <= '1';
+                when CSR_MSTATUS  => csr_mstatus_we  <= '1';
+                when CSR_MTVEC    => csr_mtvec_we    <= '1';
+                when CSR_MEPC     => csr_mepc_we     <= '1';
+                when CSR_MCAUSE   => csr_mcause_we   <= '1';
                 when CSR_MTVAL    =>
                 when CSR_DCSR     =>
                 when CSR_DPC      =>
@@ -1183,19 +1224,22 @@ begin
         end process;
         csr_q.mie <= (31 downto 12 => '0') & csr_mie_q.meie & (10 downto 8 => '0') & csr_mie_q.mtie & (6 downto 0 => '0');
 
+        mcause_nxt <=
+               (CSR_MCAUSE_ILLEGAL_INSTRUCTION                                         and (31 downto 0 => illegal_instr_q          and bool_to_sl(C_CATCH_ILLEGAL)))
+            or (CSR_MCAUSE_MACHINE_ECALL                                               and (31 downto 0 => ecall_q                  and bool_to_sl(C_IMPL_ECALL)))
+            or (CSR_MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED                              and (31 downto 0 => misaligned_instruction_q and bool_to_sl(C_CATCH_MISALIGNED_INSTRUCTION)))
+            or (CSR_MCAUSE_BREAKPOINT                                                  and (31 downto 0 => ebreak_q                 and bool_to_sl(C_IMPL_EBREAK)))
+            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED                                     and (31 downto 0 => misaligned_load_q        and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
+            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED                                     and (31 downto 0 => misaligned_store_q       and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
+            or (CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT                                  and (31 downto 0 => external_interrupt_q     and not exception_q))
+            or (CSR_MCAUSE_MACHINE_TIMER_INTERRUPT                                     and (31 downto 0 => timer_interrupt_q        and not exception_q))
+            ;
+
         process (clk_i)
         begin
             if rising_edge(clk_i) then
-                if exception_q = '1' and illegal_instr_q = '1' then
-                    csr_q.mcause <= CSR_MCAUSE_ILLEGAL_INSTRUCTION;
-                elsif exception_q = '1' and ecall_q = '1' then
-                    csr_q.mcause <= CSR_MCAUSE_MACHINE_ECALL;
-                elsif exception_q = '1' and ebreak_q = '1' then
-                    csr_q.mcause <= CSR_MCAUSE_BREAKPOINT;
-                elsif interrupt_q = '1' and external_interrupt_q = '1' then
-                    csr_q.mcause <= CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT;
-                elsif interrupt_q = '1' and timer_interrupt_q = '1' then
-                    csr_q.mcause <= CSR_MCAUSE_MACHINE_TIMER_INTERRUPT;
+                if exception_q = '1' or interrupt_q = '1' then
+                    csr_q.mcause <= mcause_nxt;
                 elsif csr_mcause_we = '1' and csr_write_en = '1' then
                     csr_q.mcause <= csr_write_data(31) & (30 downto 6 => '0') & csr_write_data(5 downto 0);
                 end if;
@@ -1242,20 +1286,29 @@ begin
         csr_mstatus_q.mpp <= "11";
         csr_q.mstatus <= (31 downto 13 => '0') & csr_mstatus_q.mpp & (10 downto 8 => '0') & csr_mstatus_q.mpie & (6 downto 4 => '0') & csr_mstatus_q.mie & (2 downto 0 => '0');
 
-        gen_mtval: if C_CATCH_ILLEGAL = TRUE generate
+        gen_mtval: if C_IMPL_EBREAK = TRUE or C_CATCH_ILLEGAL = TRUE or C_CATCH_MISALIGNED_INSTRUCTION = TRUE or C_CATCH_MISALIGNED_LOAD_STORE = TRUE generate
+            signal mtval_nxt : std_logic_vector(31 downto 0);
+        begin
+            mtval_nxt <=
+                   (memory_pc_q(31 downto 2) & "00" and (31 downto 0 =>     ebreak_q                                  and bool_to_sl(C_IMPL_EBREAK and not G_EXTENSION_C)))
+                or (memory_pc_q(31 downto 1) & '0'  and (31 downto 0 =>     ebreak_q                                  and bool_to_sl(C_IMPL_EBREAK and     G_EXTENSION_C)))
+                or (instr_dat_q                     and (31 downto 0 =>     illegal_instr_q                           and bool_to_sl(C_CATCH_ILLEGAL)))
+                or (memory_alu_b_res_q              and (31 downto 0 =>    (misaligned_instruction_q                  and bool_to_sl(C_CATCH_MISALIGNED_INSTRUCTION))
+                                                                        or (misaligned_load_q                         and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE))
+                                                                        or (misaligned_store_q                        and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE))))
+                ;
+
             process (clk_i)
             begin
                 if rising_edge(clk_i) then
-                    if exception_q = '1' and illegal_instr_q = '1' then
-                        csr_q.mtval <= instr_dat_q;
-                    elsif exception_q = '1' or interrupt_q = '1' then
-                        csr_q.mtval <= (others => '0');
+                    if exception_q = '1' or interrupt_q = '1' then
+                        csr_q.mtval <= mtval_nxt;
                     end if;
                 end if;
             end process;
         end generate gen_mtval;
 
-        gen_no_mtval: if not (C_CATCH_ILLEGAL = TRUE) generate
+        gen_no_mtval: if not (C_CATCH_ILLEGAL = TRUE) and FALSE generate
             csr_q.mtval <= (others => '0');
         end generate gen_no_mtval;
 

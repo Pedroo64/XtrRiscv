@@ -95,6 +95,7 @@ architecture rtl of cpu_checker is
     signal load_pc : std_logic;
     signal target_pc : std_logic_vector(31 downto 0);
 -- memory
+    signal mem_cmd_misaligned : std_logic;
     signal mem_cmd_adr : std_logic_vector(31 downto 0);
     signal mem_cmd_dat : std_logic_vector(31 downto 0);
     signal mem_cmd_vld, mem_cmd_we, mem_rsp_vld : std_logic;
@@ -490,8 +491,13 @@ begin
 
 -- Memory asserts
     mem_cmd_adr <= execute_mem_adr;
+    mem_cmd_misaligned <= 
+        '1' when (execute_funct3 = "001" or execute_funct3 = "101") and mem_cmd_adr(0) /= '0' else
+        '1' when (execute_funct3 = "010" or execute_funct3 = "110") and mem_cmd_adr(1 downto 0) /= "00" else
+        '0';
+
     -- TODO
-    mem_cmd_vld <= '1' when execute_valid = '1' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) and fetch_load_pc_i = '0' else '0';
+    mem_cmd_vld <= '1' when execute_valid = '1' and (execute_opcode = RV32I_OP_LOAD or execute_opcode = RV32I_OP_STORE) and fetch_load_pc_i = '0' and mem_cmd_misaligned = '0' else '0';
     mem_cmd_we  <= '1' when execute_opcode = RV32I_OP_STORE else '0';
     mem_rsp_vld <= '1' when writeback_valid = '1' and writeback_opcode = RV32I_OP_LOAD else '0';
     process (execute_funct3, execute_mem_dat)

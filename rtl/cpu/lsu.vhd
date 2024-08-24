@@ -6,7 +6,8 @@ use work.rv32i_pkg.all;
 
 entity lsu is
     generic (
-        G_TWO_CYCLES_READ : boolean := FALSE
+        G_TWO_CYCLES_READ : boolean := FALSE;
+        G_CATCH_MISALIGNED : boolean := FALSE
     );
     port (
         arst_i : in std_logic;
@@ -29,13 +30,18 @@ entity lsu is
         rsp_dat_i : in std_logic_vector(31 downto 0);
         rsp_vld_i : in std_logic;
         cmd_rdy_o : out std_logic;
-        rsp_rdy_o : out std_logic
+        rsp_rdy_o : out std_logic;
+        load_misaligned_o : out std_logic;
+        store_misaligned_o : out std_logic
     );
 end entity lsu;
 
 architecture rtl of lsu is
     signal cmd_rdy, rsp_rdy : std_logic;
+    signal address_misaligned : std_logic;
 begin
+
+    address_misaligned <= (size_i(0) and address_i(0)) or (size_i(1) and (address_i(1) or address_i(0))) when G_CATCH_MISALIGNED = TRUE else '0'; 
 
     gen_one_cycle_read: if G_TWO_CYCLES_READ = FALSE generate
         signal valid : std_logic;
@@ -61,7 +67,7 @@ begin
         cmd_adr_o <= address_i;
         cmd_dat_o <= data_i;
         cmd_siz_o <= size_i(1 downto 0);
-        cmd_vld_o <= valid;
+        cmd_vld_o <= valid and not address_misaligned;
         cmd_we_o <= store_i;
         data_o <= rsp_dat_i when load_q = '1' else (others => '-');
     end generate gen_one_cycle_read;
@@ -96,8 +102,8 @@ begin
                 cmd_valid_q <= '0';
             elsif rising_edge(clk_i) then
                 if enable = '1' then
-                    valid_q <= valid_i and not flush_i;
-                    cmd_valid_q <= valid_i and not flush_i;
+                    valid_q <= valid_i and not flush_i and not address_misaligned;
+                    cmd_valid_q <= valid_i and not flush_i and not address_misaligned;
                 elsif cmd_rdy = '1' then
                     cmd_valid_q <= '0';
                 end if;
@@ -118,9 +124,9 @@ begin
         end process;
 
         cmd_rdy <= '0' when valid_q = '1' and cmd_rdy_i = '0' else '1';
-        rsp_rdy <= 
-            '0' when valid_q = '1' and load_q = '1' and stall_q = '0' else 
-            '0' when valid_q = '1' and load_q = '1' and stall_q = '1' and rsp_vld_i = '0' else 
+        rsp_rdy <=
+            '0' when valid_q = '1' and load_q = '1' and stall_q = '0' else
+            '0' when valid_q = '1' and load_q = '1' and stall_q = '1' and rsp_vld_i = '0' else
             '1';
 
         cmd_adr_o <= address_q;
@@ -135,5 +141,8 @@ begin
 
     cmd_rdy_o <= cmd_rdy;
     rsp_rdy_o <= rsp_rdy;
+
+    store_misaligned_o <= store_i and address_misaligned; 
+    load_misaligned_o  <= load_i  and address_misaligned;
 
 end architecture rtl;
