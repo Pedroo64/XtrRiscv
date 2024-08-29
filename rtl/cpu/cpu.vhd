@@ -44,8 +44,8 @@ entity cpu is
         debug_cmd_dat_i : in std_logic_vector(31 downto 0);
         debug_cmd_vld_i : in std_logic;
         debug_cmd_we_i : in std_logic;
-        debug_cmd_rdy_o : out std_logic := '0';
-        debug_rsp_vld_o : out std_logic := '0';
+        debug_cmd_rdy_o : out std_logic;
+        debug_rsp_vld_o : out std_logic;
         debug_rsp_dat_o : out std_logic_vector(31 downto 0);
         external_irq_i : in std_logic;
         timer_irq_i : in std_logic
@@ -63,6 +63,8 @@ architecture rtl of cpu is
     constant C_FETCH_CNT_WIDTH : integer := integer(ceil(log2(real(C_FETCH_FIFO_DEPTH))));
     -- global
     signal booted_q : std_logic;
+    signal instr_cmd_rdy, instr_rsp_vld : std_logic;
+    signal instr_rsp_dat : std_logic_vector(31 downto 0);
     -- fetch
     signal fetch_enable, fetch_flush, fetch_pc_en, fetch_load_pc_en, fetch_stall, fetch_flush_q : std_logic;
     signal fetch_pc_q, fetch_nxt_pc, fetch_target_pc : std_logic_vector(31 downto 0);
@@ -164,6 +166,11 @@ architecture rtl of cpu is
     -- muldiv
     signal muldiv_rdy : std_logic;
     signal muldiv_res : std_logic_vector(31 downto 0);
+    -- debug module
+    signal debug_mode_q, debug_reset : std_logic;
+    signal debug_instr_cmd_vld, debug_instr_cmd_rdy, debug_instr_rsp_vld : std_logic;
+    signal debug_instr_rsp_dat : std_logic_vector(31 downto 0);
+    signal debug_mode_sel_q : std_logic;
 begin
 
     process (clk_i, arst_i)
@@ -171,9 +178,15 @@ begin
         if arst_i = '1' then
             booted_q <= '0';
         elsif rising_edge(clk_i) then
-            booted_q <= not srst_i;
+            if srst_i = '1' or debug_reset = '1' or booted_q = '0' then
+                booted_q <= not (srst_i or debug_reset);
+            end if;
         end if;
     end process;
+
+    instr_cmd_rdy <= (not debug_mode_q and instr_cmd_rdy_i)     or (debug_mode_q and debug_instr_cmd_rdy);
+    instr_rsp_vld <= (not debug_mode_sel_q and instr_rsp_vld_i) or (debug_mode_sel_q and debug_instr_rsp_vld);
+    instr_rsp_dat <= instr_rsp_dat_i when debug_mode_sel_q = '0' else debug_instr_rsp_dat;
 
 -- Fetch stage
     fetch_load_pc_en <= branch_load_pc;
@@ -185,7 +198,7 @@ begin
         fetch_target_pc when fetch_load_pc_en = '1' else
         std_logic_vector(unsigned(fetch_pc_q) + 4);
 
-    fetch_pc_en <= (fetch_load_pc_en or (instr_cmd_rdy_i and not fetch_stall and not fetch_command_full and not fetch_flush_q));
+    fetch_pc_en <= (fetch_load_pc_en or (instr_cmd_rdy and not fetch_stall and not fetch_command_full and not fetch_flush_q));
 
     process (clk_i)
     begin
@@ -197,8 +210,8 @@ begin
     end process;
 
     fetch_fifo_clr  <= fetch_flush;
-    fetch_fifo_we   <= (not fetch_enable or not fetch_fifo_ef) and instr_rsp_vld_i;
-    fetch_fifo_wdat <= instr_rsp_dat_i;
+    fetch_fifo_we   <= (not fetch_enable or not fetch_fifo_ef) and instr_rsp_vld;
+    fetch_fifo_wdat <= instr_rsp_dat;
     fetch_fifo_re   <= fetch_enable and not fetch_fifo_ef;
 
     u_fetch_fifo : entity work.cpu_fifo
@@ -218,11 +231,11 @@ begin
             full_o => fetch_fifo_ff
         );
 
-    fetch_instr_raw_dat <= instr_rsp_dat_i when fetch_fifo_ef = '1' else fetch_fifo_rdat;
-    fetch_instr_raw_vld <= ((instr_rsp_vld_i and fetch_fifo_ef) or not fetch_fifo_ef) and not fetch_flush_q;
+    fetch_instr_raw_dat <= instr_rsp_dat when fetch_fifo_ef = '1' else fetch_fifo_rdat;
+    fetch_instr_raw_vld <= ((instr_rsp_vld and fetch_fifo_ef) or not fetch_fifo_ef) and not fetch_flush_q;
 
-    fetch_pending_inc <= fetch_instr_cmd_vld and instr_cmd_rdy_i;
-    fetch_pending_dec <= instr_rsp_vld_i;
+    fetch_pending_inc <= fetch_instr_cmd_vld and instr_cmd_rdy;
+    fetch_pending_dec <= instr_rsp_vld;
     fetch_command_inc <= fetch_pending_inc;
     fetch_command_dec <= decode_enable and fetch_instr_raw_vld;
 
@@ -290,9 +303,10 @@ begin
         fetch_stall           <= '0';
     end generate gen_no_aligner;
 
+    debug_instr_cmd_vld <= fetch_instr_cmd_vld and debug_mode_q;
 
     instr_cmd_adr_o <= fetch_pc_q;
-    instr_cmd_vld_o <= fetch_instr_cmd_vld;
+    instr_cmd_vld_o <= fetch_instr_cmd_vld and not debug_mode_q;
 
 -- Pre-decode
     gen_decompressor: if G_EXTENSION_C = TRUE generate
@@ -966,13 +980,24 @@ begin
         signal ebreak_q, ecall_q, mret_q : std_logic;
         signal exception, exception_q, interrupt, interrupt_q, interrut_en : std_logic;
         signal trap_entry, trap_exit : std_logic;
-        signal epc : std_logic_vector(31 downto 0);
+        signal trap_entry_vect, trap_exit_vect : std_logic_vector(31 downto 0);
+        signal epc_nxt : std_logic_vector(31 downto 0);
         signal decode_illegal_opcode, execute_illegal_opcode_q : std_logic;
         signal execute_instr_dat_q, instr_dat_q : std_logic_vector(31 downto 0);
         signal illegal_instr_q : std_logic;
         signal misaligned_store_q, misaligned_load_q : std_logic;
         signal execute_misaligned_instruction, misaligned_instruction_q : std_logic;
         signal mcause_nxt : std_logic_vector(31 downto 0);
+        -- debug module
+        signal dcsr_ebreakm_q, dcsr_stepie_q, dcsr_step_q : std_logic;
+        signal decode_dret, execute_dret_q, dret_q : std_logic;
+        signal debug_step, debug_step_q : std_logic;
+        signal debug_haltreq, debug_haltreq_q : std_logic;
+        signal debug_int, debug_int_q : std_logic;
+        signal debug_breakpoint, debug_breakpoint_q : std_logic;
+        signal debug_exc, debug_exc_q : std_logic;
+        signal csr_dcsr_we, csr_dpc_we, csr_dm_data0_we : std_logic;
+        signal debug_trap_entry, debug_trap_exit : std_logic;
     begin
         gen_catch_illegal_instr: if C_CATCH_ILLEGAL = TRUE generate
         begin
@@ -1032,41 +1057,56 @@ begin
         decode_ebreak <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_EBREAK and C_IMPL_EBREAK = TRUE else '0';
         decode_mret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_MRET and C_IMPL_MRET = TRUE else '0';
         decode_csr_en <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 /= "000" else '0';
+        decode_dret   <= '1' when decode_opcode = RV32I_OP_SYS and decode_funct3 = "000" and decode_instr_dat_q(31 downto 20) = CSR_FN12_DRET and G_DEBUG_MODULE = TRUE else '0';
 
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if execute_enable = '1' then
+                    execute_ecall_q          <= decode_ecall;
+                    execute_ebreak_q         <= decode_ebreak;
+                    execute_mret_q           <= decode_mret;
+                    execute_zimm_q           <= decode_rs1_adr;
+                    execute_pc_q             <= decode_pc_q;
+                    execute_csr_en_q         <= decode_csr_en and decode_valid_q;
+                    execute_illegal_opcode_q <= decode_illegal_opcode and decode_valid_q;
+                    execute_instr_dat_q      <= decode_instr_dat_q;
+                    execute_dret_q           <= decode_dret;
+                end if;
+            end if;
+        end process;
+        
         execute_misaligned_instruction <=
             '0' when C_CATCH_MISALIGNED_INSTRUCTION = FALSE else
             '1' when unsigned(execute_alu_b_res(1 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = FALSE else
             '1' when unsigned(execute_alu_b_res(0 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = TRUE  else
             '0';
 
+        debug_step       <= dcsr_step_q;
+        debug_breakpoint <= execute_ebreak_q and dcsr_ebreakm_q;
+
         process (clk_i)
         begin
             if rising_edge(clk_i) then
-                if execute_enable = '1' then
-                    execute_ecall_q  <= decode_ecall;
-                    execute_ebreak_q <= decode_ebreak;
-                    execute_mret_q   <= decode_mret;
-                    execute_zimm_q   <= decode_rs1_adr;
-                    execute_pc_q     <= decode_pc_q;
-                    execute_csr_en_q <= decode_csr_en and decode_valid_q;
-                    execute_illegal_opcode_q <= decode_illegal_opcode and decode_valid_q;
-                    execute_instr_dat_q <= decode_instr_dat_q;
-                end if;
                 if memory_enable = '1' then
-                    memory_pc_q <= execute_pc_q;
-                    memory_csr_read_data_q <= csr_read_data_q;
-                    instr_dat_q <= execute_instr_dat_q;
-                    ecall_q <= execute_ecall_q;
-                    ebreak_q <= execute_ebreak_q;
-                    illegal_instr_q <= execute_illegal_opcode_q;
-                    misaligned_load_q <= lsu_misaligned_load;
-                    misaligned_store_q <= lsu_misaligned_store;
+                    memory_pc_q              <= execute_pc_q;
+                    memory_csr_read_data_q   <= csr_read_data_q;
+                    instr_dat_q              <= execute_instr_dat_q;
+
+                    ecall_q                  <= execute_ecall_q;
+                    ebreak_q                 <= execute_ebreak_q;
+                    illegal_instr_q          <= execute_illegal_opcode_q;
+                    misaligned_load_q        <= lsu_misaligned_load;
+                    misaligned_store_q       <= lsu_misaligned_store;
                     misaligned_instruction_q <= execute_misaligned_instruction;
+                    debug_step_q             <= debug_step;
+                    debug_breakpoint_q       <= debug_breakpoint;
+                    debug_haltreq_q          <= debug_haltreq;
                 end if;
             end if;
         end process;
 
-        interrut_en <= csr_q.mstatus(CSR_MSTATUS_MIE);
+        interrut_en <= csr_q.mstatus(CSR_MSTATUS_MIE) and not debug_mode_q and (not dcsr_step_q or dcsr_stepie_q);
         external_interrupt_en <= csr_q.mie(CSR_MIE_MEIE);
         timer_interrupt_en <= csr_q.mie(CSR_MIE_MTIE);
 
@@ -1075,7 +1115,7 @@ begin
 
         exception <=
             '1' when execute_ecall_q = '1'
-                  or execute_ebreak_q = '1'
+                  or (execute_ebreak_q = '1' and dcsr_ebreakm_q = '0')
                   or execute_illegal_opcode_q = '1'
                   or lsu_misaligned_load = '1'
                   or lsu_misaligned_store = '1'
@@ -1083,6 +1123,8 @@ begin
                 else
             '0';
         interrupt <= '1' when (external_interrupt = '1' or timer_interrupt = '1') and interrut_en = '1' else '0';
+        debug_int <= '1' when debug_mode_q = '0' and (debug_haltreq = '1' or debug_step = '1') else '0';
+        debug_exc <= '1' when debug_breakpoint = '1' else '0';
 
         process (clk_i)
         begin
@@ -1099,30 +1141,39 @@ begin
                 interrupt_q     <= '0';
                 exception_q     <= '0';
                 mret_q          <= '0';
+                debug_int_q     <= '0';
+                debug_exc_q     <= '0';
+                dret_q          <= '0';
             elsif rising_edge(clk_i) then
                 if memory_enable = '1' then
                     memory_csr_en_q <= execute_csr_en_q and execute_valid_q and not memory_flush;
                     exception_q     <= exception and execute_valid_q and not memory_flush;
                     interrupt_q     <= interrupt and not memory_flush;
                     mret_q          <= execute_mret_q and execute_valid_q and not memory_flush;
+                    debug_exc_q     <= debug_exc and execute_valid_q and not memory_flush;
+                    debug_int_q     <= debug_int and not memory_flush;
+                    dret_q          <= execute_dret_q and execute_valid_q and not memory_flush and debug_mode_q;
                 end if;
             end if;
         end process;
 
-        trap_entry <= exception_q or interrupt_q;
-        trap_exit  <= mret_q;
+        trap_entry       <= exception_q or interrupt_q;
+        trap_exit        <= mret_q;
+        debug_trap_entry <= debug_exc_q or debug_int_q;
+        debug_trap_exit  <= dret_q;
 
-        epc <=
-            memory_pc_q        when exception_q = '1' else
-            memory_alu_b_res_q when interrupt_q = '1' and memory_branch_q = '1' else
-            execute_pc_q       when interrupt_q = '1' and memory_branch_q = '0' else
-            (others => '-');
+        epc_nxt <=
+               (memory_pc_q        and (31 downto 0 =>      exception_q))
+            or (memory_alu_b_res_q and (31 downto 0 => (not exception_q and interrupt_q) and     memory_branch_q))
+            or (execute_pc_q       and (31 downto 0 => (not exception_q and interrupt_q) and not memory_branch_q))
+            ;
 
-        csr_load_pc   <= interrupt_q or exception_q or mret_q;
+        csr_load_pc   <= trap_entry or trap_exit or debug_trap_entry or debug_trap_exit;
         csr_target_pc <=
-            csr_q.mtvec(31 downto 2) & "00" when trap_entry = '1' and trap_exit = '0' else
-            csr_q.mepc                      when trap_entry = '0' and trap_exit = '1' else
-            (others => '-');
+               (trap_entry_vect and (31 downto 0 => trap_entry))
+            or (trap_exit_vect  and (31 downto 0 => trap_exit))
+            or (csr_q.dpc       and (31 downto 0 => debug_trap_exit))
+            ;
 
         csr_read_en   <= memory_enable and execute_valid_q;
         csr_read_addr <= execute_alu_a_src2_q(11 downto 0);
@@ -1139,9 +1190,9 @@ begin
                         when CSR_MEPC     => csr_read_data_q <= csr_q.mepc;
                         when CSR_MCAUSE   => csr_read_data_q <= csr_q.mcause;
                         when CSR_MTVAL    => csr_read_data_q <= csr_q.mtval;
-                        when CSR_DCSR     =>
-                        when CSR_DPC      =>
-                        when CSR_DM_DATA0 =>
+                        when CSR_DCSR     => csr_read_data_q <= csr_q.dcsr;
+                        when CSR_DPC      => csr_read_data_q <= csr_q.dpc;
+                        when CSR_DM_DATA0 => csr_read_data_q <= csr_q.dm_data0;
                         when others       =>
                     end case;
                 end if;
@@ -1195,6 +1246,9 @@ begin
             csr_mtvec_we    <= '0';
             csr_mepc_we     <= '0';
             csr_mcause_we   <= '0';
+            csr_dcsr_we     <= '0';
+            csr_dpc_we      <= '0';
+            csr_dm_data0_we <= '0';
             case csr_write_addr is
                 when CSR_MSCRATCH => csr_mscratch_we <= '1';
                 when CSR_MIE      => csr_mie_we      <= '1';
@@ -1203,9 +1257,9 @@ begin
                 when CSR_MEPC     => csr_mepc_we     <= '1';
                 when CSR_MCAUSE   => csr_mcause_we   <= '1';
                 when CSR_MTVAL    =>
-                when CSR_DCSR     =>
-                when CSR_DPC      =>
-                when CSR_DM_DATA0 =>
+                when CSR_DCSR     => csr_dcsr_we     <= '1';
+                when CSR_DPC      => csr_dpc_we      <= '1';
+                when CSR_DM_DATA0 => csr_dm_data0_we <= '1';
                 when others       =>
             end case;
         end process;
@@ -1244,9 +1298,9 @@ begin
                     csr_q.mcause <= csr_write_data(31) & (30 downto 6 => '0') & csr_write_data(5 downto 0);
                 end if;
                 if exception_q = '1' or interrupt_q = '1' then
-                    csr_q.mepc <= epc(31 downto 2) & "00";
+                    csr_q.mepc <= epc_nxt(31 downto 2) & "00";
                     if G_EXTENSION_C = TRUE then
-                        csr_q.mepc(1) <= epc(1);
+                        csr_q.mepc(1) <= epc_nxt(1);
                     end if;
                 elsif csr_mepc_we = '1' and csr_write_en = '1' then
                     csr_q.mepc <= csr_write_data(31 downto 2) & "00";
@@ -1312,13 +1366,145 @@ begin
             csr_q.mtval <= (others => '0');
         end generate gen_no_mtval;
 
+        trap_entry_vect <= csr_q.mtvec(31 downto 2) & "00";
+        trap_exit_vect  <= csr_q.mepc;
+
+        -- debug module
+        gen_debug_module: if G_DEBUG_MODULE = TRUE generate
+            signal dcsr_debugver : std_logic_vector(3 downto 0);
+            signal dcsr_cause_nxt, dcsr_cause_q : std_logic_vector(2 downto 0);
+            signal dm_data0_wdata : std_logic_vector(31 downto 0);
+            signal dm_data0_we : std_logic;
+            signal depc_nxt : std_logic_vector(31 downto 0);
+            signal csr_debug_we : std_logic;
+        begin
+            dcsr_cause_nxt <=
+                   (std_logic_vector(to_unsigned(3, 3)) and (2 downto 0 => debug_haltreq_q))
+                or (std_logic_vector(to_unsigned(1, 3)) and (2 downto 0 => debug_breakpoint_q))
+                or (std_logic_vector(to_unsigned(4, 3)) and (2 downto 0 => debug_step_q))
+                ;
+
+            csr_debug_we <= debug_mode_q and csr_write_en;
+
+            process (clk_i, arst_i)
+            begin
+                if arst_i = '1' then
+                    debug_mode_q <= '0';
+                    dcsr_ebreakm_q <= '0';
+                    dcsr_stepie_q <= '0';
+                    dcsr_cause_q <= (others => '0');
+                    dcsr_step_q <= '0';
+                elsif rising_edge(clk_i) then
+                    if debug_trap_entry = '1' or debug_trap_exit = '1' then
+                        debug_mode_q <= debug_trap_entry;
+                    end if;
+                    if debug_trap_entry = '1' then
+                        dcsr_cause_q <= dcsr_cause_nxt;
+                    elsif csr_dcsr_we = '1' and csr_debug_we = '1' then
+                        dcsr_cause_q <= csr_write_data(8 downto 6);
+                    end if;
+                    if csr_dcsr_we = '1' and csr_debug_we = '1' then
+                        dcsr_ebreakm_q <= csr_write_data(15);
+                        dcsr_stepie_q <= csr_write_data(11);
+                        dcsr_step_q <= csr_write_data(2);
+                    end if;
+                end if;
+            end process;
+
+            depc_nxt <=
+                   (memory_pc_q        and (31 downto 0 =>      debug_exc_q))
+                or (memory_alu_b_res_q and (31 downto 0 => (not debug_exc_q and debug_int_q) and     memory_branch_q and not (trap_entry or trap_exit)))
+                or (execute_pc_q       and (31 downto 0 => (not debug_exc_q and debug_int_q) and not memory_branch_q and not (trap_entry or trap_exit)))
+                or (trap_entry_vect    and (31 downto 0 => (not debug_exc_q and debug_int_q) and                              trap_entry              ))
+                or (trap_exit_vect     and (31 downto 0 => (not debug_exc_q and debug_int_q) and                                            trap_exit ))
+                ;
+
+            process (clk_i)
+            begin
+                if rising_edge(clk_i) then
+                    if debug_trap_entry = '1' then
+                        csr_q.dpc <= depc_nxt(31 downto 2) & "00";
+                        if G_EXTENSION_C = TRUE then
+                            csr_q.dpc(1) <= depc_nxt(1);
+                        end if;
+                    elsif csr_dpc_we = '1' and csr_debug_we = '1' then
+                        csr_q.dpc <= csr_write_data(31 downto 2) & "00";
+                        if G_EXTENSION_C = TRUE then
+                            csr_q.dpc(1) <= csr_write_data(1);
+                        end if;
+                    end if;
+                    if dm_data0_we = '1' then
+                        csr_q.dm_data0 <= dm_data0_wdata;
+                    elsif csr_dm_data0_we = '1' and csr_debug_we = '1' then
+                        csr_q.dm_data0 <= csr_write_data;
+                    end if;
+                end if;
+            end process;
+
+            dcsr_debugver <= x"4";
+
+            csr_q.dcsr(31 downto 28) <= dcsr_debugver;
+            csr_q.dcsr(27 downto 16) <= (others => '0');
+            csr_q.dcsr(15) <= dcsr_ebreakm_q;
+            csr_q.dcsr(14 downto 12) <= (others => '0');
+            csr_q.dcsr(11) <= dcsr_stepie_q;
+            csr_q.dcsr(10 downto 9) <= (others => '0');
+            csr_q.dcsr(8 downto 6) <= dcsr_cause_q;
+            csr_q.dcsr(5 downto 3) <= (others => '0');
+            csr_q.dcsr(2) <= dcsr_step_q;
+            csr_q.dcsr(1 downto 0) <= (others => '0');
+
+            u_debug_module : entity work.debug_module
+            port map (
+                arst_i => arst_i,
+                clk_i => clk_i,
+                debug_mode_i => debug_mode_q,
+                debug_reset_o => debug_reset,
+                debug_haltreq_o => debug_haltreq,
+                debug_adr_i => debug_cmd_adr_i,
+                debug_vld_i => debug_cmd_vld_i,
+                debug_we_i => debug_cmd_we_i,
+                debug_dat_i => debug_cmd_dat_i,
+                debug_dat_o => debug_rsp_dat_o,
+                debug_vld_o => debug_rsp_vld_o,
+                debug_rdy_o => debug_cmd_rdy_o,
+                enable_i => fetch_enable,
+                instr_cmd_valid_i => debug_instr_cmd_vld,
+                instr_cmd_ready_o => debug_instr_cmd_rdy,
+                instr_rsp_data_o => debug_instr_rsp_dat,
+                instr_rsp_valid_o => debug_instr_rsp_vld,
+                csr_data0_dat_o => dm_data0_wdata,
+                csr_data0_vld_o => dm_data0_we,
+                csr_data0_dat_i => csr_q.dm_data0,
+                ebreak_i => ebreak_q,
+                dret_i => dret_q
+            );
+
+            process (clk_i, arst_i)
+            begin
+                if arst_i = '1' then
+                    debug_mode_sel_q <= '0';
+                elsif rising_edge(clk_i) then
+                    if fetch_pending_cnt_q = 0 then
+                        debug_mode_sel_q <= debug_mode_q;
+                    end if;
+                end if;
+            end process;
+        end generate gen_debug_module;
+
+        gen_no_debug_module: if G_DEBUG_MODULE = FALSE generate
+            dcsr_step_q      <= '0';
+            dcsr_stepie_q    <= '0';
+            dcsr_ebreakm_q   <= '0';
+        end generate gen_no_debug_module;
+
         csr_trap_entry <= trap_entry;
         csr_trap_exit <= trap_exit;
-        csr_trap_entry_vect <= csr_q.mtvec;
-        csr_trap_exit_vect <= csr_q.mepc;
+        csr_trap_entry_vect <= trap_entry_vect;
+        csr_trap_exit_vect <= trap_exit_vect;
         csr_trap_exception <= exception_q;
         csr_trap_interrupt <= interrupt_q;
-        csr_trap_exception_pc <= epc;
+        csr_trap_exception_pc <= epc_nxt;
     end generate gen_csr;
 
     gen_no_csr: if G_EXTENSION_ZICSR = FALSE generate
@@ -1328,6 +1514,15 @@ begin
         csr_trap_entry <= '0';
         csr_trap_exit  <= '0';
     end generate gen_no_csr;
+        
+    gen_no_debug_module: if G_EXTENSION_ZICSR = FALSE or G_DEBUG_MODULE = FALSE generate
+        debug_mode_q     <= '0';
+        debug_reset      <= '0';
+        debug_mode_sel_q <= '0';
+        debug_cmd_rdy_o  <= '0';
+        debug_rsp_vld_o  <= '0';
+        debug_rsp_dat_o  <= (others => '0');
+    end generate gen_no_debug_module;
 
 
 -- cpu checker

@@ -292,7 +292,7 @@ begin
                         current_st <= st_idle;
                     end if;
                 when st_execute =>
-                    if enable_i = '1' and cnt = 7 then
+                    if instr_cmd_valid_i = '1' and cnt = 7 then
                         current_st <= st_idle;
                     end if;
                 when others =>
@@ -315,10 +315,10 @@ begin
         elsif rising_edge(clk_i) then
             if current_st /= st_execute then
                 cnt <= (others => '0');
-            elsif enable_i = '1' and instr_cmd_valid_i = '1' then
+            elsif instr_cmd_valid_i = '1' then
                 cnt <= cnt + 1;
             end if;
-            if enable_i = '1' and instr_cmd_valid_i = '1' then
+            if instr_cmd_valid_i = '1' then
                 if current_st = st_execute then
                     case to_integer(cnt) is
                         when 0      => instr_rsp_valid_o <= dm_regs_command_control_alias.transfer and not dm_regs.dmcontrol.resumereq;
@@ -327,16 +327,16 @@ begin
                         when 6      => instr_rsp_valid_o <= dm_regs.dmcontrol.resumereq;
                         when others => instr_rsp_valid_o <= '0';
                     end case;
-                else
-                    instr_rsp_valid_o <= '0';
                 end if;
+            else
+                instr_rsp_valid_o <= '0';
             end if;
         end if;
     end process;
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if enable_i = '1' and instr_cmd_valid_i = '1' then
+            if instr_cmd_valid_i = '1' then
                 case to_integer(cnt) is
                     when 0      =>
                         instr_rsp_data_o(6 downto 0)   <= RV32I_OP_SYS;
@@ -356,8 +356,10 @@ begin
                     when 4      => instr_rsp_data_o <= dm_regs.progbuf3;
                     when 5      => instr_rsp_data_o <= x"001000" & '0' & RV32I_OP_SYS; -- EBREAK
                     when 6      => instr_rsp_data_o <= x"7b200073"; -- DRET
-                    when others => instr_rsp_data_o <= (others => 'X');
+                    when others => instr_rsp_data_o <= (others => '-');
                 end case;
+            else
+                instr_rsp_data_o <= (others => '-');
             end if;
         end if;
     end process;
