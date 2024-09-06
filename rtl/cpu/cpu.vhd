@@ -209,7 +209,7 @@ begin
         end if;
     end process;
 
-    fetch_fifo_clr  <= fetch_flush;
+    fetch_fifo_clr  <= fetch_flush_q;
     fetch_fifo_we   <= (not fetch_enable or not fetch_fifo_ef) and instr_rsp_vld;
     fetch_fifo_wdat <= instr_rsp_dat;
     fetch_fifo_re   <= fetch_enable and not fetch_fifo_ef;
@@ -996,6 +996,7 @@ begin
         signal debug_int, debug_int_q : std_logic;
         signal debug_breakpoint, debug_breakpoint_q : std_logic;
         signal debug_exc, debug_exc_q : std_logic;
+        signal debug_ebk, debug_ebk_q : std_logic;
         signal csr_dcsr_we, csr_dpc_we, csr_dm_data0_we : std_logic;
         signal debug_trap_entry, debug_trap_exit : std_logic;
     begin
@@ -1075,15 +1076,35 @@ begin
                 end if;
             end if;
         end process;
-        
+
         execute_misaligned_instruction <=
             '0' when C_CATCH_MISALIGNED_INSTRUCTION = FALSE else
             '1' when unsigned(execute_alu_b_res(1 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = FALSE else
             '1' when unsigned(execute_alu_b_res(0 downto 0)) /= 0 and execute_branch = '1' and G_EXTENSION_C = TRUE  else
             '0';
 
-        debug_step       <= dcsr_step_q;
+        debug_step       <= execute_valid_q  and dcsr_step_q;
         debug_breakpoint <= execute_ebreak_q and dcsr_ebreakm_q;
+
+        interrut_en <= csr_q.mstatus(CSR_MSTATUS_MIE) and (not dcsr_step_q or dcsr_stepie_q);
+        external_interrupt_en <= csr_q.mie(CSR_MIE_MEIE);
+        timer_interrupt_en <= csr_q.mie(CSR_MIE_MTIE);
+
+        external_interrupt <= external_irq_i and external_interrupt_en;
+        timer_interrupt    <= timer_irq_i and timer_interrupt_en;
+
+        exception <= not debug_mode_q and (
+               execute_ecall_q
+            or (execute_ebreak_q and not dcsr_ebreakm_q)
+            or execute_illegal_opcode_q
+            or lsu_misaligned_load
+            or lsu_misaligned_store
+            or execute_misaligned_instruction
+        );
+        interrupt <= not debug_mode_q and interrut_en and (external_interrupt or timer_interrupt);
+        debug_int <= not debug_mode_q and (debug_haltreq or debug_step);
+        debug_exc <= not debug_mode_q and debug_breakpoint;
+        debug_ebk <=     debug_mode_q and execute_ebreak_q;
 
         process (clk_i)
         begin
@@ -1106,26 +1127,6 @@ begin
             end if;
         end process;
 
-        interrut_en <= csr_q.mstatus(CSR_MSTATUS_MIE) and not debug_mode_q and (not dcsr_step_q or dcsr_stepie_q);
-        external_interrupt_en <= csr_q.mie(CSR_MIE_MEIE);
-        timer_interrupt_en <= csr_q.mie(CSR_MIE_MTIE);
-
-        external_interrupt <= external_irq_i and external_interrupt_en;
-        timer_interrupt    <= timer_irq_i and timer_interrupt_en;
-
-        exception <=
-            '1' when execute_ecall_q = '1'
-                  or (execute_ebreak_q = '1' and dcsr_ebreakm_q = '0')
-                  or execute_illegal_opcode_q = '1'
-                  or lsu_misaligned_load = '1'
-                  or lsu_misaligned_store = '1'
-                  or execute_misaligned_instruction = '1'
-                else
-            '0';
-        interrupt <= '1' when (external_interrupt = '1' or timer_interrupt = '1') and interrut_en = '1' else '0';
-        debug_int <= '1' when debug_mode_q = '0' and (debug_haltreq = '1' or debug_step = '1') else '0';
-        debug_exc <= '1' when debug_breakpoint = '1' else '0';
-
         process (clk_i)
         begin
             if rising_edge(clk_i) then
@@ -1138,21 +1139,24 @@ begin
         begin
             if arst_i = '1' then
                 memory_csr_en_q <= '0';
-                interrupt_q     <= '0';
-                exception_q     <= '0';
-                mret_q          <= '0';
-                debug_int_q     <= '0';
-                debug_exc_q     <= '0';
-                dret_q          <= '0';
             elsif rising_edge(clk_i) then
                 if memory_enable = '1' then
                     memory_csr_en_q <= execute_csr_en_q and execute_valid_q and not memory_flush;
+                end if;
+            end if;
+        end process;
+
+        process (clk_i)
+        begin
+            if rising_edge(clk_i) then
+                if memory_enable = '1' then
                     exception_q     <= exception and execute_valid_q and not memory_flush;
                     interrupt_q     <= interrupt and not memory_flush;
                     mret_q          <= execute_mret_q and execute_valid_q and not memory_flush;
                     debug_exc_q     <= debug_exc and execute_valid_q and not memory_flush;
                     debug_int_q     <= debug_int and not memory_flush;
                     dret_q          <= execute_dret_q and execute_valid_q and not memory_flush and debug_mode_q;
+                    debug_ebk_q     <= debug_ebk and execute_valid_q and not memory_flush;
                 end if;
             end if;
         end process;
@@ -1168,7 +1172,7 @@ begin
             or (execute_pc_q       and (31 downto 0 => (not exception_q and interrupt_q) and not memory_branch_q))
             ;
 
-        csr_load_pc   <= trap_entry or trap_exit or debug_trap_entry or debug_trap_exit;
+        csr_load_pc   <= trap_entry or trap_exit or debug_trap_entry or debug_trap_exit or debug_ebk_q;
         csr_target_pc <=
                (trap_entry_vect and (31 downto 0 => trap_entry))
             or (trap_exit_vect  and (31 downto 0 => trap_exit))
@@ -1279,25 +1283,25 @@ begin
         csr_q.mie <= (31 downto 12 => '0') & csr_mie_q.meie & (10 downto 8 => '0') & csr_mie_q.mtie & (6 downto 0 => '0');
 
         mcause_nxt <=
-               (CSR_MCAUSE_ILLEGAL_INSTRUCTION                                         and (31 downto 0 => illegal_instr_q          and bool_to_sl(C_CATCH_ILLEGAL)))
-            or (CSR_MCAUSE_MACHINE_ECALL                                               and (31 downto 0 => ecall_q                  and bool_to_sl(C_IMPL_ECALL)))
-            or (CSR_MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED                              and (31 downto 0 => misaligned_instruction_q and bool_to_sl(C_CATCH_MISALIGNED_INSTRUCTION)))
-            or (CSR_MCAUSE_BREAKPOINT                                                  and (31 downto 0 => ebreak_q                 and bool_to_sl(C_IMPL_EBREAK)))
-            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED                                     and (31 downto 0 => misaligned_load_q        and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
-            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED                                     and (31 downto 0 => misaligned_store_q       and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
-            or (CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT                                  and (31 downto 0 => external_interrupt_q     and not exception_q))
-            or (CSR_MCAUSE_MACHINE_TIMER_INTERRUPT                                     and (31 downto 0 => timer_interrupt_q        and not exception_q))
+               (CSR_MCAUSE_ILLEGAL_INSTRUCTION            and (31 downto 0 => illegal_instr_q          and bool_to_sl(C_CATCH_ILLEGAL)))
+            or (CSR_MCAUSE_MACHINE_ECALL                  and (31 downto 0 => ecall_q                  and bool_to_sl(C_IMPL_ECALL)))
+            or (CSR_MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED and (31 downto 0 => misaligned_instruction_q and bool_to_sl(C_CATCH_MISALIGNED_INSTRUCTION)))
+            or (CSR_MCAUSE_BREAKPOINT                     and (31 downto 0 => ebreak_q                 and bool_to_sl(C_IMPL_EBREAK)))
+            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED        and (31 downto 0 => misaligned_load_q        and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
+            or (CSR_MCAUSE_LOAD_ADDRESS_MISALIGNED        and (31 downto 0 => misaligned_store_q       and bool_to_sl(C_CATCH_MISALIGNED_LOAD_STORE)))
+            or (CSR_MCAUSE_MACHINE_EXTERNAL_INTERRUPT     and (31 downto 0 => external_interrupt_q     and not exception_q))
+            or (CSR_MCAUSE_MACHINE_TIMER_INTERRUPT        and (31 downto 0 => timer_interrupt_q        and not exception_q))
             ;
 
         process (clk_i)
         begin
             if rising_edge(clk_i) then
-                if exception_q = '1' or interrupt_q = '1' then
+                if trap_entry = '1' then
                     csr_q.mcause <= mcause_nxt;
                 elsif csr_mcause_we = '1' and csr_write_en = '1' then
                     csr_q.mcause <= csr_write_data(31) & (30 downto 6 => '0') & csr_write_data(5 downto 0);
                 end if;
-                if exception_q = '1' or interrupt_q = '1' then
+                if trap_entry = '1' then
                     csr_q.mepc <= epc_nxt(31 downto 2) & "00";
                     if G_EXTENSION_C = TRUE then
                         csr_q.mepc(1) <= epc_nxt(1);
@@ -1355,7 +1359,7 @@ begin
             process (clk_i)
             begin
                 if rising_edge(clk_i) then
-                    if exception_q = '1' or interrupt_q = '1' then
+                    if trap_entry = '1' then
                         csr_q.mtval <= mtval_nxt;
                     end if;
                 end if;
@@ -1493,9 +1497,9 @@ begin
         end generate gen_debug_module;
 
         gen_no_debug_module: if G_DEBUG_MODULE = FALSE generate
-            dcsr_step_q      <= '0';
-            dcsr_stepie_q    <= '0';
-            dcsr_ebreakm_q   <= '0';
+            dcsr_step_q    <= '0';
+            dcsr_stepie_q  <= '0';
+            dcsr_ebreakm_q <= '0';
         end generate gen_no_debug_module;
 
         csr_trap_entry <= trap_entry;
@@ -1514,16 +1518,15 @@ begin
         csr_trap_entry <= '0';
         csr_trap_exit  <= '0';
     end generate gen_no_csr;
-        
-    gen_no_debug_module: if G_EXTENSION_ZICSR = FALSE or G_DEBUG_MODULE = FALSE generate
+
+    gen_no_csr_or_no_debug_module: if G_EXTENSION_ZICSR = FALSE or G_DEBUG_MODULE = FALSE generate
         debug_mode_q     <= '0';
         debug_reset      <= '0';
         debug_mode_sel_q <= '0';
         debug_cmd_rdy_o  <= '0';
         debug_rsp_vld_o  <= '0';
         debug_rsp_dat_o  <= (others => '0');
-    end generate gen_no_debug_module;
-
+    end generate gen_no_csr_or_no_debug_module;
 
 -- cpu checker
     gen_verif: if G_VERIFICATION = TRUE generate
