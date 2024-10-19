@@ -80,7 +80,7 @@ begin
         )
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => sys_rst,
-            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i, 
+            tck_i => tck_i, tdi_i => tdi_i, tdo_o => tdo_o, tms_i => tms_i,
             instr_cmd_o => instr_cmd, instr_rsp_i => instr_rsp,
             data_cmd_o => dat_cmd, data_rsp_i => dat_rsp,
             external_irq_i => external_irq, timer_irq_i => timer_irq);
@@ -95,7 +95,7 @@ begin
 
     u_xtr_ram : entity work.xtr_ram
         generic map (
-            C_RAM_SIZE => G_RAM_SIZE, C_INIT_FILE => G_INIT_FILE)
+            G_RAM_SIZE => G_RAM_SIZE, G_INIT_FILE => G_INIT_FILE)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => srst_i,
             instr_cmd_i => instr_cmd, instr_rsp_o => instr_rsp,
@@ -112,5 +112,5 @@ begin
 
     external_irq <= external_irq_i;
 
-    
+
 end architecture rtl;

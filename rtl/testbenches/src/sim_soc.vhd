@@ -98,7 +98,7 @@ begin
 
     u_xtr_ram : entity work.xtr_ram
         generic map (
-            C_RAM_SIZE => G_RAM_SIZE, C_INIT_FILE => G_INIT_FILE)
+            G_RAM_SIZE => G_RAM_SIZE, G_INIT_FILE => G_INIT_FILE)
         port map (
             arst_i => arst_i, clk_i => clk_i, srst_i => '0',
             instr_cmd_i => instr_cmd, instr_rsp_o => instr_rsp,
