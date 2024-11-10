@@ -65,6 +65,7 @@ VHDL_SOURCES += $(RTL_DIR)/cpu/debug/dtm_jtag.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/debug/debug_module_pkg.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/debug/debug_module.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/cpu.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/dcu.vhd
 VHDL_SOURCES += $(RTL_DIR)/utils/utils.vhd
 VHDL_SOURCES += $(RTL_DIR)/utils/xtr_def.vhd
 VHDL_SOURCES += $(RTL_DIR)/utils/xtr_split.vhd
@@ -78,6 +79,7 @@ VHDL_SOURCES += $(RTL_DIR)/testbenches/src/sim_file.vhd
 VHDL_SOURCES += $(RTL_DIR)/testbenches/src/sim_soc.vhd
 VHDL_SOURCES += $(RTL_DIR)/testbenches/src/fli/rtl/jtag_vpi.vhd
 VHDL_SOURCES += $(RTL_DIR)/testbenches/tb_xtr_soc.vhd
+VHDL_SOURCES += $(RTL_DIR)/testbenches/tb_dcu.vhd
 
 #
 # Internal
