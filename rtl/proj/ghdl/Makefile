@@ -49,6 +49,7 @@ VHDL_SOURCES += $(RTL_DIR)/cpu/debug/dtm_pkg.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/debug/dtm_jtag.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/debug/debug_module_pkg.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/debug/debug_module.vhd
+VHDL_SOURCES += $(RTL_DIR)/cpu/dcu.vhd
 VHDL_SOURCES += $(RTL_DIR)/cpu/cpu.vhd
 VHDL_SOURCES += $(RTL_DIR)/utils/utils.vhd
 VHDL_SOURCES += $(RTL_DIR)/utils/xtr_def.vhd
