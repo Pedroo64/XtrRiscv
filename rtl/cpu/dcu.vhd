@@ -1,13 +1,13 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
-
 use IEEE.math_real.all;
 
 entity dcu is
     generic (
         G_CACHE_SIZE : integer := 512;
-        G_MEM_ADDR_WIDTH : integer := 32
+        G_MEM_ADDR_WIDTH : integer := 32;
+        G_DATA_WIDTH : integer := 32
     );
     port (
         arst_i : in std_logic;
@@ -32,11 +32,12 @@ end entity dcu;
 
 architecture rtl of dcu is
 -- Signals
-    signal cpu_vld, cpu_vld_q : std_logic;
-    signal cpu_miss, cpu_miss_q : std_logic;
-    signal stb_miss, stb_miss_q : std_logic;
+    signal cpu_vld_q : std_logic;
+    signal cpu_miss_set, cpu_miss_clr, cpu_miss_q : std_logic;
 -- Cache
     constant C_ADDR_WIDTH : integer := integer(ceil(log2(real(G_CACHE_SIZE))));
+    constant C_BYTE_PER_DATA : integer := G_DATA_WIDTH/8;
+    constant C_BYTE_PER_DATA_WIDTH : integer := integer(ceil(log2(real(C_BYTE_PER_DATA))));
     constant C_TAG_IWIDTH : integer := C_ADDR_WIDTH;
     constant C_TAG_IMIN : integer := 2;
     constant C_TAG_IMAX : integer := C_TAG_IWIDTH + C_TAG_IMIN - 1;
@@ -65,9 +66,9 @@ architecture rtl of dcu is
     signal cache_tag_addr : std_logic_vector(C_TAG_DMAX downto C_TAG_DMIN);
     signal cache_tag_match, cache_tag_hit, cache_tag_miss, cache_tag_dirty : std_logic;
     signal cache_tag_vld : std_logic;
-    signal cache_cpu_addr_q : std_logic_vector(G_MEM_ADDR_WIDTH - 1 downto 0);
+    signal cache_cpu_addr_q : std_logic_vector(G_MEM_ADDR_WIDTH - 1 downto C_BYTE_PER_DATA_WIDTH);
     signal cache_biu_vld, cache_cpu_vld, cache_stb_vld : std_logic;
-    signal cache_cpu_rdy, cache_biu_rdy, cache_stb_rdy : std_logic;
+    signal cache_biu_rdy, cache_cpu_rdy, cache_stb_rdy : std_logic;
     signal cache_priority_stb : std_logic;
 -- STB
     type stb_state_t is (st_stb_idle, st_stb_tag_read, st_stb_write_data, st_stb_alloc_biu);
@@ -75,26 +76,31 @@ architecture rtl of dcu is
     signal stb_slot_nxt_state, stb_slot_state_q : stb_state_t;
     signal stb_slot_vld_set, stb_slot_vld_clr : std_logic;
     signal stb_slot_vld_q : std_logic;
-    signal stb_slot_strb_q : std_logic_vector(3 downto 0);
-    signal stb_slot_addr_q : std_logic_vector(G_MEM_ADDR_WIDTH - 1 downto 0);
-    signal stb_slot_data_q : std_logic_vector(31 downto 0);
+    signal stb_slot_strb_q : std_logic_vector(C_BYTE_PER_DATA - 1 downto 0);
+    signal stb_slot_addr_q : std_logic_vector(G_MEM_ADDR_WIDTH - 1 downto C_BYTE_PER_DATA_WIDTH);
+    signal stb_slot_data_q : std_logic_vector(G_DATA_WIDTH - 1 downto 0);
     signal stb_slot_dirty_q : std_logic;
     signal stb_full : std_logic;
     signal stb_tag_wr_vld, stb_dat_wr_vld : std_logic;
     signal stb_tag_rdy : std_logic;
-    signal stb_alloc_biu_vld, stb_evict_biu_vld : std_logic;
-    signal stb_alloc_biu_strb, stb_evict_biu_strb : std_logic_vector(3 downto 0);
+    signal stb_alloc_biu_vld, stb_alloc_biu_rdy : std_logic;
+    signal stb_evict_biu, stb_evict_biu_vld : std_logic;
+    signal stb_alloc_biu_strb, stb_evict_biu_strb : std_logic_vector(C_BYTE_PER_DATA - 1 downto 0);
     signal stb_index_match, stb_tag_match : std_logic;
+    signal stb_index_match_nxt, stb_index_match_q : std_logic;
     signal stb_index_hit, stb_tag_hit, stb_hit : std_logic;
 -- BIU
     type biu_state_t is (st_biu_idle, st_biu_evict, st_biu_alloc);
     signal biu_nxt_state, biu_state_q : biu_state_t;
     signal biu_addr, biu_addr_q : std_logic_vector(G_MEM_ADDR_WIDTH - 1 downto 0);
-    signal biu_data, biu_data_q : std_logic_vector(31 downto 0);
-    signal biu_dirty, biu_dirty_q, biu_alloc_valid_q : std_logic;
+    signal biu_data, biu_data_q : std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    signal biu_dirty, biu_dirty_q : std_logic;
+    signal biu_alloc_valid_set, biu_alloc_valid_clr, biu_alloc_valid_q : std_logic;
     signal biu_valid_set, biu_valid_clr, biu_valid_q : std_logic;
-    signal biu_strb, biu_strb_q : std_logic_vector(3 downto 0);
+    signal biu_strb, biu_strb_q : std_logic_vector(C_BYTE_PER_DATA - 1 downto 0);
     signal biu_alloc_vld : std_logic;
+    signal biu_ready : std_logic;
+    signal biu_alloc_ready, biu_evict_ready : std_logic;
 begin
 
     -- Cache
@@ -112,27 +118,24 @@ begin
 
     cache_init_done <= cache_init_addr_q(cache_init_addr_q'left);
 
-    tag_ram.addr   <= (cache_init_addr_q(C_TAG_IWIDTH - 1 downto 0)    and (C_TAG_IWIDTH - 1 downto 0 => not cache_init_done))
-                   or (biu_addr_q(C_TAG_IMAX downto C_TAG_IMIN)        and (C_TAG_IWIDTH - 1 downto 0 =>     cache_biu_vld))
-                   or (cpu_adr_i(C_TAG_IMAX downto C_TAG_IMIN)         and (C_TAG_IWIDTH - 1 downto 0 =>     cache_cpu_vld))
-                   or (stb_slot_addr_q(C_TAG_IMAX downto C_TAG_IMIN)   and (C_TAG_IWIDTH - 1 downto 0 =>     cache_stb_vld))
+    tag_ram.addr   <= (cache_init_addr_q(C_TAG_IWIDTH - 1 downto 0)    and (tag_ram.addr'range => not cache_init_done))
+                   or (biu_addr_q(C_TAG_IMAX downto C_TAG_IMIN)        and (tag_ram.addr'range =>     cache_biu_vld))
+                   or (cpu_adr_i(C_TAG_IMAX downto C_TAG_IMIN)         and (tag_ram.addr'range =>     cache_cpu_vld))
+                   or (stb_slot_addr_q(C_TAG_IMAX downto C_TAG_IMIN)   and (tag_ram.addr'range =>     cache_stb_vld))
                    ;
 
-    tag_ram.wdat   <= ((biu_addr_q(C_TAG_DMAX downto C_TAG_DMIN)      & biu_dirty_q & biu_valid_q) and (C_TAG_DWIDTH - 1 downto 0 => cache_biu_vld))
-                   or ((stb_slot_addr_q(C_TAG_DMAX downto C_TAG_DMIN) & "11")                      and (C_TAG_DWIDTH - 1 downto 0 => cache_stb_vld))
+    tag_ram.wdat   <= ((biu_addr_q(C_TAG_DMAX downto C_TAG_DMIN)      & biu_dirty_q & '1') and (tag_ram.wdat'range => cache_biu_vld))
+                   or ((stb_slot_addr_q(C_TAG_DMAX downto C_TAG_DMIN) & "11")              and (tag_ram.wdat'range => cache_stb_vld))
                    ;
 
     tag_ram.wr     <= not cache_init_done or cache_biu_vld or (stb_tag_wr_vld and cache_stb_vld);
 
     tag_ram.vld    <= not cache_init_done or cache_biu_vld or (stb_tag_wr_vld and cache_stb_vld) or cache_cpu_vld;
 
-    data_ram.addr  <= (biu_addr_q(C_DATA_IMAX downto C_DATA_IMIN)      and (C_DATA_IWIDTH - 1 downto 0 => cache_biu_vld))
-                   or (cpu_adr_i(C_DATA_IMAX downto C_DATA_IMIN)       and (C_DATA_IWIDTH - 1 downto 0 => cache_cpu_vld))
-                   or (stb_slot_addr_q(C_DATA_IMAX downto C_DATA_IMIN) and (C_DATA_IWIDTH - 1 downto 0 => cache_stb_vld))
-                   ;
+    data_ram.addr  <= tag_ram.addr;
 
-    data_ram.wdat  <= (biu_data_q      and (31 downto 0 =>     cache_biu_vld))
-                   or (stb_slot_data_q and (31 downto 0 =>     cache_stb_vld))
+    data_ram.wdat  <= (biu_data_q      and (data_ram.wdat'range =>     biu_alloc_vld))
+                   or (stb_slot_data_q and (data_ram.wdat'range => not biu_alloc_vld))
                    ;
 
     data_ram.wr   <= biu_alloc_vld or cache_stb_vld;
@@ -141,22 +144,13 @@ begin
 
     cache_priority_stb  <= cpu_vld_i and cpu_wr_i and stb_full;
 
-    cache_biu_vld <= biu_alloc_vld;
-    cache_cpu_vld       <=
-        '1' when cache_init_done = '1' and biu_state_q = st_biu_idle and cpu_vld_i = '1' and cache_tag_miss = '0' and biu_alloc_vld = '0' and cache_priority_stb = '0' else
-        '0';
-    cache_stb_vld       <=
-        '1' when cache_init_done = '1' and (cpu_vld_i = '0' or cache_priority_stb = '1' or cpu_miss_q = '1') and biu_alloc_vld = '0' and stb_dat_wr_vld = '1' else
-        '0';
-
+    cache_biu_vld <= cache_init_done and biu_alloc_vld;
+    cache_cpu_vld <= cache_init_done and not biu_alloc_vld and biu_ready and cpu_vld_i and not cache_tag_miss and not cache_priority_stb;
+    cache_stb_vld <= cache_init_done and not biu_alloc_vld and (not cpu_vld_i or cache_priority_stb or cpu_miss_q) and stb_dat_wr_vld;
 
     cache_biu_rdy <= cache_init_done;
-    cache_cpu_rdy <=
-        '0' when cache_init_done = '0' or biu_alloc_vld = '1' or cache_priority_stb = '1' or biu_state_q /= st_biu_idle or cache_tag_miss = '1' else
-        '1';
-    cache_stb_rdy <=
-        '0' when cache_init_done = '0' or biu_alloc_vld = '1' or not (cpu_vld_i = '0' or cache_priority_stb = '1' or cpu_miss_q = '1') else
-        '1';
+    cache_cpu_rdy <= cache_init_done and not (biu_alloc_vld or cache_priority_stb or not biu_ready or cache_tag_miss);
+    cache_stb_rdy <= cache_init_done and not (biu_alloc_vld or not (not cpu_vld_i or cache_priority_stb or cpu_miss_q));
 
     u_tag_ram : entity work.bram
         generic map (
@@ -180,8 +174,8 @@ begin
         generic map (
             G_DEPTH => G_CACHE_SIZE,
             G_ADDR_WIDTH => C_DATA_IWIDTH,
-            G_DATA_WIDTH => 32,
-            G_BYTE_WIDTH => 32,
+            G_DATA_WIDTH => G_DATA_WIDTH,
+            G_BYTE_WIDTH => G_DATA_WIDTH,
             G_INIT_FILE => "none"
         )
         port map (
@@ -198,7 +192,7 @@ begin
     begin
         if rising_edge(clk_i) then
             if cache_cpu_vld = '1' then
-                cache_cpu_addr_q <= cpu_adr_i;
+                cache_cpu_addr_q <= cpu_adr_i(cache_cpu_addr_q'range);
             end if;
             cache_vld_q <= tag_ram.vld and not tag_ram.wr;
         end if;
@@ -215,7 +209,7 @@ begin
 
     stb_slot_wr <= cpu_vld_i and cpu_wr_i and cache_cpu_rdy;
 
-    process (stb_slot_state_q, stb_slot_wr, cache_tag_hit, stb_dat_wr_vld, cache_stb_rdy, stb_evict_biu_vld, stb_alloc_biu_vld)
+    process (stb_slot_state_q, stb_slot_wr, cache_tag_hit, cache_stb_rdy, stb_evict_biu, stb_alloc_biu_rdy)
     begin
         case stb_slot_state_q is
             when st_stb_idle =>
@@ -231,13 +225,13 @@ begin
                     stb_slot_nxt_state <= st_stb_alloc_biu;
                 end if;
             when st_stb_write_data =>
-                if (stb_dat_wr_vld = '1' and cache_stb_rdy = '1') or stb_evict_biu_vld = '1' then
+                if cache_stb_rdy = '1' or stb_evict_biu = '1' then
                     stb_slot_nxt_state <= st_stb_idle;
                 else
                     stb_slot_nxt_state <= st_stb_write_data;
                 end if;
             when st_stb_alloc_biu =>
-                if stb_alloc_biu_vld = '1' then
+                if stb_alloc_biu_rdy = '1' then
                     stb_slot_nxt_state <= st_stb_idle;
                 else
                     stb_slot_nxt_state <= st_stb_alloc_biu;
@@ -255,17 +249,17 @@ begin
         end if;
     end process;
 
+    stb_slot_vld_set <= '1' when stb_slot_state_q = st_stb_tag_read else '0';
+    stb_slot_vld_clr <= '1' when cache_stb_rdy = '1' or stb_evict_biu_vld = '1' or stb_alloc_biu_vld = '1' else '0';
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
             stb_slot_vld_q <= '0';
         elsif rising_edge(clk_i) then
-            case stb_slot_state_q is
-                when st_stb_idle       => if stb_slot_wr = '1'                                                         then stb_slot_vld_q <= '1'; end if;
-                when st_stb_write_data => if (stb_dat_wr_vld = '1' and cache_stb_rdy = '1') or stb_evict_biu_vld = '1' then stb_slot_vld_q <= '0'; end if;
-                when st_stb_alloc_biu  => if stb_alloc_biu_vld = '1'                                                   then stb_slot_vld_q <= '0'; end if;
-                when others =>
-            end case;
+            if stb_slot_vld_set = '1' or stb_slot_vld_clr = '1' then
+                stb_slot_vld_q <= stb_slot_vld_set;
+            end if;
         end if;
     end process;
 
@@ -273,34 +267,46 @@ begin
     begin
         if rising_edge(clk_i) then
             if stb_slot_state_q = st_stb_idle then
-                stb_slot_addr_q <= cpu_adr_i;
-                stb_slot_data_q <= cpu_dat_i;
+                stb_slot_addr_q <= cpu_adr_i(stb_slot_addr_q'range);
                 stb_slot_strb_q <= cpu_siz_i;
             end if;
             if stb_slot_state_q = st_stb_tag_read then
-                for i in stb_slot_strb_q'range loop
-                    if stb_slot_strb_q(i) = '0' then
-                        stb_slot_data_q((i+1)*8-1 downto i*8) <= data_ram.rdat((i+1)*8-1 downto i*8);
-                    end if;
-                end loop;
+                stb_slot_dirty_q <= cache_tag_dirty;
+            end if;
+            for i in stb_slot_strb_q'range loop
+                case stb_slot_state_q is
+                    when st_stb_idle     => stb_slot_data_q((i+1)*8-1 downto i*8) <= cpu_dat_i((i+1)*8-1 downto i*8);
+                    when st_stb_tag_read => if stb_slot_strb_q(i) = '0' then stb_slot_data_q((i+1)*8-1 downto i*8) <= data_ram.rdat((i+1)*8-1 downto i*8); end if;
+                    when others          =>
+                end case;
+            end loop;
+        end if;
+    end process;
+
+    stb_index_match_nxt <= '1' when stb_slot_addr_q(C_TAG_IMAX downto C_TAG_IMIN) = cpu_adr_i(C_TAG_IMAX downto C_TAG_IMIN) else '0';
+
+    process (clk_i)
+    begin
+        if rising_edge(clk_i) then
+            if cache_cpu_vld = '1' then
+                stb_index_match_q <= stb_index_match_nxt;
             end if;
         end if;
     end process;
 
-    stb_index_match   <= '1' when stb_slot_addr_q(C_TAG_IMAX downto C_TAG_IMIN) = cache_cpu_addr_q(C_TAG_IMAX downto C_TAG_IMIN) else '0';
+    stb_index_match   <= stb_index_match_q;
     stb_tag_match     <= '1' when stb_slot_addr_q(C_TAG_DMAX downto C_TAG_DMIN) = cache_tag_addr else '0';
     stb_index_hit     <= stb_slot_vld_q and stb_index_match;
     stb_tag_hit       <= stb_slot_vld_q and stb_tag_match and cache_tag_vld and cache_vld_q;
     stb_hit           <= stb_index_hit and stb_tag_hit;
 
-    stb_evict_biu_vld <= '1' when stb_slot_state_q = st_stb_write_data and stb_index_hit = '1' and cache_tag_match = '0' and cache_tag_vld = '1' and cache_vld_q = '1' else '0';
-    stb_alloc_biu_vld <= '1' when stb_slot_state_q = st_stb_alloc_biu and biu_state_q = st_biu_alloc else '0';
+    stb_evict_biu     <= '1' when stb_index_hit = '1' and cache_tag_match = '0' and cache_tag_vld = '1' and cache_vld_q = '1' else '0';
+    stb_evict_biu_vld <= '1' when stb_slot_state_q = st_stb_write_data and stb_evict_biu = '1' else '0';
+    stb_alloc_biu_vld <= '1' when stb_slot_state_q = st_stb_alloc_biu else '0';
+    stb_alloc_biu_rdy <= '1' when biu_state_q = st_biu_alloc else '0';
     stb_tag_wr_vld    <= '1' when stb_slot_state_q = st_stb_write_data and stb_slot_dirty_q = '0' else '0';
     stb_dat_wr_vld    <= '1' when stb_slot_state_q = st_stb_write_data else '0';
-
     stb_full <= '1' when stb_slot_state_q /= st_stb_idle else '0';
-
-    stb_slot_dirty_q <= '0';
 
     -- BIU
     process (biu_state_q, cache_tag_miss, cache_tag_dirty, biu_rdy_i, biu_vld_i, stb_index_hit)
@@ -339,44 +345,43 @@ begin
         end if;
     end process;
 
-    biu_addr <=
-        cache_tag_addr & cache_cpu_addr_q(C_TAG_DMIN-1 downto 2) & "00" when cache_tag_miss = '1' and (cache_tag_dirty = '1' or stb_index_hit = '1') else
-        cache_cpu_addr_q(cache_cpu_addr_q'left downto 2) & "00";
+    biu_alloc_ready <= '1' when biu_state_q = st_biu_alloc else '0';
+    biu_evict_ready <= '1' when biu_state_q = st_biu_evict else '0';
 
-    gen_biu_data: for i in 0 to 3 generate
-        biu_data((i+1)*8-1 downto i*8) <=
-            stb_slot_data_q((i+1)*8-1 downto i*8) when stb_index_hit = '1' or (stb_slot_state_q = st_stb_alloc_biu and stb_slot_strb_q(i) = '1') else
-            data_ram.rdat((i+1)*8-1 downto i*8)   when cache_vld_q = '1' and cache_tag_dirty = '1' else
-            biu_dat_i((i+1)*8 - 1 downto i*8)     when biu_strb_q(i) = '0' else
-            biu_data_q((i+1)*8 - 1 downto i*8);
+    biu_addr <= (((cache_tag_addr)                                           and (G_MEM_ADDR_WIDTH - 1 downto C_TAG_DMIN =>      cache_vld_q and (cache_tag_dirty or stb_index_hit)))
+             or ((cache_cpu_addr_q(cache_cpu_addr_q'left downto C_TAG_DMIN)) and (G_MEM_ADDR_WIDTH - 1 downto C_TAG_DMIN => not (cache_vld_q and (cache_tag_dirty or stb_index_hit))))
+             ) & cache_cpu_addr_q(C_TAG_DMIN-1 downto 2) & "00";
+
+    gen_biu_data: for i in biu_strb'range generate
+        biu_data((i+1)*8-1 downto i*8) <= (stb_slot_data_q((i+1)*8-1 downto i*8) and (7 downto 0 => (cache_vld_q and stb_index_hit) or (stb_alloc_biu_vld and stb_slot_strb_q(i))))
+                                       or (data_ram.rdat((i+1)*8-1 downto i*8)   and (7 downto 0 =>  cache_vld_q and not stb_index_hit))
+                                       or (biu_dat_i((i+1)*8 - 1 downto i*8)     and (7 downto 0 =>  biu_alloc_ready and not biu_strb_q(i) and not (stb_alloc_biu_vld and stb_slot_strb_q(i))))
+                                       ;
     end generate gen_biu_data;
 
-    biu_strb <=
-        stb_slot_strb_q when stb_slot_state_q = st_stb_alloc_biu else
-        (others => '0');
-
-    biu_dirty <=
-        '1' when stb_slot_state_q = st_stb_alloc_biu else
-        '0';
+    biu_strb  <= (stb_slot_strb_q and (biu_strb'range => stb_alloc_biu_vld));
+    biu_dirty <= stb_alloc_biu_vld;
 
     process (clk_i)
     begin
         if rising_edge(clk_i) then
-            if (biu_state_q = st_biu_idle and cache_tag_miss = '1') or (biu_state_q = st_biu_evict and biu_rdy_i = '1') then
+            if (cache_vld_q = '1' and biu_ready = '1') or (biu_evict_ready = '1' and biu_rdy_i = '1') then
                 biu_addr_q <= biu_addr;
             end if;
-            if biu_state_q = st_biu_idle or (biu_state_q = st_biu_alloc and (stb_alloc_biu_vld = '1' or biu_vld_i = '1')) then
-                biu_data_q <= biu_data;
-            end if;
-            if biu_state_q = st_biu_idle or (biu_state_q = st_biu_alloc and stb_alloc_biu_vld = '1') then
+            for i in 0 to 3 loop
+                if (cache_vld_q = '1' and biu_ready = '1') or (biu_alloc_ready = '1' and (stb_alloc_biu_vld = '1' or (biu_vld_i = '1' and biu_strb_q(i) = '0'))) then
+                    biu_data_q((i+1)*8-1 downto (i*8)) <= biu_data((i+1)*8-1 downto (i*8));
+                end if;
+            end loop;
+            if (cache_vld_q = '1' and biu_ready = '1') or (biu_alloc_ready = '1' and stb_alloc_biu_vld = '1') then
                 biu_strb_q  <= biu_strb;
                 biu_dirty_q <= biu_dirty;
             end if;
         end if;
     end process;
 
-    biu_valid_set <= '1' when cache_tag_miss = '1' or biu_vld_i = '1' else '0';
-    biu_valid_clr <= '1' when (biu_state_q = st_biu_alloc and biu_rdy_i = '1') or biu_state_q = st_biu_idle else '0';
+    biu_valid_set <= '1' when biu_state_q = st_biu_idle and cache_tag_miss = '1' else '0';
+    biu_valid_clr <= '1' when biu_state_q = st_biu_alloc and biu_rdy_i = '1' else '0';
 
     process (clk_i, arst_i)
     begin
@@ -389,20 +394,23 @@ begin
         end if;
     end process;
 
+    biu_alloc_valid_set <= '1' when biu_state_q = st_biu_alloc and biu_vld_i = '1' else '0';
+    biu_alloc_valid_clr <= biu_alloc_valid_q;
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
             biu_alloc_valid_q <= '0';
         elsif rising_edge(clk_i) then
-            if biu_state_q = st_biu_alloc and biu_vld_i = '1' then
-                biu_alloc_valid_q <= '1';
-            else
-                biu_alloc_valid_q <= '0';
+            if biu_alloc_valid_set = '1' or biu_alloc_valid_clr = '1' then
+                biu_alloc_valid_q <= biu_alloc_valid_set;
             end if;
         end if;
     end process;
 
     biu_alloc_vld <= biu_alloc_valid_q;
+
+    biu_ready <= '1' when biu_state_q = st_biu_idle else '0';
 
     biu_adr_o <= biu_addr_q;
     biu_dat_o <= biu_data_q;
@@ -411,6 +419,9 @@ begin
 
     -- Control
 
+    cpu_miss_set <= cpu_vld_q and cache_tag_miss;
+    cpu_miss_clr <= biu_alloc_vld;
+
     process (clk_i, arst_i)
     begin
         if arst_i = '1' then
@@ -418,25 +429,19 @@ begin
             cpu_vld_q <= '0';
         elsif rising_edge(clk_i) then
             cpu_vld_q <= cpu_vld_i and not cpu_wr_i and cache_cpu_rdy;
-            if cpu_miss_q = '0' and cpu_vld_q = '1' and cache_tag_miss = '1' then
-                cpu_miss_q <= '1';
-            elsif cpu_miss_q = '1' and biu_alloc_vld = '1' then
-                cpu_miss_q <= '0';
+            if cpu_miss_set = '1' or cpu_miss_clr = '1' then
+                cpu_miss_q <= cpu_miss_set;
             end if;
         end if;
     end process;
 
     cpu_rdy_o <= cache_cpu_rdy;
 
-    cpu_vld_o <=
-        '1' when cpu_vld_q = '1' and cache_tag_hit = '1' else
-        '1' when cpu_miss_q = '1' and biu_alloc_vld = '1' else
-        '0';
+    cpu_vld_o <= (cpu_vld_q and cache_tag_hit) or (cpu_miss_q and biu_alloc_vld);
 
-    cpu_dat_o <=
-        stb_slot_data_q when stb_hit = '1' else
-        biu_data_q      when cpu_miss_q = '1' else
-        data_ram.rdat   when cache_vld_q = '1' else
-        (others => 'X');
+    cpu_dat_o <= (stb_slot_data_q and (31 downto 0 => stb_index_hit))
+              or (biu_data_q      and (31 downto 0 => cpu_miss_q))
+              or (data_ram.rdat   and (31 downto 0 => cache_vld_q and not stb_index_hit))
+        ;
 
 end architecture rtl;

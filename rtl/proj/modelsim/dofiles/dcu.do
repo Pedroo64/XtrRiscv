@@ -21,12 +21,9 @@ add wave -noupdate -group "biu if" ${dcu_path}/biu_vld_o
 add wave -noupdate -group "biu if" ${dcu_path}/biu_rdy_i
 add wave -noupdate -group "biu if" ${dcu_path}/biu_dat_i
 add wave -noupdate -group "biu if" ${dcu_path}/biu_vld_i
-add wave -noupdate -group "biu if" ${dcu_path}/cpu_vld
-add wave -noupdate -group "biu if" ${dcu_path}/cpu_vld_q
-add wave -noupdate -group "biu if" ${dcu_path}/cpu_miss
-add wave -noupdate -group "biu if" ${dcu_path}/cpu_miss_q
-add wave -noupdate -group "biu if" ${dcu_path}/stb_miss
-add wave -noupdate -group "biu if" ${dcu_path}/stb_miss_q
+
+add wave -noupdate -group "cache" ${dcu_path}/cpu_vld_q
+add wave -noupdate -group "cache" ${dcu_path}/cpu_miss_q
 
 add wave -noupdate -group "cache" ${dcu_path}/tag_ram
 add wave -noupdate -group "cache" ${dcu_path}/data_ram
@@ -74,11 +71,16 @@ add wave -noupdate -group "stb" -divider "New Divider"
 
 add wave -noupdate -group "biu" ${dcu_path}/biu_nxt_state
 add wave -noupdate -group "biu" ${dcu_path}/biu_state_q
+add wave -noupdate -group "biu" ${dcu_path}/biu_addr
+add wave -noupdate -group "biu" ${dcu_path}/biu_data
+add wave -noupdate -group "biu" ${dcu_path}/biu_strb
+add wave -noupdate -group "biu" ${dcu_path}/biu_dirty
 add wave -noupdate -group "biu" ${dcu_path}/biu_addr_q
 add wave -noupdate -group "biu" ${dcu_path}/biu_data_q
 add wave -noupdate -group "biu" ${dcu_path}/biu_valid_q
 add wave -noupdate -group "biu" ${dcu_path}/biu_dirty_q
 add wave -noupdate -group "biu" ${dcu_path}/biu_strb_q
+add wave -noupdate -group "biu" ${dcu_path}/biu_alloc_valid_q
 add wave -noupdate -group "biu" ${dcu_path}/biu_alloc_vld
 add wave -noupdate -group "biu" -divider "New Divider"
 
