@@ -15,23 +15,20 @@ SRC        = $(RTL_DIR)/utils/vhdl_utils.vhd
 SRC       += $(RTL_DIR)/cpu/rv32i_pkg.vhd
 SRC       += $(RTL_DIR)/cpu/csr_def.vhd
 SRC       += $(RTL_DIR)/cpu/cpu_checker.vhd
+SRC       += $(RTL_DIR)/cpu/utils/cpu_fifo.vhd
 SRC       += $(RTL_DIR)/cpu/comparator.vhd
-SRC       += $(RTL_DIR)/cpu/alu.vhd
 SRC       += $(RTL_DIR)/cpu/c_extension/decompressor.vhd
+SRC       += $(RTL_DIR)/cpu/c_extension/instruction_aligner.vhd
 SRC       += $(RTL_DIR)/cpu/m_extension/mul.vhd
 SRC       += $(RTL_DIR)/cpu/m_extension/div.vhd
 SRC       += $(RTL_DIR)/cpu/m_extension/muldiv.vhd
 SRC       += $(RTL_DIR)/cpu/shifter.vhd
-SRC       += $(RTL_DIR)/cpu/instruction_fetch.vhd
-SRC       += $(RTL_DIR)/cpu/instruction_decode.vhd
-SRC       += $(RTL_DIR)/cpu/execute.vhd
-SRC       += $(RTL_DIR)/cpu/memory.vhd
-SRC       += $(RTL_DIR)/cpu/writeback.vhd
-SRC       += $(RTL_DIR)/cpu/csr.vhd
 SRC       += $(RTL_DIR)/cpu/regfile.vhd
-SRC       += $(RTL_DIR)/cpu/control_unit.vhd
-SRC       += $(RTL_DIR)/cpu/branch_unit.vhd
 SRC       += $(RTL_DIR)/cpu/lsu.vhd
+SRC       += $(RTL_DIR)/cpu/debug/dtm_pkg.vhd
+SRC       += $(RTL_DIR)/cpu/debug/dtm_jtag.vhd
+SRC       += $(RTL_DIR)/cpu/debug/debug_module_pkg.vhd
+SRC       += $(RTL_DIR)/cpu/debug/debug_module.vhd
 SRC       += $(RTL_DIR)/cpu/cpu.vhd
 SRC       += $(RTL_DIR)/utils/utils.vhd
 SRC       += $(RTL_DIR)/utils/xtr_def.vhd
@@ -49,9 +46,9 @@ SRC       += $(RTL_DIR)/soc/xtr_peripherials.vhd
 SRC       += $(RTL_DIR)/soc/xtr_soc.vhd
 SRC       += $(RTL_DIR)/proj/xilinx/arty_s7-50/src/top.vhd
 
-translate: $(BUILD_DIR)/$(DESIGN)/opt.dcp 
-place_and_route: $(BUILD_DIR)/$(DESIGN)/route.dcp 
-bitstream: $(BUILD_DIR)/$(DESIGN)/bitstream.bit 
+translate: $(BUILD_DIR)/$(DESIGN)/opt.dcp
+place_and_route: $(BUILD_DIR)/$(DESIGN)/route.dcp
+bitstream: $(BUILD_DIR)/$(DESIGN)/bitstream.bit
 
 create_project:
 	$(VIVADO) $(VIVADO_FLAGS) -source ./vivado.tcl -tclargs project_create $(BUILD_DIR) $(PROJECT) $(DEVICE) $(DESIGN) $(XCF) $(SRC)
@@ -60,7 +57,7 @@ open_project:
 	$(VIVADO) $(VIVADO_FLAGS) -source ./vivado.tcl -tclargs project_open $(BUILD_DIR) $(PROJECT) $(DESIGN)
 
 get_device_list:
-	$(VIVADO) $(VIVADO_FLAGS) -source ./vivado.tcl -tclargs get_device_list 
+	$(VIVADO) $(VIVADO_FLAGS) -source ./vivado.tcl -tclargs get_device_list
 
 program_device: bitstream
 	$(VIVADO) $(VIVADO_FLAGS) -source ./vivado.tcl -tclargs program_device $(BOARD_DEVICE) $(BUILD_DIR)/$(DESIGN)/bitstream.bit

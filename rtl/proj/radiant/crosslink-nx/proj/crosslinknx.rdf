@@ -3,120 +3,41 @@
     <Options/>
     <Implementation title="impl_1" dir="impl_1" description="impl_1" synthesis="synplify" default_strategy="Strategy1">
         <Options def_top="top"/>
-        <Source name="../src/top.vhd" type="VHDL" type_short="VHDL">
-            <Options top_module="top"/>
-        </Source>
-        <Source name="../../../../cpu/alu.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/cpu.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/csr.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/csr_def.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/regfile.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/rv32i_pkg.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/xtr_cpu.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../utils/utils.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../utils/xtr_abr.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../utils/xtr_def.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/xtr_soc.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/xtr_peripherials.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/ram/bram.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/ram/xtr_ram.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/boottrap/xtr_boot_trap.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/boottrap/boot_trap.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/timer/xtr_mtime.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/uart/uart_rx.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/uart/uart_tx.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../soc/uart/xtr_uart.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/shifter.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/branch_unit.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/comparator.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/control_unit.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/execute.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/instruction_decode.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/instruction_fetch.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/memory.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/writeback.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/m_extension/mul.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/m_extension/muldiv.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/m_extension/div.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/c_extension/decompressor.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../utils/vhdl_utils.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/lsu.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../../../../cpu/cpu_checker.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="../constraints/constraints.pdc" type="Physical Constraints File" type_short="PDC">
-            <Options/>
-        </Source>
+        <Source name="../src/top.vhd"                                      type="VHDL" type_short="VHDL"> <Options top_module="top"/>    </Source>
+        <Source name="../../../../utils/vhdl_utils.vhd"                    type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/rv32i_pkg.vhd"                       type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/csr_def.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/cpu_checker.vhd"                     type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/utils/cpu_fifo.vhd"                  type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/comparator.vhd"                      type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/c_extension/decompressor.vhd"        type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/c_extension/instruction_aligner.vhd" type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/m_extension/mul.vhd"                 type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/m_extension/div.vhd"                 type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/m_extension/muldiv.vhd"              type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/shifter.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/regfile.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/lsu.vhd"                             type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/debug/dtm_pkg.vhd"                   type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/debug/dtm_jtag.vhd"                  type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/debug/debug_module_pkg.vhd"          type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/debug/debug_module.vhd"              type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/cpu.vhd"                             type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../cpu/xtr_cpu.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../utils/utils.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../utils/xtr_abr.vhd"                       type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../utils/xtr_def.vhd"                       type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/xtr_soc.vhd"                         type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/xtr_peripherials.vhd"                type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/ram/bram.vhd"                        type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/ram/xtr_ram.vhd"                     type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/boottrap/xtr_boot_trap.vhd"          type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/boottrap/boot_trap.vhd"              type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/timer/xtr_mtime.vhd"                 type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/uart/uart_rx.vhd"                    type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/uart/uart_tx.vhd"                    type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../../../../soc/uart/xtr_uart.vhd"                   type="VHDL" type_short="VHDL"> <Options/>                     </Source>
+        <Source name="../constraints/constraints.pdc"                      type="Physical Constraints File" type_short="PDC"> <Options/> </Source>
     </Implementation>
     <Strategy name="Strategy1" file="crosslinknx1.sty"/>
 </RadiantProject>
